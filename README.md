@@ -100,6 +100,7 @@ Germany, Canada and Australia are the demo markets. Because Eurostat publishes H
 - **SKU categories** use product-aware model selection from a bounded official shortlist. A broader series can still be the best available proxy; the table distinguishes model-selected, remembered and unconfirmed matches and names the actual series. This is a coverage check, not a guarantee that an official category precisely describes each product. Market-category lookup is a separate catalogue-matching path. A guard rejects known sweet-only categories for a snacks comparison and uses a verified broader Food alternative or omits the category. This targeted guard does not validate every possible product match. The current recordings include this guard and the explicit comparison-category override; check each actual series label.
 - **Historical benchmarks are descriptive.** A point or narrow span is possible; it does not express confidence, price headroom or a prediction. Cost recovery requires a stated cost change and a cost-to-price share with its before/after-change basis. Unspecified timing is shown as a before-change assumption.
 - **SQL result completeness:** the client refuses results reaching the requested row limit (1,000 by default), because a complete result cannot be confirmed. SKU prices are omitted when their query is incomplete; even a result of exactly 1,000 complete rows is conservatively refused. There is no automatic pagination.
+- **Narrative checks have a limited scope.** They check numbers and explicit comparisons, not every claim. In example 06, the accepted Watch text incorrectly suggests that the currently used HICP series is discontinued. The query uses the successor `prc_hicp_minr`; only the earlier `prc_hicp_manr` was discontinued. The original recording is preserved and annotated in the recording notes.
 - **The price list is sample data** for a fictional exporter.
 - **Speed** depends on the provider and source queries: the current six CLI recordings took 21–110 s per question, with market numbers at 9.1–52.9 s. Market numbers are shown immediately after the federated comparison, before SKU discovery and pricing finish; SKU prices and the checked prose follow. A disconnected UI retries the event stream for up to 10 s, preserving available numbers and replaying the latest snapshot on reconnection.
 
@@ -114,7 +115,7 @@ The six questions were run consecutively by `scripts/15_examples.sh` with a new 
 | `03_typo_market` | “canda” → Canada. Policy changes to 60%; +4% is within the broader Food benchmark used for snacks. Product choices reused; narrative checks passed. | 66 s / 44.8 s |
 | `04_unsupported_market` | Japan explicitly not covered; Canada +5% is above its Food benchmark. Canadian product mappings reused; narrative checks passed. | 21 s / 9.1 s |
 | `05_within_range` | CA/AU Food, +3% within both benchmarks; separate cost target 3.4%. Eight views reused, no planning or discovery. Narrative rejected, rewrite timed out. | 68 s / 13.0 s |
-| `06_eu_markets` | FR/IT/ES: six new Eurostat series, 90 comparison rows, +3% above all benchmarks. No matching sample SKUs. Narrative checks passed. | 83 s / 44.2 s |
+| `06_eu_markets` | FR/IT/ES: six new Eurostat series, 90 comparison rows, +3% above all benchmarks. No matching sample SKUs. Numeric/comparison checks passed; the Watch text misstates the dataset status (see recording notes). | 83 s / 44.2 s |
 
 These are measured runs, not speed or completion guarantees. They include the versioned calendar-based ABS/StatCan YoY decoder, explicit comparison-category override, common-period comparison and sentence-boundary correction. The first request resolves to Food even though its product introduction mentions snacks. Examples 01 and 02 had provider failures or timeouts before a validated narrative; example 05 rejected mixed Canadian/Australian values before its rewrite timed out. Calculated facts remained available in each case. All six evidence packets passed offline replay, preserving 368 market rows and 417 pricing rows; the verifier reports the unsupported Japanese request separately. The older policy-scaled and category-mismatched recordings remain in Git history and local recording backups. [Recording notes](examples/README.md) distinguish validated selection, reuse, broader proxies and narrative failure.
 
@@ -137,16 +138,26 @@ cp .env.example .env        # then fill in (never commit .env):
 #   LLM_PROVIDER=meterless, METERLESS_BASE_URL (Nightshift Console), METERLESS_RUNTIME_TOKEN
 
 npm run smoke               # Zetaris, Nightshift, the three agencies, H-MEM
-npm run ui                  # http://localhost:5177
-# a new suffix on EVERY cold recording; keep the same UI process for the memory repeat
+```
+
+Start the everyday UI with `npm run ui`, then open `http://localhost:5177`. For a cold recording, stop that server and use this alternative launch command with a new suffix each time:
+
+```bash
 PSIG_RUN_ID=$(date -u +%Y%m%dT%H%M%S)-$$
 PSIG_MEMORY_DIR=".pricesignal/cold-$PSIG_RUN_ID" PSIG_ZETARIS_NS="$PSIG_RUN_ID" npm run ui
+```
+
+Keep that UI process running for the “same as last time” follow-up. For CLI use, stop the UI first or choose a separate memory directory; the default UI and CLI share the same store.
+
+```bash
 npm run ask -- "is food inflation in deutschland, canada & aus still hot? thinking +5%"
 ```
 
 `npm run setup` and `setup:conformance` download the upstream H-MEM reference code and conformance suite; they need network access and are not pinned dependency snapshots. `npm test` and `npm run typecheck` run locally after setup. Do not run multiple app processes against the same memory directory.
 
 Helper scripts used on our machine (Ubuntu laptop + Windows desktop running Nightshift) are in `scripts/` (Docker install, Zetaris install, secret entry without echo, smoke tests, integration probe, network check). `scripts/03_app_setup.sh` stops at the first failed step and returns its exit code. `bash scripts/15_examples.sh` creates a fresh experimental store and Zetaris suffix by default. It replaces the six example folders only after every run exits successfully and saves a brief, a valid trace and its evidence packet. Prior recordings and logs remain under `logs/`; a supplied memory directory must not already exist.
+
+`bash scripts/13_coldwarm.sh` measures a cold request followed by a memory repeat in a new experimental store and namespace, preserving existing stores. It runs the offline suite first and stops on a failed CLI step or missing/malformed saved artifacts. To run only the repeat later, pass `warm` and explicitly set `PSIG_MEMORY_DIR` and `PSIG_ZETARIS_NS` to the values printed by its successful cold step; the saved context must match. Existing directories are refused for a new cold run, and the default UI store is refused in both modes. `07_ask.sh` and `14_eu_probe.sh` preserve failed command exits through their log pipes; `10_messy.sh` records all six outcomes and returns nonzero if any run fails. These helper scripts make live calls; the regression tests use temporary fixtures and fake commands.
 
 ## Verify a saved calculation
 
