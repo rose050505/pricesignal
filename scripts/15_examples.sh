@@ -48,7 +48,7 @@ run() { # $1 folder name, $2 question
   NAMES+=("$NAME")
   printf 'OK   %s (%s s, exit %s)\n' "$NAME" "$((T1-T0))" "$CODE" | tee -a "$SUM"
 }
-run 01_cold_start "our gochujang & snacks: is food inflation in deutschland, canada & aus still running hot?? costs rose 8%; unit costs are 60% of our selling price; thinking +5% for Q1; we usually pass on ~70% of cost increases" || exit 1
+run 01_cold_start "our gochujang & snacks: is food inflation in deutschland, canada & aus still running hot?? our costs rose 8%, unit costs are 60% of our selling price. we pass on ~70% of cost increases. thinking +5% for Q1, too much?" || exit 1
 run 02_same_as_last_time "same as last time, but what if we go -2%?" || exit 1
 run 03_typo_market "canda snacks price hike 4%?? is that ok, we pass thru like 60pct of costs" || exit 1
 run 04_unsupported_market "japan + canada food prices, ok to raise 5%?" || exit 1

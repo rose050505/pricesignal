@@ -72,6 +72,8 @@ export interface RunMetrics {
 
 export interface Brief {
   request: Request;
+  /** UTC start of this run, kept stable across partial and final snapshots. */
+  startedAt?: string;
   metrics?: RunMetrics;
   partialStage?: "markets" | "pricing";
   facts: MarketFacts[];

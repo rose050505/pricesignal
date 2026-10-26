@@ -11,7 +11,7 @@ function browser() {
   class Element {
     innerHTML = ""; textContent = ""; className = ""; value = ""; disabled = false;
     scrollTop = 0; scrollHeight = 100; clientHeight = 100;
-    children: Element[] = []; onclick?: () => Promise<void>;
+    children: Element[] = []; onclick?: () => Promise<void>; oninput?: () => void;
     appendChild(child: Element) { this.children.push(child); this.scrollHeight += 40; }
     scrollIntoView() { pageScrolls++; }
     setAttribute() {}
@@ -37,6 +37,7 @@ function browser() {
     setTimeout: (fn: () => void) => { const id = ++nextTimer; timers.set(id, fn); return id; },
     clearTimeout: (id: number) => timers.delete(id),
   });
+  for (const file of ["scenario.js", "preview-panel.js"]) vm.runInContext(fs.readFileSync(new URL(`../public/${file}`, import.meta.url), "utf8"), context);
   vm.runInContext(script, context);
   return { context, node, streams, timers, pageScrolls: () => pageScrolls, run: (code: string) => vm.runInContext(code, context) };
 }
@@ -311,4 +312,119 @@ test('the shared server serializer preserves alignment in partial and final payl
     assert.equal(serialize({ ...base, partialStage, alignment: expected }).alignment, expected);
   }
   assert.equal(serialize(base).alignment, null);
+});
+
+const coveredMarket = (country: string, concept = 'food') => ({
+  country, agency: 'Official statistics',
+  [concept === 'all_items' ? 'allItems' : 'category']: { concept, label: concept === 'all_items' ? 'All items' : 'Food', sourceId: `fixture:${country}:${concept}`, frequency: 'M', latestYoy: 2, avg12: 2, latestPeriod: '2026-09', trend: 'flat', points: [] },
+});
+
+test('coverage counts requested category evidence, excludes SKU rows, and includes unsupported markets in its denominator', () => {
+  const b = browser();
+  b.context.sample = { ...result(true), concept: 'food', requestedCountries: ['DE', 'CA'], unsupportedCountries: ['<Japan>'],
+    facts: [coveredMarket('DE'), coveredMarket('CA', 'all_items')],
+    skus: [{ country: 'CA', sku: 'SKU', product: 'Food', currentPrice: 10, currency: 'CAD', yoy: 2, period: '2026-09' }],
+  };
+  b.run('render(sample,"DE CA Japan food")');
+  const output = b.node('#out').innerHTML;
+  assert.match(output, /Partial coverage[^<]*1\/3/i);
+  assert.ok(output.indexOf('Partial coverage') < output.indexOf('class="markets"'));
+  assert.match(output, /CA[^<]*food[^<]*all.items/i);
+  assert.match(output, /Unsupported markets:[^<]*&lt;Japan&gt;/i);
+  assert.doesNotMatch(output, /<Japan>/);
+});
+
+test('coverage distinguishes all, partial and no requested-category evidence including old payloads', () => {
+  const b = browser();
+  for (const [facts, expected] of [
+    [[coveredMarket('DE'), coveredMarket('CA')], /All requested markets covered[^<]*2\/2/i],
+    [[coveredMarket('DE')], /Partial coverage[^<]*1\/2/i],
+    [[coveredMarket('DE', 'all_items')], /No requested.market evidence[^<]*0\/2/i],
+  ] as const) {
+    b.context.sample = { ...result(), concept: 'food', requestedCountries: ['DE', 'CA'], facts };
+    b.run('render(sample,"DE CA food")');
+    assert.match(b.node('#out').innerHTML, expected);
+  }
+  b.context.sample = { ...result(), concept: 'food', facts: [coveredMarket('DE'), coveredMarket('CA')] };
+  b.run('render(sample,"legacy fixture")');
+  assert.match(b.node('#out').innerHTML, /All requested markets covered[^<]*2\/2/i);
+});
+
+test('the final run status reports partial or absent coverage instead of implying every requested market succeeded', async () => {
+  for (const [facts, expected] of [[[coveredMarket('DE')], /partial coverage.*1\/2/i], [[], /no requested.market evidence.*0\/2/i]] as const) {
+    const b = browser(); b.node('#q').value = 'DE CA food';
+    await b.node('#go').onclick!();
+    b.streams[0].listeners.result({ data: JSON.stringify({ ...result(), concept: 'food', requestedCountries: ['DE', 'CA'], facts }) });
+    assert.match(b.node('#runstatus').textContent, expected);
+    assert.equal(b.pageScrolls(), 0);
+  }
+});
+
+test('model badges accept only successful response events and ignore model names inside errors or warnings', () => {
+  const b = browser();
+  for (const event of [
+    { kind: 'error', title: 'warn_empty_response from nvidia/nemotron-failed' },
+    { kind: 'warn', title: 'narrative (nvidia/nemotron-warn, 12 ms via Meterless Nightshift)' },
+    { kind: 'llm', title: 'warn_empty_response (nvidia/nemotron-empty, 12 ms via Meterless Nightshift)' },
+    { kind: 'llm', title: 'starting request for nvidia/nemotron-pending' },
+  ]) {
+    b.context.event = event; b.run('addTrace(event)');
+    assert.equal(b.run('servedModel'), null, event.title);
+  }
+  b.run('addTrace({kind:"llm",title:"parsed request (nvidia/nemotron-good, 125 ms via Meterless Nightshift)"})');
+  const accepted = b.node('#modelpill').textContent;
+  assert.match(accepted, /nvidia\/nemotron-good/);
+  b.run('addTrace({kind:"error",title:"provider failed for nvidia/nemotron-failed"})');
+  assert.equal(b.node('#modelpill').textContent, accepted);
+});
+
+test('a structured successful response reports its actual model and provider', () => {
+  const b = browser();
+  b.run('addTrace({kind:"llm",title:"Model reply received",detail:{status:"success",model:"nvidia/nemotron-structured",provider:"fixture-provider",ms:25}})');
+  assert.match(b.node('#modelpill').textContent, /nvidia\/nemotron-structured/);
+  assert.match(b.node('#modelpill').textContent, /fixture-provider/);
+  b.run('addTrace({kind:"llm",title:"Model reply failed",detail:{status:"error",model:"nvidia/nemotron-failed",provider:"fixture-provider",ms:25}})');
+  assert.doesNotMatch(b.node('#modelpill').textContent, /nemotron-failed/);
+});
+
+test('a new run resets the previous served model to pending until a new successful response arrives', async () => {
+  const b = browser();
+  b.run('addTrace({kind:"llm",title:"narrative (nvidia/nemotron-previous, 25 ms via Meterless Nightshift) - numbers and verdicts match the facts"})');
+  assert.match(b.node('#modelpill').textContent, /nemotron-previous/);
+  b.node('#q').value = 'DE food'; await b.node('#go').onclick!();
+  assert.equal(b.run('servedModel'), null);
+  assert.match(b.node('#modelpill').textContent, /awaiting.*successful response/i);
+  await b.run('status()');
+  assert.match(b.node('#modelpill').textContent, /awaiting.*successful response/i);
+  b.streams[0].listeners.result({ data: JSON.stringify(result()) });
+  assert.match(b.node('#modelpill').textContent, /no successful response/i);
+});
+
+test('SKU tables scroll internally and a manual results link does not scroll the page on render', () => {
+  assert.match(html, /\.sku-scroll\s*\{[^}]*overflow-x\s*:\s*auto/);
+  assert.match(html, /header\s*\{[^}]*flex-wrap\s*:\s*wrap/);
+  assert.match(html, /\.pill\s*\{[^}]*white-space\s*:\s*normal/);
+  assert.match(html, /href="#out"/);
+  const b = browser();
+  b.context.sample = { ...result(), skus: [{ country: 'DE', sku: 'SKU', product: 'Food', currentPrice: 10, currency: 'EUR', yoy: 2, period: '2026-09' }] };
+  b.run('render(sample,"food")');
+  assert.match(b.node('#out').innerHTML, /class="sku-scroll"[^>]*tabindex="0"[^>]*>[\s\S]*<table class="skus"/);
+  assert.equal(b.pageScrolls(), 0);
+});
+
+test('a completed brief connects the separate local preview and a new run removes that preview', async () => {
+  const b=browser();
+  b.context.sample={...result(),concept:'food',proposed:5,startedAt:'2026-10-26T17:30:00.000Z',facts:[{country:'DE',agency:'Eurostat',cite:'Q7',category:{concept:'food',label:'Food',frequency:'M',latestPeriod:'2026-09',sourceId:'de:food',latestYoy:0.4,avg12:1.4,trend:'easing',points:[]},suggested:{low:0.4,high:1.4},costNeed:3.4,verdict:'above the market benchmark'}]};
+  b.run('render(sample,"food +5%")');
+  const original=b.node('#out').innerHTML;
+  assert.match(original,/id="scenario-proposal"/);
+  assert.match(original,/Original brief/);
+  assert.equal(typeof b.node('#scenario-proposal').oninput,'function');
+  b.node('#scenario-proposal').value='-2'; b.node('#scenario-proposal').oninput!();
+  assert.match(b.node('#scenario-results').innerHTML,/Preview at -2%/);
+  assert.match(b.node('#scenario-results').innerHTML,/below the market benchmark/);
+  assert.match(b.node('#scenario-results').innerHTML,/3\.4%/);
+  assert.equal(b.node('#out').innerHTML,original,'updating the preview must not re-render the original brief');
+  b.node('#q').value='same as last time, +3%'; await b.node('#go').onclick!();
+  assert.doesNotMatch(b.node('#out').innerHTML,/id="scenario-proposal"/);
 });

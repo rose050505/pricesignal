@@ -44,6 +44,8 @@ test("messy request and remembered follow-up expose the common period without re
   const partials: Brief[] = [];
   first.on("partial", (b) => partials.push(b));
   const b = await first.run("our gochujang & snacks: is food inflation in deutschland, canada & aus still hot? costs rose 8%, costs are 60% of our selling price; pass on 70%; thinking +5%?");
+  assert.equal(b.startedAt, "2026-10-27T00:00:00.000Z");
+  assert.ok(partials.every((p) => p.startedAt === b.startedAt));
   assert.equal(b.alignment?.status, "aligned");
   assert.equal(b.alignment?.status === "aligned" && b.alignment.period, "2026-08");
   assert.deepEqual(b.facts.map((f) => f.category?.latestPeriod), ["2026-09", "2026-09", "2026-08"]);

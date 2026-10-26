@@ -12,14 +12,16 @@
 @media (prefers-color-scheme:dark){:root{--cost:#8fb3f2;--bg:#121417;--panel:#1a1d21;--ink:#e9e7e2;--muted:#9aa0a8;--line:#2b2f35;--accent:#4fc3a6;--accent-soft:#163a31;--warn:#f0b35a;--warn-soft:#3a2c14;--bad:#f08a80;--bad-soft:#3d1e1b;--chip:#23272c}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif}
-header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 28px;border-bottom:1px solid var(--line);background:var(--panel)}
-.brand{display:flex;align-items:baseline;gap:12px}.brand b{font-size:20px;letter-spacing:-.01em}.brand span{color:var(--muted);font-size:13px}
-.status{display:flex;gap:8px;flex-wrap:wrap;font-size:12px}
-.pill{padding:4px 10px;border-radius:999px;background:var(--chip);color:var(--muted);white-space:nowrap}.pill.ok{background:var(--accent-soft);color:var(--accent)}.pill.bad{background:var(--bad-soft);color:var(--bad)}
+header{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:16px;padding:18px 28px;border-bottom:1px solid var(--line);background:var(--panel)}
+.brand{display:flex;flex-wrap:wrap;align-items:baseline;gap:12px;min-width:0;flex:1 1 320px}.brand b{font-size:20px;letter-spacing:-.01em}.brand span{color:var(--muted);font-size:13px}
+.status{display:flex;gap:8px;flex-wrap:wrap;font-size:12px;min-width:0;max-width:100%;flex:1 1 360px}
+.pill{padding:4px 10px;border-radius:999px;background:var(--chip);color:var(--muted);white-space:normal;overflow-wrap:anywhere;max-width:100%}.pill.ok{background:var(--accent-soft);color:var(--accent)}.pill.bad{background:var(--bad-soft);color:var(--bad)}
 main{display:grid;grid-template-columns:minmax(300px,400px) minmax(0,1fr);gap:20px;padding:20px 28px;max-width:1500px;margin:0 auto}
 main>*{min-width:0}
 @media (max-width:900px){main{grid-template-columns:minmax(0,1fr);padding:16px}}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;min-width:0;overflow-wrap:anywhere}
+.coverage{margin-bottom:12px;padding:8px 10px;border-radius:8px;background:var(--warn-soft);color:var(--warn)}.coverage.all{background:var(--accent-soft);color:var(--accent)}.coverage .sub{color:inherit;margin-top:4px}
+.result-link{display:inline-block;margin-top:8px;color:var(--accent);font-size:13px}#out{scroll-margin-top:16px}
 h2{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 10px}
 textarea{width:100%;min-height:110px;resize:vertical;border:1px solid var(--line);border-radius:8px;padding:10px;font:inherit;background:var(--bg);color:var(--ink)}
 button{border:0;border-radius:8px;padding:10px 16px;font:inherit;font-weight:600;cursor:pointer;background:var(--accent);color:#fff}button:disabled{opacity:.5;cursor:wait}
@@ -30,8 +32,8 @@ button{border:0;border-radius:8px;padding:10px 16px;font:inherit;font-weight:600
 .k{font:600 11px var(--mono);text-transform:uppercase;padding:2px 6px;border-radius:4px;background:var(--chip);color:var(--muted);height:fit-content;text-align:center}
 .k.memory{background:var(--accent-soft);color:var(--accent)}.k.discover{background:#e6eefb;color:#2856a8}.k.onboard,.k.compare,.k.pricing,.k.sql{background:#efe7fb;color:#6532a8}.k.warn,.k.error{background:var(--warn-soft);color:var(--warn)}
 @media (prefers-color-scheme:dark){.k.discover{background:#1d2a40;color:#8fb3f2}.k.onboard,.k.compare,.k.pricing,.k.sql{background:#2b2140;color:#c4a6f2}}
-.skus{width:100%;border-collapse:collapse;font-size:13px}.skus th{text-align:left;color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding:6px 8px;border-bottom:1px solid var(--line)}.skus td{padding:7px 8px;border-bottom:1px solid var(--line)}.skus td.num{font-family:var(--mono);text-align:right;white-space:nowrap}
-.markets{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.sku-scroll{overflow-x:auto;max-width:100%}.skus{width:100%;min-width:640px;border-collapse:collapse;font-size:13px}.skus th{text-align:left;color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding:6px 8px;border-bottom:1px solid var(--line)}.skus td{padding:7px 8px;border-bottom:1px solid var(--line)}.skus td.num{font-family:var(--mono);text-align:right;white-space:nowrap}
+.markets{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr));gap:14px}
 .alignment{min-width:0}.alignment-scroll{overflow-x:auto;max-width:100%;margin-top:10px}
 .alignment-table{width:100%;min-width:640px;border-collapse:collapse;font-size:13px}
 .alignment-table th{text-align:left;color:var(--muted);font-size:11px;padding:6px 8px;border-bottom:1px solid var(--line)}
@@ -48,10 +50,14 @@ button{border:0;border-radius:8px;padding:10px 16px;font:inherit;font-weight:600
 .notes li{margin:4px 0}
 pre{font:12px/1.45 var(--mono);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;max-height:260px;white-space:pre}
 details summary{cursor:pointer;color:var(--muted);font-size:13px}
-.right{display:flex;flex-direction:column;gap:16px}
+.right{display:flex;flex-direction:column;gap:16px;min-width:0}
 .empty{color:var(--muted);text-align:center;padding:60px 20px}
 .src{font:11px var(--mono);color:var(--muted);word-break:break-all}
 .prose{font-size:13px;line-height:1.45;margin:10px 0 0}
+.preview{border-color:var(--accent);min-width:0}.preview-controls{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:12px}
+.preview-controls label{font-size:13px;font-weight:600}.preview-controls input{width:110px;max-width:100%;padding:8px;border:1px solid var(--line);border-radius:6px;font:inherit;background:var(--bg);color:var(--ink)}
+.preview-scroll{overflow-x:auto;max-width:100%}.preview-table{width:100%;min-width:560px;border-collapse:collapse;font-size:13px}.preview-table th,.preview-table td{text-align:left;vertical-align:top;padding:8px;border-bottom:1px solid var(--line)}
+.preview-table th{font-weight:600}.preview-table th .sub{font-weight:400}.preview-title{font-size:14px}.preview-error{color:var(--bad)}.preview-skus{margin-top:12px}
 </style>
 </head>
 <body>
@@ -66,11 +72,14 @@ details summary{cursor:pointer;color:var(--muted);font-size:13px}
     <div class="examples" id="examples"></div>
     <button id="go">Investigate</button>
     <div id="runstatus" class="sub" role="status" aria-live="polite" aria-atomic="true" style="margin-top:8px;min-height:36px">Ready to investigate.</div>
+    <a class="result-link" href="#out">View results</a>
     <h2 style="margin-top:18px">What the agent is doing</h2>
     <ul class="trace" id="trace"><li><span class="k">idle</span><span class="sub">Steps appear here as the agent works.</span></li></ul>
   </section>
-  <section class="right" id="out"><div class="card empty">The brief will appear here: one card per market, the fragmentation the agent had to resolve, and the SQL behind every number.</div></section>
+  <section class="right" id="out" tabindex="-1"><div class="card empty">The brief will appear here: one card per market, the fragmentation the agent had to resolve, and the SQL behind every number.</div></section>
 </main>
+<script src="/scenario.js"></script>
+<script src="/preview-panel.js"></script>
 <script>
 const EX=[
   "our gochujang & snacks: is food inflation in deutschland, canada & aus still running hot?? thinking +5% for Q1, too much? we usually pass on ~70% of cost increases",
@@ -84,21 +93,29 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 EX.forEach(t=>{const b=document.createElement("button");b.textContent=t;b.onclick=()=>{$("#q").value=t};$("#examples").appendChild(b)});
 // The model that actually answered (from the trace) stays in the header after the status refresh.
-let servedModel=null;
-function showModel(){const p=$("#modelpill");if(servedModel&&p){p.textContent=servedModel.t;p.className=servedModel.c}}
+let servedModel=null,modelRunStarted=false;
+function showModel(){const p=$("#modelpill");if(!p)return;if(servedModel){p.textContent=servedModel.t;p.className=servedModel.c}else if(modelRunStarted){p.textContent=runActive?"model: awaiting a successful response":"model: no successful response this run";p.className="pill"}}
 async function status(){try{const s=await (await fetch("/api/status")).json();
-  $("#status").innerHTML=`<span class="pill ${s.state==="online"?"ok":"bad"}">${s.provider==="meterless"?"Meterless Nightshift":s.provider} · ${esc(s.state)}</span><span class="pill" id="modelpill">model: ${esc(s.fast)} (Nightshift lane)</span><span class="pill ${s.zetaris==="online"?"ok":"bad"}">Zetaris · ${esc(s.zetaris||"unknown")}</span><span class="pill">H-MEM · ${s.memoryRecords} memories</span>`;showModel();
+  $("#status").innerHTML=`<span class="pill ${s.state==="online"?"ok":"bad"}">${esc(s.provider==="meterless"?"Meterless Nightshift":s.provider)} · ${esc(s.state)}</span><span class="pill" id="modelpill">configured model: ${esc(s.fast)}</span><span class="pill ${s.zetaris==="online"?"ok":"bad"}">Zetaris · ${esc(s.zetaris||"unknown")}</span><span class="pill">H-MEM · ${s.memoryRecords} memories</span>`;showModel();
 }catch(e){$("#status").innerHTML=`<span class="pill bad">server unreachable</span>`}}
 status();
 let runStarted=0,runTimer=null,runStage="",runActive=false;
 const seenTrace=new Set();
 function showRunStatus(){if(runActive)$("#runstatus").textContent=`${runStage} · ${((Date.now()-runStarted)/1000).toFixed(1)} s elapsed`}
 function setRunStage(stage){runStage=stage;showRunStatus()}
-function finishRun(message){runActive=false;clearInterval(runTimer);runTimer=null;$("#runstatus").textContent=message;$("#out").setAttribute("aria-busy","false");$("#go").disabled=false}
+function finishRun(message){runActive=false;clearInterval(runTimer);runTimer=null;$("#runstatus").textContent=message;$("#out").setAttribute("aria-busy","false");$("#go").disabled=false;showModel()}
+function responseModel(e){
+  if(e.kind!=="llm"||/warn_empty_response|empty\s+(?:model\s+)?response/i.test(String(e.title)))return null;
+  const d=e.detail;if(d&&(d.success===false||/^(error|failed|warn_empty_response)$/.test(d.status)))return null;
+  const match=String(e.title).match(/^(?:parsed request|SKU category selection|narrative) \(([\w./:-]+), (\d+(?:\.\d+)?) ms via ([\w .:-]+)\)(?: - [^\n]*)?$/);
+  if(match)return{model:match[1],provider:match[3]};
+  if(d&&(d.success===true||d.status==="success")&&typeof d.model==="string"&&d.model.trim()&&typeof d.provider==="string"&&d.provider.trim()&&Number.isFinite(d.ms))return{model:d.model,provider:d.provider};
+  return null;
+}
 function addTrace(e){
   if(e.t!=null){const id=JSON.stringify([e.t,e.kind,e.title]);if(seenTrace.has(id))return;seenTrace.add(id)}
-  const mm=String(e.title).match(/[\w.-]+\/[\w.-]*nemotron[\w.:-]*/i)||String(e.title).match(/\(([\w.-]+\/[\w.:-]+),/);
-  if(mm&&$("#modelpill")){const m=(mm[1]||mm[0]);const nv=/nemotron/i.test(m);servedModel={t:(nv?"model: ":"model (not Nemotron!): ")+m+" via Nightshift",c:"pill "+(nv?"ok":"bad")};showModel()}
+  const reply=responseModel(e);
+  if(reply){const nv=/nemotron/i.test(reply.model),provider=reply.provider==="meterless"?"Meterless Nightshift":reply.provider;servedModel={t:"model: "+reply.model+" via "+provider,c:"pill "+(nv?"ok":"bad")};showModel()}
   const trace=$("#trace"),follow=trace.scrollHeight-trace.scrollTop-trace.clientHeight<32;
   const li=document.createElement("li");li.innerHTML=`<span class="k ${esc(e.kind)}">${esc(e.kind)}</span><span>${esc(e.title)}</span>`;trace.appendChild(li);
   if(follow)trace.scrollTop=trace.scrollHeight;
@@ -135,26 +152,45 @@ function alignmentCard(a){
   <div class="alignment-scroll" tabindex="0" role="region" aria-label="Same-period market comparison table"><table class="alignment-table"><thead><tr><th scope="col">Market</th><th scope="col">Official series</th><th scope="col" class="num">Common-period YoY</th><th scope="col">Latest available</th><th scope="col">Source</th></tr></thead><tbody>${a.rows.map(row=>`<tr><th scope="row">${esc(row.country)}</th><td>${esc(row.label)}</td><td class="num">${pct(row.yoy)}</td><td>${esc(row.latestPeriod)}<div class="sub">${pct(row.latestYoy)} YoY</div></td><td class="src">${esc(row.sourceId)} · ${esc(a.cite)}</td></tr>`).join("")}</tbody></table></div>
   <p class="sub">${esc(a.note||caveat)} ${latest}</p></section>`;
 }
+function coverage(r){
+  const facts=r.facts||[],unique=xs=>[...new Set(xs.filter(x=>typeof x==="string"&&x.trim()))];
+  const requested=unique(Array.isArray(r.requestedCountries)?r.requestedCountries:facts.map(f=>f.country));
+  const unsupported=unique(Array.isArray(r.unsupportedCountries)?r.unsupportedCountries:[]),concept=r.concept;
+  const usable=s=>s&&(!concept||s.concept===concept)&&typeof s.latestYoy==="number"&&Number.isFinite(s.latestYoy)&&typeof s.latestPeriod==="string"&&s.latestPeriod.length>0;
+  const available=requested.filter(country=>!unsupported.includes(country)&&facts.some(f=>f.country===country&&[f.category,f.allItems].some(usable)));
+  const missing=requested.filter(country=>!available.includes(country)&&!unsupported.includes(country)).map(country=>{
+    const fallback=facts.some(f=>f.country===country&&f.allItems&&concept&&concept!=="all_items");
+    return `${country}: no usable ${concept||"requested category"} series${fallback?"; all-items is shown as a fallback":" returned"}.`;
+  });
+  const total=unique([...requested,...unsupported]).length,state=total>0&&available.length===total?"all":available.length?"partial":"none";
+  const title=`${state==="all"?"All requested markets covered":state==="partial"?"Partial coverage":"No requested-market evidence"} · ${available.length}/${total} requested markets`;
+  return{state,title,missing,unsupported};
+}
+function coverageBanner(c){return`<div class="coverage ${c.state}"><b>${esc(c.title)}</b>${c.missing.length?`<div class="sub">${c.missing.map(esc).join(" ")}</div>`:""}${c.unsupported.length?`<div class="sub">Unsupported markets: ${c.unsupported.map(esc).join(", ")}. No official series is available through the current adapters.</div>`:""}</div>`}
 function render(r,question){
   const md=r.markdown||"";const headline=(md.match(/^\*\*(.+)\*\*$/m)||[])[1];
   const proposed=r.proposed!=null?String(r.proposed):(md.match(/proposed change: ([+-]?[\d.]+)%/)||[])[1];
   const categoryLabel=new Map([["food","Food"],["all_items","All items"],["snacks","Snacks"],["condiments","Condiments"]]).get(r.concept)||r.concept;
+  const covered=coverage(r);
   const pending=r.partialStage==="markets"?"Market numbers ready — pricing SKUs and checking the summary…":r.skus?.length?"Numbers and SKU prices ready — checking the summary…":"Market numbers ready — checking the summary…";
-  if(r.partial)setRunStage(r.partialStage==="markets"?"Market numbers ready; pricing SKUs and checking the summary":"Numbers ready; checking the summary");
+  if(r.partial)setRunStage(`${covered.title}; ${r.partialStage==="markets"?"pricing SKUs and checking the summary":"checking the summary"}`);
   const metrics=r.metrics?`${r.metrics.modelCalls} model calls · ${r.metrics.plannerCalls} planner calls · ${r.metrics.discoveries} discoveries · ${r.metrics.reusedViews} reused views${r.metrics.numbersMs!=null?` · first numbers ${(r.metrics.numbersMs/1000).toFixed(1)} s`:""}`:"";
-  $("#out").innerHTML=`<div class="card">${headline?`<p class="headline">${esc(headline)}</p>`:r.partial?`<p class="headline" style="color:var(--muted)">${esc(pending)}</p>`:""}<div class="sub">${r.invalidPassThrough?"Policy input invalid; cost target omitted":`Policy: pass through ${Math.round(r.passThrough*100)}% of the change in unit costs${r.policySource?` (${esc(r.policySource)})`:""}`}${r.cost!=null?` · your costs ${r.cost>0?"+":""}${r.cost}%${r.costRemembered?" (remembered)":""}${r.costShare!=null?` · cost share ${esc(r.costShare)}% of current price${r.costShareRemembered?" (remembered)":""}`:""} ${r.facts.some(f=>f.costNeed!=null)?` → cost recovery target ${r.facts.find(f=>f.costNeed!=null).costNeed.toFixed(1)}%`:""}`:""} · ${r.partial?"numbers ready in":"finished in"} ${(r.ms/1000).toFixed(1)} s · ${r.sql.length} SQL statements · ${r.views.filter(v=>v.via==="memory").length} of ${r.views.length} sources recalled from memory</div>${r.cost!=null&&r.costShare==null?`<div class="sub" style="margin-top:6px;color:var(--warn)">Cost share is needed to estimate a price target. Add current unit costs as a percentage of the current selling price.</div>`:""}<div class="sub" style="margin-top:6px">${categoryLabel?`<b>Interpreted market category: ${esc(categoryLabel)}</b> · `:""}Market benchmark: latest YoY and the recent one-year mean. A historical comparison; customer demand and next-quarter inflation are not estimated.</div>${metrics?`<div class="sub" style="margin-top:6px">${esc(metrics)}</div>`:""}${r.narrative?`<div class="sub" style="margin-top:6px">${r.narrative.watch?`<b>Watch:</b> ${esc(r.narrative.watch)} · `:""}Summary written by NVIDIA Nemotron via Meterless Nightshift; its figures and comparison labels were checked against the computed facts.</div>`:r.partial||!r.facts.length?"":`<div class="sub" style="margin-top:6px">No model-written summary this time (${esc({grounding:"its numbers or verdicts did not match the facts",unusable:"the reply was not usable",provider:"the model provider returned an error or timed out",budget:"the time budget ran out"}[r.narrativeIssue]||"not available")}); the headline and every figure are computed in code.</div>`}</div>
+  $("#out").innerHTML=`<div class="card">${coverageBanner(covered)}${headline?`<p class="headline">${esc(headline)}</p>`:r.partial?`<p class="headline" style="color:var(--muted)">${esc(pending)}</p>`:""}<div class="sub">${r.invalidPassThrough?"Policy input invalid; cost target omitted":`Policy: pass through ${Math.round(r.passThrough*100)}% of the change in unit costs${r.policySource?` (${esc(r.policySource)})`:""}`}${r.cost!=null?` · your costs ${r.cost>0?"+":""}${r.cost}%${r.costRemembered?" (remembered)":""}${r.costShare!=null?` · cost share ${esc(r.costShare)}% of current price${r.costShareRemembered?" (remembered)":""}`:""} ${r.facts.some(f=>f.costNeed!=null)?` → cost recovery target ${r.facts.find(f=>f.costNeed!=null).costNeed.toFixed(1)}%`:""}`:""} · ${r.partial?"numbers ready in":"finished in"} ${(r.ms/1000).toFixed(1)} s · ${r.sql.length} SQL statements · ${r.views.filter(v=>v.via==="memory").length} of ${r.views.length} sources recalled from memory</div>${r.cost!=null&&r.costShare==null?`<div class="sub" style="margin-top:6px;color:var(--warn)">Cost share is needed to estimate a price target. Add current unit costs as a percentage of the current selling price.</div>`:""}<div class="sub" style="margin-top:6px">${categoryLabel?`<b>Interpreted market category: ${esc(categoryLabel)}</b> · `:""}Market benchmark: latest YoY and the recent one-year mean. A historical comparison; customer demand and next-quarter inflation are not estimated.</div>${metrics?`<div class="sub" style="margin-top:6px">${esc(metrics)}</div>`:""}${r.narrative?`<div class="sub" style="margin-top:6px">${r.narrative.watch?`<b>Watch:</b> ${esc(r.narrative.watch)} · `:""}Summary written by NVIDIA Nemotron via Meterless Nightshift; its figures and comparison labels were checked against the computed facts.</div>`:r.partial||!r.facts.length?"":`<div class="sub" style="margin-top:6px">No model-written summary this time (${esc({grounding:"its numbers or verdicts did not match the facts",unusable:"the reply was not usable",provider:"the model provider returned an error or timed out",budget:"the time budget ran out"}[r.narrativeIssue]||"not available")}); the headline and every figure are computed in code.</div>`}</div>
+  ${PricePreviewPanel.render(r)}
+  ${!r.partial&&r.facts.length?`<h2>Original brief${proposed!=null?` · proposed ${Number(proposed)>0?"+":""}${esc(proposed)}%`:" · no proposal supplied"}</h2>`:""}
   <div class="markets">${r.facts.map(f=>card(f,proposed!=null?Number(proposed):null,r.narrative?.markets?.[f.country])).join("")}</div>
   ${alignmentCard(r.alignment)}
   ${r.sinceLast&&r.sinceLast.length?`<div class="card"><h2>Since your last brief · remembered in H-MEM</h2><ul class="notes">${r.sinceLast.map(n=>`<li>${esc(n)}</li>`).join("")}</ul></div>`:""}
-  ${r.skus&&r.skus.length?`<div class="card"><h2>Your price list · internal data joined in Zetaris (${esc(r.pricing?.id)}) · product categories with broader proxies marked</h2><table class="skus"><tr><th>SKU</th><th>Product</th><th>Market</th><th style="text-align:right">Current</th><th style="text-align:right">Benchmark price scenario</th>${proposed!=null?`<th style="text-align:right">At ${Number(proposed)>0?"+":""}${esc(proposed)}%</th>`:""}<th style="text-align:right">Rate used</th></tr>${r.skus.map(s=>`<tr><td><b>${esc(s.sku)}</b></td><td>${esc(s.product)}</td><td>${esc(s.country)}</td><td class="num">${s.currentPrice.toFixed(2)} ${esc(s.currency)}</td><td class="num">${s.low!=null?`${s.low.toFixed(2)}–${s.high.toFixed(2)} ${esc(s.currency)}`:"-"}${s.rangeLow!=null?`<div class="sub">${s.rangeLow>0?"+":""}${s.rangeLow.toFixed(1)}–${s.rangeHigh.toFixed(1)}%</div>`:""}</td>${proposed!=null?`<td class="num" style="color:${s.verdict&&s.verdict.startsWith("above")?"var(--warn)":"inherit"}">${s.atProposed!=null?s.atProposed.toFixed(2):"-"}${s.verdict?`<div class="sub">${esc(s.verdict.split(" ")[0])}</div>`:""}</td>`:""}<td class="num">${s.yoy>0?"+":""}${s.yoy.toFixed(1)}% ${esc(s.period)}${s.rateLabel?`<div style="font-family:var(--sans,inherit);font-size:11px;color:var(--muted);white-space:normal">${esc(s.rateLabel)}${s.coarser?" · coarser":""}</div>`:""}${s.selectionSource?`<details style="white-space:normal;text-align:left;margin-top:4px"><summary>${s.selectionFit==="broader"?"Broader proxy":"Product match"} · ${esc({model:"Model-selected",memory:"Remembered match",fallback:"Unconfirmed match"}[s.selectionSource]||s.selectionSource)}</summary><div class="sub">${esc(s.selectionReason)}</div></details>`:""}</td></tr>`).join("")}</table></div>`:""}
+  ${r.skus&&r.skus.length?`<div class="card"><h2>Your price list · internal data joined in Zetaris (${esc(r.pricing?.id)}) · product categories with broader proxies marked</h2><div class="sku-scroll" tabindex="0" role="region" aria-label="SKU price scenarios"><table class="skus"><tr><th>SKU</th><th>Product</th><th>Market</th><th style="text-align:right">Current</th><th style="text-align:right">Benchmark price scenario</th>${proposed!=null?`<th style="text-align:right">At ${Number(proposed)>0?"+":""}${esc(proposed)}%</th>`:""}<th style="text-align:right">Rate used</th></tr>${r.skus.map(s=>`<tr><td><b>${esc(s.sku)}</b></td><td>${esc(s.product)}</td><td>${esc(s.country)}</td><td class="num">${s.currentPrice.toFixed(2)} ${esc(s.currency)}</td><td class="num">${s.low!=null?`${s.low.toFixed(2)}–${s.high.toFixed(2)} ${esc(s.currency)}`:"-"}${s.rangeLow!=null?`<div class="sub">${s.rangeLow>0?"+":""}${s.rangeLow.toFixed(1)}–${s.rangeHigh.toFixed(1)}%</div>`:""}</td>${proposed!=null?`<td class="num" style="color:${s.verdict&&s.verdict.startsWith("above")?"var(--warn)":"inherit"}">${s.atProposed!=null?s.atProposed.toFixed(2):"-"}${s.verdict?`<div class="sub">${esc(s.verdict.split(" ")[0])}</div>`:""}</td>`:""}<td class="num">${s.yoy>0?"+":""}${s.yoy.toFixed(1)}% ${esc(s.period)}${s.rateLabel?`<div style="font-family:var(--sans,inherit);font-size:11px;color:var(--muted);white-space:normal">${esc(s.rateLabel)}${s.coarser?" · coarser":""}</div>`:""}${s.selectionSource?`<details style="white-space:normal;text-align:left;margin-top:4px"><summary>${s.selectionFit==="broader"?"Broader proxy":"Product match"} · ${esc({model:"Model-selected",memory:"Remembered match",fallback:"Unconfirmed match"}[s.selectionSource]||s.selectionSource)}</summary><div class="sub">${esc(s.selectionReason)}</div></details>`:""}</td></tr>`).join("")}</table></div></div>`:""}
   ${r.notes.length?`<div class="card"><h2>Data coverage and limitations</h2><ul class="notes">${r.notes.map(n=>`<li>${esc(n)}</li>`).join("")}</ul></div>`:""}
   <div class="card"><h2>Evidence</h2>${r.facts.length?`<p class="sub">Market rates come from Zetaris query <b>${esc(r.compared.id)}</b> — one federated SQL across the sources the agent onboarded (${r.views.map(v=>"psig."+esc(v.view)+" ("+esc(v.via)+")").join(", ")}). Benchmarks and hypothetical SKU prices are computed in code from the historical rates. The cost recovery target separately uses your stated cost share, cost change and pass-through policy.</p>`:`<p class="sub">No covered market was asked about, so no official series was queried.</p>`}<pre>${esc(r.compared.sql)}</pre>${r.pricing?`<p class="sub">SKU rates come from the internal price list joined with official series in <b>${esc(r.pricing.id)}</b>:</p><pre>${esc(r.pricing.sql)}</pre>`:""}
   <details><summary>All ${r.sql.length} statements the agent ran</summary>${r.sql.map(q=>`<pre>-- ${esc(q.id)} · ${q.rows} rows · ${q.ms} ms\n${esc(q.sql)}</pre>`).join("")}</details>
-  <details><summary>Brief as Markdown</summary><pre>${esc(md)}</pre></details></div>`;status()}
+  <details><summary>Brief as Markdown</summary><pre>${esc(md)}</pre></details></div>`;PricePreviewPanel.bind(r);status()}
 $("#go").onclick=async()=>{
   const q=$("#q").value.trim();if(!q)return;
   $("#go").disabled=true;$("#trace").innerHTML="";seenTrace.clear();$("#out").innerHTML=`<div class="card empty">Reading your request, then finding official evidence. Market numbers will appear as soon as they are ready.</div>`;
   $("#out").setAttribute("aria-busy","true");runStarted=Date.now();runActive=true;setRunStage("Understanding your question");runTimer=setInterval(showRunStatus,1000);
+  servedModel=null;modelRunStarted=true;showModel();
   let hasPartial=false,reconnectTimer=null;
   const clearReconnect=()=>{if(reconnectTimer!==null)clearTimeout(reconnectTimer);reconnectTimer=null};
   try{
@@ -164,7 +200,7 @@ $("#go").onclick=async()=>{
     es.onerror=()=>{if(!runActive||reconnectTimer!==null)return;setRunStage("Connection interrupted; reconnecting");reconnectTimer=setTimeout(()=>{es.close();clearReconnect();finishRun("Connection lost. You can investigate again; any figures above are from the interrupted run.")},10000)};
     es.onmessage=m=>addTrace(JSON.parse(m.data));
     es.addEventListener("partial",m=>{clearReconnect();hasPartial=true;render(JSON.parse(m.data),q)});
-    es.addEventListener("result",m=>{clearReconnect();es.close();const r=JSON.parse(m.data);render(r,q);finishRun(`Brief complete in ${(r.ms/1000).toFixed(1)} s.`)});
+    es.addEventListener("result",m=>{clearReconnect();es.close();const r=JSON.parse(m.data);render(r,q);finishRun(`Run complete — ${coverage(r).title}. ${(r.ms/1000).toFixed(1)} s.`)});
     es.addEventListener("failure",m=>{clearReconnect();es.close();const error=JSON.parse(m.data).error;if(!hasPartial)$("#out").innerHTML=`<div class="card"><b>The investigation could not finish</b><pre>${esc(error)}</pre></div>`;finishRun(`Investigation stopped: ${error}. ${hasPartial?"Available figures are preserved. ":""}You can investigate again.`)});
   }catch(e){clearReconnect();if(!hasPartial)$("#out").innerHTML=`<div class="card"><b>The investigation could not start</b><pre>${esc(e)}</pre></div>`;finishRun("The request failed. Check the runtime status, then investigate again.")}
 };

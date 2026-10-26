@@ -234,6 +234,7 @@ Reply with JSON only.`;
   // ---------- 2. act until every market has a governed view ----------
   async run(raw: string): Promise<Brief> {
     const t0 = Date.now();
+    const startedAt = new Date(t0).toISOString();
     const req = await this.parse(raw);
     const memory = this.deps.memory;
     if (req.passThrough !== undefined) {
@@ -257,7 +258,7 @@ Reply with JSON only.`;
     if (req.defaultMarkets) notes.push(`No market was named in the question, so the brief covers the default markets ${req.countries.join(", ")}.`);
     if (!req.countries.length) {
       // Only markets PriceSignal does not cover were named: say so instead of answering for markets nobody asked about.
-      const brief: Brief = { request: req, facts: [], notes, passThrough: req.passThrough ?? memory.latestPolicy()?.policy ?? 1, compared: { id: "-", sql: "", columns: COMPARE_COLUMNS, rows: [], ms: 0 }, sqlLog: this.sqlLog, views: [], ms: Date.now() - t0, trace: this.trace };
+      const brief: Brief = { request: req, startedAt, facts: [], notes, passThrough: req.passThrough ?? memory.latestPolicy()?.policy ?? 1, compared: { id: "-", sql: "", columns: COMPARE_COLUMNS, rows: [], ms: 0 }, sqlLog: this.sqlLog, views: [], ms: Date.now() - t0, trace: this.trace };
       brief.markdown = renderBrief(brief);
       this.log("done", `none of the markets in the question is covered (${req.unknownCountries.join(", ")}) - nothing to compare`);
       return brief;
@@ -359,7 +360,7 @@ Reply with JSON only.`;
     const snapshotMetrics = (): RunMetrics => ({ ...this.metrics, reusedViews: [...views.values()].filter((v) => v.via === "memory").length });
     // Market facts are useful immediately; do not hide them behind slower SKU discovery and pricing.
     this.metrics.numbersMs = Date.now() - t0;
-    const marketPartial: Brief = { request: req, facts, alignment, notes: [...notes], passThrough: policy, policySource, compared, sqlLog: [...this.sqlLog], views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: this.metrics.numbersMs, trace: [...this.trace], metrics: snapshotMetrics(), partialStage: "markets" };
+    const marketPartial: Brief = { request: req, startedAt, facts, alignment, notes: [...notes], passThrough: policy, policySource, compared, sqlLog: [...this.sqlLog], views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: this.metrics.numbersMs, trace: [...this.trace], metrics: snapshotMetrics(), partialStage: "markets" };
     this.log("progress", `market numbers ready in ${(this.metrics.numbersMs / 1000).toFixed(1)} s - pricing SKUs and writing the summary`);
     this.emit("partial", marketPartial);
     // The narrative only needs the market facts, so the model writes it while Zetaris prices the SKUs.
@@ -367,11 +368,11 @@ Reply with JSON only.`;
     const pricing = await this.priceList(req, views, facts, policy, ensureView, notes);
     const sinceLast = this.compareWithLastBrief(facts, req, policy);
     // Everything in the brief except the prose is ready: let the UI show it while the model finishes writing.
-    const partial: Brief = { request: req, facts, alignment, notes, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, sinceLast, compared, sqlLog: [...this.sqlLog], views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: [...this.trace], metrics: snapshotMetrics(), partialStage: "pricing" };
+    const partial: Brief = { request: req, startedAt, facts, alignment, notes, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, sinceLast, compared, sqlLog: [...this.sqlLog], views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: [...this.trace], metrics: snapshotMetrics(), partialStage: "pricing" };
     this.emit("partial", partial);
     const { narrative, issue: narrativeIssue } = await narrativeP;
     memory.rememberRequest(req);
-    const brief: Brief = { request: req, facts, alignment, notes, narrative, narrativeIssue, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, sinceLast, compared, sqlLog: this.sqlLog, views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: this.trace, metrics: snapshotMetrics() };
+    const brief: Brief = { request: req, startedAt, facts, alignment, notes, narrative, narrativeIssue, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, sinceLast, compared, sqlLog: this.sqlLog, views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: this.trace, metrics: snapshotMetrics() };
     brief.markdown = renderBrief(brief);
     this.log("done", `brief ready in ${Math.round(brief.ms / 1000)} s (${this.sqlLog.length} SQL statements, ${[...views.values()].filter((v) => v.via === "memory").length} views reused from memory; ${this.metrics.modelCalls} model calls, ${this.metrics.plannerCalls} planner calls, ${this.metrics.discoveries} discoveries)`);
     return brief;
@@ -1048,12 +1049,14 @@ function requestPercentages(raw: string, model: any): {
   invalidCostShare: boolean; invalidPassThrough: boolean; issues: string[];
 } {
   const matches = [...raw.matchAll(/([+＋\-−－]?)\s*(\d+(?:\.\d+)?)\s*(?:%|pct\b|percent\b|퍼센트|프로)/gi)];
-  const clauseBoundary = /[,;!?\n]|\b(?:but|and|while|whereas)\b|하지만|그런데|반면|그리고/i;
+  // Keep offsets unchanged while protecting common abbreviations from sentence splitting.
+  const context = raw.replace(/\b(?:approx|e\.g|i\.e)\./gi, abbreviation => abbreviation.replace(/\./g, " "));
+  const clauseBoundary = /[,;!?\n]|(?<!\d)\.|\.(?!\d)|\b(?:but|and|while|whereas)\b|하지만|그런데|반면|그리고/i;
   const found = matches.map((m, i) => {
     const from = i ? matches[i - 1].index! + matches[i - 1][0].length : 0;
     const end = m.index! + m[0].length;
-    const before = raw.slice(Math.max(from, m.index! - 80), m.index).split(clauseBoundary).at(-1)!;
-    const after = raw.slice(end, Math.min(matches[i + 1]?.index ?? raw.length, end + 70)).split(clauseBoundary)[0];
+    const before = context.slice(Math.max(from, m.index! - 80), m.index).split(clauseBoundary).at(-1)!;
+    const after = context.slice(end, Math.min(matches[i + 1]?.index ?? raw.length, end + 70)).split(clauseBoundary)[0];
     const costWords = /\bcosts?\b|원가|비용|\binput\b|\bingredient\b|\bmaterial\b|\bfreight\b/i;
     const share = /cost[ -]*(?:share|ratio)|costs?[ -]*(?:to|\/)[ -]*(?:selling[ -]*)?price|원가\s*비중|비용\s*비중|판매가.*(?:원가|비용)|(?:원가|비용).*판매가/i.test(before)
       || /^\s*(?:(?:unit|current)\s+)?cost[ -]*(?:share|ratio)\b|^\s*(?:원가|비용)\s*비중/i.test(after)
