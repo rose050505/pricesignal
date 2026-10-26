@@ -1,0 +1,21 @@
+{
+  "name": "pricesignal",
+  "version": "0.1.0",
+  "description": "Cross-border inflation agent for exporters: discovers fragmented statistics sources, onboards them into Zetaris, and answers with evidence. Powered by Meterless Nightshift (NVIDIA Nemotron) and H-MEM memory.",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "setup": "npx --yes degit meterless/meterless/engines/hmem/reference vendor/hmem --force && cd vendor/hmem && npm install --no-audit --no-fund",
+    "setup:conformance": "npx --yes degit meterless/meterless/engines/hmem/conformance vendor/hmem-conformance --force",
+    "conformance": "cd vendor/hmem && HMEM_IMPL=$(pwd)/../../src/hmem_impl.ts npx tsx ../hmem-conformance/runner.ts",
+    "test": "tsx --test tests/*.test.ts",
+    "smoke": "tsx src/smoke.ts",
+    "ask": "tsx src/cli.ts",
+    "ui": "tsx src/server.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0"
+  },
+  "engines": { "node": ">=20" }
+}

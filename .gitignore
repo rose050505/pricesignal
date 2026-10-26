@@ -1,0 +1,8 @@
+node_modules/
+vendor/
+.env
+.pricesignal/
+out/
+logs/
+zetaris-platform/
+.zetaris_admin
