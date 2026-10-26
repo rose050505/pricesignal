@@ -31,7 +31,7 @@ Assembling a comparable answer by hand means three APIs, three formats and three
 3. **Onboards each series into Zetaris** as a Lightning REST table plus a decoding view with a common schema — the agency APIs become governed SQL tables.
 4. **Answers with one federated SQL query** across all three agencies in Zetaris.
 5. **Joins the company's own price list.** The exporter's internal price list (SKU, market, product category, current shelf price) is a Zetaris REST table too. A second federated query joins each SKU with the official series of its own category in its market (gochujang → condiments, chips → snacks, ramen → food; missing category series are onboarded first), so the brief ends with a suggested new price per SKU.
-6. **Computes the facts in code** (latest year-on-year rate, 12-period average, trend, staleness, suggested range, verdict, new SKU prices) and lets the model write only the prose. Numbers in the prose must match a computed fact, the request or the policy; otherwise the model rewrites once and then a deterministic summary is used.
+6. **Computes the facts in code** (latest year-on-year rate, 12-period average, trend, staleness, suggested range, verdict, new SKU prices) and lets the model write only the prose. Numbers in the prose must match a computed fact, the request or the policy, a stated range must be the computed range, and "within / above / below the evidence" must be the computed verdict (re-checking replies recorded on 26 Oct found Nemotron calling a +3% proposal "above" a 0.4–3.4% range, which the earlier number-only check let through); otherwise the model rewrites once and then a deterministic summary is used.
 7. **Remembers** (Meterless H-MEM): series mappings, the user's pricing policy and the last request persist across sessions. "Same as last time, but +3%?" is resolved from memory, and remembered mappings skip discovery and onboarding.
 
 **What the suggested range means.** Range = your pass-through share × how much consumer prices for that category have moved in that market over the latest month and the 12-month average. It is a market-side check ("how much room do shelf prices in this category give us?"), not a measure of your own costs.
@@ -57,7 +57,7 @@ messy question
 │            ├─ PSIG_STATCAN   (REST table → psig view)            │
 │            ├─ PSIG_ABS       (REST table → psig view)            │
 │            └─ PSIG_INTERNAL  (company price list → psig view)    │
-│  Guardrails: SQL allowlist, number-grounding check, staleness    │
+│  Guardrails: SQL allowlist, number+verdict check, staleness      │
 └──────────────────────────────────────────────────────────────────┘
      │
      ▼
@@ -69,7 +69,7 @@ verdict on the proposed change, source series id, SQL behind it)
 
 **Zetaris** is where the fragmented sources become one dataset. The agent registers each agency endpoint with `CREATE LIGHTNING REST TABLE` and a decoding `CREATE SCHEMASTORE VIEW` (JSON-stat, WDS and SDMX are flattened in Lightning SQL), all in a common schema `(country, concept, category_label, frequency, period, yoy_pct, source_id)`. Every official rate the user sees comes from one federated `UNION ALL` query over those views, and the brief cites the statement id (Q7, Q8, …) next to each rate, with the SQL behind it listed at the end. The company's internal price list is registered the same way (`PSIG_INTERNAL`), and a second federated query joins each internal SKU with the official series of its own category in its market; the per-SKU rate, average and range are then computed in code like the market facts. Onboarding is idempotent: when Zetaris already has a table or view from an earlier run, the trace says so ("already in Zetaris") instead of claiming it was created. Remembered views are checked before reuse: a view whose data stops more than three months ago (six for quarterly series) is not reused, and the agent goes back to discovery. A small successor map handles known dataset moves, such as Eurostat's `prc_hicp_manr` → `prc_hicp_minr`. Every SQL statement the agent sends passes an allowlist (`SELECT`, plus the `CREATE LIGHTNING …` / `CREATE SCHEMASTORE …` statements used for onboarding); anything else is blocked in code.
 
-**Meterless Nightshift** is the application's primary AI provider. The app implements the Meterless Runtime provider contract: OpenAI-compatible `/v1/chat/completions`, Bearer runtime token, `meterless-app` on every request, `meterless-scope: user` on chat, `GET /v1/models` to decide online / unauthorized / offline, and the `meterless/fast` routing mode (`meterless/deep` is configurable but not used by default). The model that served each step is shown in the agent trace.
+**Meterless Nightshift** is the application's primary AI provider. The app implements the Meterless Runtime provider contract: OpenAI-compatible `/v1/chat/completions`, Bearer runtime token, `meterless-app` on every request, `meterless-scope: user` on chat, `GET /v1/models` to decide online / unauthorized / offline, and the `meterless/fast` routing mode (`meterless/deep` is configurable but not used by default). The model that served each step is shown in the agent trace. Nemotron's response time through Nightshift varied from about 1 s to over 50 s between consecutive calls on 26 Oct, so model calls are hedged: if no reply has come after 10 s (`PSIG_HEDGE_MS`), the same request is sent once more, the first reply wins and the other request is cancelled; the trace says when this happened.
 
 **Meterless H-MEM** gives the agent memory across sessions. We run the Meterless reference engine unchanged (`src/hmem_impl.ts` re-exports it, and `npm run conformance` runs the official suite against that file: 13/13). Our work is in how the agent uses it: series mappings are long-term factual memories with structured tags, so a recalled memory changes what the agent does next (skip discovery and onboarding); a re-onboarded series supersedes the old mapping; reused mappings get `helpful` feedback; the pricing policy is a preference memory and the brief says when it was remembered rather than stated; and the last request is stored so "same as last time" works.
 
@@ -130,7 +130,7 @@ Helper scripts used on our machine (Ubuntu laptop + Windows desktop running Nigh
 
 ```
 src/agent.ts          planner loop, actions, guardrails
-src/brief.ts          facts computed from Zetaris rows, number-grounding check, rendering
+src/brief.ts          facts computed from Zetaris rows, number and verdict check, rendering
 src/sources/          one adapter per agency: discover() + Lightning SQL onboarding templates;
                       pricelist.ts registers the internal price list and joins it with the rates
 data/price_list.json  sample internal price list (fictional exporter)

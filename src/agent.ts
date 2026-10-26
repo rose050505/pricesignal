@@ -6,9 +6,9 @@
 import { EventEmitter } from "node:events";
 import { chat, ChatMessage, ChatResult } from "./llm.ts";
 import { AgentMemory } from "./memory.ts";
-import { SqlResult, SqlRunner, rowsAsObjects, resetCiteIds } from "./zetaris.ts";
+import { SqlResult, SqlRunner, rowsAsObjects } from "./zetaris.ts";
 import { AGENCY_FOR, COMPARE_COLUMNS, Candidate, Concept, Country, CONCEPT_WORDS, compareSql, discover, monthsBack, normalizeCountry, onboard } from "./sources/index.ts";
-import { MarketFacts, Brief, SkuLine, buildFacts, renderBrief, allowedNumbers, checkNarrative, factsForNarrative, seriesFacts, Narrative, NarrativeIssue } from "./brief.ts";
+import { MarketFacts, Brief, SkuLine, buildFacts, renderBrief, signedPct, marketKey, allowedNumbers, checkNarrative, factsForNarrative, seriesFacts, Narrative, NarrativeIssue } from "./brief.ts";
 import { PRICE_DB, PRICING_COLUMNS, SKU_RATE_COLUMNS, ensurePriceList, priceTable, priceView, pricingSql, skuCategoriesSql, skuRatesSql } from "./sources/pricelist.ts";
 
 export interface Request {
@@ -20,11 +20,13 @@ export interface Request {
   passThrough?: number; // from the request, else memory, else 1.0
   policyStatement?: string;
   unknownCountries: string[];
+  /** no market was named, so the default markets are used (the brief says so) */
+  defaultMarkets?: boolean;
 }
 
 export interface TraceEvent { t: number; kind: string; title: string; detail?: unknown }
 
-export interface AgentDeps { llm?: typeof chat; sql: SqlRunner; memory: AgentMemory; discoverFn?: typeof discover; onboardFn?: typeof onboard; maxSteps?: number }
+export interface AgentDeps { llm?: typeof chat; sql: SqlRunner; memory: AgentMemory; discoverFn?: typeof discover; onboardFn?: typeof onboard; maxSteps?: number; hedgeMs?: number }
 
 const SYSTEM_PLANNER = `You are PriceSignal, an agent that helps an exporter's pricing manager decide price changes per market from official inflation statistics.
 Markets and agencies: EU members (DE, FR, IT, ES, NL, BE, AT, IE, PT, FI, SE, DK, PL, CZ) = Eurostat HICP, CA = Statistics Canada CPI, AU = Australian Bureau of Statistics CPI.
@@ -49,19 +51,23 @@ export class PriceSignalAgent extends EventEmitter {
   private onboardFn: typeof onboard;
   private maxSteps: number;
   private providerSlow = false;
+  private hedgeMs: number;
+  /** the Zetaris runner as this agent uses it: allowlist, trace, and this run's own statement numbers (Q1, Q2, ...) */
+  private sql: SqlRunner;
+  private cite = 0;
   readonly trace: TraceEvent[] = [];
   readonly sqlLog: SqlResult[] = [];
 
   constructor(private deps: AgentDeps) {
     super();
-    resetCiteIds();
     const base = deps.llm ?? chat;
     this.llm = (async (messages: any, opts: any = {}) => {
       const o = this.providerSlow ? { ...opts, attempts: 1, timeoutMs: Math.min(opts.timeoutMs ?? 45_000, 45_000) } : opts;
       try {
         return await base(messages, o);
       } catch (e) {
-        if (/Abort|HTTP 5\d\d|fetch failed|ETIMEDOUT/i.test(String(e)) && !this.providerSlow) {
+        // A hedged request we cancelled ourselves says nothing about the provider.
+        if (/Abort|HTTP 5\d\d|fetch failed|ETIMEDOUT/i.test(String(e)) && !this.providerSlow && !opts.signal?.aborted) {
           this.providerSlow = true;
           this.log("warn", "model provider is slow right now - shorter time budget for the rest of this run (deterministic fallbacks keep the brief complete)");
         }
@@ -71,15 +77,18 @@ export class PriceSignalAgent extends EventEmitter {
     this.discoverFn = deps.discoverFn ?? discover;
     this.onboardFn = deps.onboardFn ?? onboard;
     this.maxSteps = deps.maxSteps ?? 18;
+    this.hedgeMs = deps.hedgeMs ?? (process.env.PSIG_HEDGE_MS === "off" ? Infinity : Number(process.env.PSIG_HEDGE_MS || 10_000));
     const run = deps.sql.run.bind(deps.sql);
-    deps.sql.run = async (sql, opts) => {
-      if (!/^\s*(SELECT\b|CREATE\s+(LIGHTNING\s+(DATABASE|REST\s+TABLE)|SCHEMASTORE\s+(CONTAINER|VIEW))\b)/i.test(sql)) {
+    this.sql = { run: async (sql, opts) => {
+      // One statement per call, and only SELECT or onboarding DDL (quoted text may contain anything).
+      const bare = sql.replace(/'(?:[^']|'')*'/g, "''").replace(/"[^"]*"/g, '""');
+      if (!/^\s*(SELECT\b|CREATE\s+(LIGHTNING\s+(DATABASE|REST\s+TABLE)|SCHEMASTORE\s+(CONTAINER|VIEW))\b)/i.test(sql) || /;\s*\S/.test(bare)) {
         this.log("error", `blocked statement (only SELECT and onboarding DDL are allowed): ${sql.split("\n")[0].slice(0, 80)}`);
         throw new Error("statement blocked by the SQL allowlist");
       }
       let res: SqlResult;
       try {
-        res = await run(sql, opts);
+        res = { ...(await run(sql, opts)), id: `Q${++this.cite}` };
       } catch (e) {
         // Onboarding DDL is idempotent; an object Zetaris already has is shown, not hidden.
         if (/^\s*CREATE\b/i.test(sql) && /already exists|AlreadyExists|duplicate/i.test(String(e))) this.log("sql", `already in Zetaris (not created again): ${sql.split("\n")[0].slice(0, 90)}`, { sql, existed: true });
@@ -88,7 +97,54 @@ export class PriceSignalAgent extends EventEmitter {
       this.sqlLog.push(res);
       this.log("sql", `${res.id}: ${sql.split("\n")[0].slice(0, 90)}`, { id: res.id, sql, rows: res.rows.length, ms: res.ms });
       return res;
-    };
+    } };
+  }
+
+  /**
+   * Hedged model call. Nemotron's latency through Nightshift swings from about 1 s to 40+ s between
+   * consecutive calls, so if no reply has come after hedgeMs (or the first request fails early), the same
+   * request is sent once more and the first reply wins. Fast calls never send the second request.
+   */
+  private hedged(what: string, call: (signal: AbortSignal) => Promise<ChatResult>): Promise<ChatResult> {
+    if (!Number.isFinite(this.hedgeMs)) return call(new AbortController().signal);
+    return new Promise<ChatResult>((resolve, reject) => {
+      let launched = 0;
+      let failed = 0;
+      let done = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const inFlight: AbortController[] = [];
+      const hedge = (why: string) => {
+        if (done || launched > 1) return;
+        clearTimeout(timer);
+        this.log("warn", `${what}: ${why} - sent the same request again; the first reply wins`);
+        launch();
+      };
+      const launch = () => {
+        const n = ++launched;
+        const ctl = new AbortController();
+        inFlight.push(ctl);
+        call(ctl.signal).then(
+          (r) => {
+            if (done) return;
+            done = true;
+            clearTimeout(timer);
+            // The other request is cancelled; its error is expected and not a sign of a slow provider.
+            for (const c of inFlight) if (c !== ctl) c.abort(new Error("cancelled: the other request answered first"));
+            if (n === 2) this.log("llm", `${what}: the second request answered first (${r.ms} ms)`);
+            resolve(r);
+          },
+          (e) => {
+            if (done) return;
+            if (++failed === 2) {
+              done = true;
+              reject(e);
+            } else if (launched === 1) hedge(`the first request failed (${String(e).slice(0, 80)})`);
+          },
+        );
+      };
+      launch();
+      timer = setTimeout(() => hedge(`no reply after ${Math.round(this.hedgeMs / 1000)} s`), this.hedgeMs);
+    });
   }
 
   private log(kind: string, title: string, detail?: unknown): void {
@@ -106,37 +162,45 @@ Request: """${raw}"""
 Reply with JSON only.`;
     let j: any = {};
     try {
-      const r = await this.llm([{ role: "user", content: prompt }], { lane: "fast", temperature: 0, attempts: 2, timeoutMs: 60_000 });
+      const r = await this.hedged("request parsing", (signal) => this.llm([{ role: "user", content: prompt }], { lane: "fast", temperature: 0, attempts: 1, timeoutMs: 60_000, signal }));
       j = extractJson(r.text) ?? {};
       this.log("llm", `parsed request (${r.model}, ${r.ms} ms${via(r)})`, j);
     } catch (e) {
       this.log("warn", `LLM parse failed, using rules: ${String(e).slice(0, 120)}`);
     }
-    const rawCountries: string[] = Array.isArray(j.countries) && j.countries.length ? j.countries.map(String) : raw.split(/[\s,&/]+/);
+    // Only the model's list can name a market we do not cover; scanning the words of the question
+    // (when the model gave no list) must not turn "same", "as", "last" into markets.
+    const named: string[] = Array.isArray(j.countries) ? j.countries.map(String) : [];
     const countries: Country[] = [];
     const unknown: string[] = [];
-    for (const c of rawCountries) {
-      const n = normalizeCountry(c.replace(/[^\p{L}]/gu, ""));
+    for (const c of named.length ? named : raw.split(/[\s,&/]+/)) {
+      const n = normalizeCountry(c.replace(/[^\p{L}]/gu, ""), named.length > 0);
       if (n && !countries.includes(n)) countries.push(n);
-      else if (!n && Array.isArray(j.countries)) unknown.push(c);
+      else if (!n && named.length) unknown.push(c);
     }
-    if (!countries.length) countries.push("DE", "CA", "AU");
     const concept = cleanConcept(j.concept) || "food";
     const words = Array.isArray(j.concept_words) && j.concept_words.length ? j.concept_words.map((w: unknown) => String(w).toLowerCase()) : CONCEPT_WORDS[concept] ?? [concept];
     // "same as last time": start from the request H-MEM remembered, keep only what the user changed.
     const sameAsLast = /\b(same as (last|before|previous)|like last time|as last time|as usual|same again)\b|지난번|저번|지난 분기|같은 조건/i.test(raw);
     const last = sameAsLast ? this.deps.memory.lastRequest() : undefined;
-    const explicitCountries = raw.split(/[^\p{L}]+/u).map((w) => normalizeCountry(w)).filter((c): c is Country => !!c);
+    const explicitCountries = raw.split(/[^\p{L}]+/u).map((w) => normalizeCountry(w, false)).filter((c): c is Country => !!c);
     if (last) {
       if (!explicitCountries.length) countries.splice(0, countries.length, ...(last.request.countries as Country[]));
-      this.log("memory", `recalled last request ${last.id}: markets ${last.request.countries.join(", ")}, category "${last.request.concept}"${last.request.proposedChangePct !== undefined ? `, +${last.request.proposedChangePct}%` : ""}`);
+      this.log("memory", `recalled last request ${last.id}: markets ${last.request.countries.join(", ")}, category "${last.request.concept}"${last.request.proposedChangePct !== undefined ? `, ${signedPct(last.request.proposedChangePct)}` : ""}`);
     }
+    // Nothing named and nothing remembered: the demo markets, said in the brief. Only unsupported markets named: none.
+    const defaultMarkets = !countries.length && !unknown.length;
+    if (defaultMarkets) countries.push("DE", "CA", "AU");
     // A percentage stated as the pass-through share ("we pass on 80% now") is not a proposed price change.
     const passThrough = numOrUndef(j.pass_through);
-    const explicitPct = [...raw.matchAll(/[+＋]?\s?(\d+(?:\.\d+)?)\s?(?:%|pct\b|percent\b|퍼센트|프로)/gi)]
+    const pcts = [...raw.matchAll(/([+＋]?)\s?(\d+(?:\.\d+)?)\s?(?:%|pct\b|percent\b|퍼센트|프로)/gi)]
       .filter((m) => !/(pass|반영)/i.test(raw.slice(Math.max(0, m.index! - 30), m.index)))
-      .map((m) => Number(m[1]))
-      .find((x) => passThrough === undefined || Math.abs(x - passThrough * 100) > 1e-9);
+      .map((m) => ({ x: Number(m[2]), signed: !!m[1] }))
+      .filter(({ x }) => passThrough === undefined || Math.abs(x - passThrough * 100) > 1e-9);
+    // Other percentages may be costs ("our costs rose 8% - is +4% ok?"): the model's reading wins when the
+    // question contains it; otherwise a signed "+N%" is the proposal, then the first percentage.
+    const modelPct = numOrUndef(j.proposed_change_pct);
+    const explicitPct = modelPct !== undefined && pcts.some(({ x }) => Math.abs(x - modelPct) < 1e-9) ? modelPct : (pcts.find((p) => p.signed) ?? pcts[0])?.x;
     const req: Request = {
       raw,
       countries,
@@ -146,8 +210,9 @@ Reply with JSON only.`;
       passThrough,
       policyStatement: j.policy_statement ? String(j.policy_statement) : undefined,
       unknownCountries: unknown,
+      defaultMarkets: defaultMarkets || undefined,
     };
-    this.log("request", `markets ${countries.join(", ")} | category "${req.concept}"${req.proposedChangePct !== undefined ? ` | proposed +${req.proposedChangePct}%` : ""}${unknown.length ? ` | not covered: ${unknown.join(", ")}` : ""}`, req);
+    this.log("request", `markets ${countries.join(", ")} | category "${req.concept}"${req.proposedChangePct !== undefined ? ` | proposed ${signedPct(req.proposedChangePct)}` : ""}${unknown.length ? ` | not covered: ${unknown.join(", ")}` : ""}`, req);
     return req;
   }
 
@@ -174,6 +239,14 @@ Reply with JSON only.`;
     const candidates = new Map<string, Candidate[]>();
     const notes: string[] = [];
     for (const u of req.unknownCountries) notes.push(`${u}: not covered yet - PriceSignal currently reads Eurostat (EU markets), Statistics Canada (CA) and ABS (AU).`);
+    if (req.defaultMarkets) notes.push(`No market was named in the question, so the brief covers the default markets ${req.countries.join(", ")}.`);
+    if (!req.countries.length) {
+      // Only markets PriceSignal does not cover were named: say so instead of answering for markets nobody asked about.
+      const brief: Brief = { request: req, facts: [], notes, passThrough: req.passThrough ?? memory.latestPolicy()?.policy ?? 1, compared: { id: "-", sql: "", columns: COMPARE_COLUMNS, rows: [], ms: 0 }, sqlLog: this.sqlLog, views: [], ms: Date.now() - t0, trace: this.trace };
+      brief.markdown = renderBrief(brief);
+      this.log("done", `none of the markets in the question is covered (${req.unknownCountries.join(", ")}) - nothing to compare`);
+      return brief;
+    }
     const key = (c: string, k: string) => `${c}:${k}`;
 
     const messages: ChatMessage[] = [
@@ -185,16 +258,19 @@ Reply with JSON only.`;
     let badReplies = 0;
     let autopilot = false;
 
+    // A pair is settled when it has a view, or when its agency was asked and has no usable series (":gaveup").
+    const unsettled = () => pairs.filter((p) => !views.has(key(p.country, p.concept)) && !candidates.has(key(p.country, p.concept) + ":gaveup"));
     for (let step = 0; step < this.maxSteps; step++) {
-      const missing = pairs.filter((p) => !views.has(key(p.country, p.concept)));
+      const missing = unsettled();
       let batch: { action: string; args: any }[] = [];
+      if (!missing.length && !views.size) break;
       if (!missing.length && (!compared || comparedViews !== views.size)) {
         // Every needed series is ready: the federated comparison is the only sensible next step, no model turn needed.
         this.log("plan", "all needed series are ready - running the federated comparison");
         batch = [{ action: "compare", args: {} }];
       } else if (!autopilot) {
         try {
-          const r = await this.llm(messages, { lane: "fast", temperature: 0.1, maxTokens: 6000, attempts: 2, timeoutMs: 75_000 });
+          const r = await this.hedged("planner", (signal) => this.llm(messages, { lane: "fast", temperature: 0.1, maxTokens: 6000, attempts: 1, timeoutMs: 75_000, signal }));
           const j = extractJson(r.text);
           batch = Array.isArray(j?.actions) ? j.actions.filter((a: any) => a?.action).slice(0, 8) : j?.action ? [j] : [];
           if (!batch.length) throw new Error(`no action in: ${r.text.slice(0, 120)}`);
@@ -233,8 +309,8 @@ Reply with JSON only.`;
         this.log("plan", `planner tried to finish with ${untried.map((p) => `${p.country} ${p.concept}`).join(", ")} still missing - completing them without another planner turn`);
         autopilot = true;
       }
-      if (!autopilot) messages.push({ role: "user", content: `Observations: ${JSON.stringify(observations).slice(0, 3500)}\nStill missing: ${JSON.stringify(pairs.filter((p) => !views.has(key(p.country, p.concept))))}\nNext: reply with the action JSON only.` });
-      if (!finished && compared && comparedViews === views.size && pairs.every((p) => views.has(key(p.country, p.concept)))) {
+      if (!autopilot) messages.push({ role: "user", content: `Observations: ${JSON.stringify(observations).slice(0, 3500)}\nStill missing: ${JSON.stringify(unsettled())}\nNext: reply with the action JSON only.` });
+      if (!finished && compared && comparedViews === views.size && !unsettled().length) {
         // Everything needed is onboarded and compared: finishing needs no extra model call.
         this.log("plan", "all markets compared - finishing without another planner turn");
         finished = true;
@@ -313,7 +389,7 @@ Reply with JSON only.`;
             this.log("memory", `nothing remembered for ${country} ${concept} - discovering it`);
             return { not_in_memory: true, discovered: await this.execute({ action: "discover_and_onboard", args: { country, concept } }, req, s) };
           }
-          const probe = await this.deps.sql.run(`SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.${hit.mapping.view} WHERE yoy_pct IS NOT NULL`);
+          const probe = await this.sql.run(`SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.${hit.mapping.view} WHERE yoy_pct IS NOT NULL`);
           const n = Number(probe.rows[0]?.[0] ?? 0);
           if (!n) return { error: `remembered view psig.${hit.mapping.view} returned no rows; onboard again` };
           const latest = String(probe.rows[0]?.[1] ?? "");
@@ -332,8 +408,20 @@ Reply with JSON only.`;
         case "discover_series": {
           if (!country) return { error: "country must be one of the supported market codes" };
           const words = concept === req.concept ? req.conceptWords : undefined;
-          const d = await this.discoverFn(country, concept, words);
+          let d: Awaited<ReturnType<typeof discover>>;
+          try {
+            d = await this.discoverFn(country, concept, words);
+          } catch (e) {
+            // An agency that does not answer counts as tried: report it once instead of asking it again every step.
+            s.candidates.set(s.key(country, concept), []);
+            s.candidates.set(s.key(country, concept) + ":gaveup", []);
+            const note = `${country}: ${AGENCY_FOR[country].name} did not answer for "${concept}" (${String(e).replace(/^Error: /, "").slice(0, 80)}).`;
+            if (!s.notes.includes(note)) s.notes.push(note);
+            this.log("warn", `${AGENCY_FOR[country].name} did not answer for ${country} ${concept}: ${String(e).slice(0, 120)}`);
+            return { error: "agency did not answer", candidates: [] };
+          }
           s.candidates.set(s.key(country, concept), d.candidates);
+          if (!d.candidates.length) s.candidates.set(s.key(country, concept) + ":gaveup", []);
           for (const n of d.notes) if (!s.notes.includes(`${country}: ${n}`)) s.notes.push(`${country}: ${n}`);
           (s.candidates as any).set(s.key(country, concept) + ":notes", d.notes);
           this.log("discover", `${AGENCY_FOR[country].name}: ${d.candidates.length} candidate(s) for "${concept}"`, d);
@@ -349,14 +437,20 @@ Reply with JSON only.`;
               return { reused_from_memory: reused };
             }
           }
+          const k = s.key(country, concept);
+          if (s.candidates.has(k + ":gaveup")) return { error: "already tried: this agency has no usable series for this pair" };
           const found: any = await this.execute({ action: "discover_series", args: { country, concept } }, req, s);
-          const n = s.candidates.get(s.key(country, concept))?.length ?? 0;
-          if (!n) return { discovered: found, error: "no candidate series" };
+          const n = s.candidates.get(k)?.length ?? 0;
+          if (!n) {
+            s.candidates.set(k + ":gaveup", []);
+            return { discovered: found, error: "no candidate series" };
+          }
           let last: any;
           for (let i = 0; i < Math.min(n, 3); i++) {
             last = await this.execute({ action: "onboard_series", args: { country, concept, candidate: i } }, req, s);
             if (last?.ok) break;
           }
+          if (!last?.ok) s.candidates.set(k + ":gaveup", []);
           return { notes: found?.notes, onboard: last };
         }
         case "onboard_series": {
@@ -364,7 +458,7 @@ Reply with JSON only.`;
           const list = s.candidates.get(s.key(country, concept));
           if (!list?.length) return { error: "run discover_series for this pair first" };
           const c = list[Math.max(0, Math.min(list.length - 1, Number(a.candidate ?? 0)))];
-          const r = await this.onboardFn(this.deps.sql, c, concept);
+          const r = await this.onboardFn(this.sql, c, concept);
           const how = r.existed ? "Zetaris already had it - reused and verified" : "created REST table + view";
           this.log("onboard", `${r.ok ? "onboarded" : "FAILED"} ${c.agency} ${c.code} -> psig.${r.view}${r.ok ? ` (${how}: ${r.rows} rows, latest ${r.latest})` : `: ${r.error}`}`, { candidate: c, result: { ...r, sql: r.sql } });
           if (r.ok) {
@@ -384,7 +478,7 @@ Reply with JSON only.`;
           }
           const vs = [...s.views.values()].map((v) => v.view);
           if (!vs.length) return { error: "no views yet" };
-          const res = await this.deps.sql.run(compareSql(vs, monthsBack(15)));
+          const res = await this.sql.run(compareSql(vs, monthsBack(15)));
           s.setCompared(res);
           this.log("compare", `federated query ${res.id} over ${vs.length} views -> ${res.rows.length} rows`);
           const latest = latestByKey(rowsAsObjects(res, COMPARE_COLUMNS));
@@ -415,7 +509,7 @@ Reply with JSON only.`;
     ensureView: (country: Country, concept: Concept) => Promise<{ view: string; label?: string; note?: string } | undefined>,
   ): Promise<{ skus: SkuLine[]; query: SqlResult } | undefined> {
     try {
-      const ready = await ensurePriceList(this.deps.sql);
+      const ready = await ensurePriceList(this.sql);
       if (!ready.ok) {
         this.log("warn", `internal price list not available in Zetaris: ${String(ready.error).slice(0, 140)}`);
         return undefined;
@@ -426,7 +520,7 @@ Reply with JSON only.`;
       return undefined;
     }
     try {
-      const catRes = await this.deps.sql.run(skuCategoriesSql(req.countries));
+      const catRes = await this.sql.run(skuCategoriesSql(req.countries));
       const cats = catRes.rows
         .map((r) => ({ country: normalizeCountry(String(r[0])), concept: String(r[1] ?? "").toLowerCase().trim() }))
         .filter((c): c is { country: Country; concept: string } => !!c.country && !!c.concept);
@@ -439,7 +533,7 @@ Reply with JSON only.`;
         else this.log("warn", `no official ${c.concept} series for ${c.country}; those SKUs are left out`);
       });
       if (!skuViews.size) return await this.priceListFlat(req, views, facts);
-      const res = await this.deps.sql.run(skuRatesSql([...new Set([...skuViews.values()].map((v) => v.view))], req.countries, monthsBack(15)));
+      const res = await this.sql.run(skuRatesSql([...new Set([...skuViews.values()].map((v) => v.view))], req.countries, monthsBack(15)));
       const rows = rowsAsObjects(res, SKU_RATE_COLUMNS);
       const bySku = new Map<string, Record<string, unknown>[]>();
       for (const r of rows) {
@@ -482,7 +576,7 @@ Reply with JSON only.`;
     const catViews = req.countries.map((c) => views.get(`${c}:${cat}`)?.view ?? views.get(`${c}:all_items`)?.view).filter((v): v is string => !!v);
     if (!catViews.length) return undefined;
     try {
-      const res = await this.deps.sql.run(pricingSql([...new Set(catViews)], req.countries));
+      const res = await this.sql.run(pricingSql([...new Set(catViews)], req.countries));
       const rows = rowsAsObjects(res, PRICING_COLUMNS);
       const skus: SkuLine[] = rows.map((r) => {
         const f = facts.find((x) => x.country === r.country);
@@ -522,9 +616,9 @@ Reply with JSON only.`;
         else parts.push(`no new official release (still ${s.latestPeriod}, ${pct(s.latestYoy)})`);
         if (Math.abs(o.policy - policy) > 1e-9) parts.push(`pass-through ${Math.round(o.policy * 100)}% -> ${Math.round(policy * 100)}%`);
         if (o.proposed !== undefined && req.proposedChangePct !== undefined) {
-          if (o.proposed !== req.proposedChangePct) parts.push(`last time +${o.proposed}% was ${o.verdict}; now +${req.proposedChangePct}% is ${f.verdict}`);
-          else if (o.verdict !== f.verdict) parts.push(`verdict on +${req.proposedChangePct}% changed: ${o.verdict} -> ${f.verdict}`);
-          else parts.push(`verdict on +${req.proposedChangePct}% unchanged (${f.verdict})`);
+          if (o.proposed !== req.proposedChangePct) parts.push(`last time ${signedPct(o.proposed)} was ${o.verdict}; now ${signedPct(req.proposedChangePct)} is ${f.verdict}`);
+          else if (o.verdict !== f.verdict) parts.push(`verdict on ${signedPct(req.proposedChangePct)} changed: ${o.verdict} -> ${f.verdict}`);
+          else parts.push(`verdict on ${signedPct(req.proposedChangePct)} unchanged (${f.verdict})`);
         }
         out.push(`${f.country} ${s.label} (last brief ${when}, ${prev.id}): ${parts.join("; ")}.`);
       }
@@ -540,7 +634,7 @@ Reply with JSON only.`;
     const allowed = [...allowedNumbers(facts, req, policy), ...noteNumbers];
     const payload = { request: req.raw, proposed_change_pct: req.proposedChangePct ?? null, pass_through_pct: Math.round(policy * 100), facts: factsForNarrative(facts), caveats: [...new Set(notes)] };
     const ask: ChatMessage[] = [
-      { role: "system", content: "You write short, plain-English pricing briefs for an exporter's pricing manager. Use ONLY numbers that appear in the facts JSON, written with the same one-decimal rounding. When you state a suggested range, copy suggested_range_pct low and high exactly (for example 1.0% to 4.3%); never compute a range yourself. No new numbers, no forecasts. Each market's verdict field is final: say it as given (above, within or below the evidence) and keep the headline consistent with every market's verdict. Mention only the caveats listed in the facts JSON (for example markets that are not covered); do not add claims about methodology or data sources that are not in it." },
+      { role: "system", content: "You write short, plain-English pricing briefs for an exporter's pricing manager. Use ONLY numbers that appear in the facts JSON, written with the same one-decimal rounding. When you state a suggested range, copy suggested_range_pct low and high exactly (for example 1.0% to 4.3%); never compute a range yourself. No new numbers, no forecasts. Each market's verdict field is final: say it as given (above, within or below the evidence) and keep the headline consistent with every market's verdict; never compare the proposal with the range yourself. Mention only the caveats listed in the facts JSON (for example markets that are not covered); do not add claims about methodology or data sources that are not in it." },
       { role: "user", content: `Facts: ${JSON.stringify(payload)}\nReply with JSON only: {"headline": str (<= 25 words), "markets": {"<country code>": str (2-3 sentences: what the data says and what it means for the proposed change)}, "watch": str (one sentence on what to re-check next month)}` },
     ];
     // One time budget for the prose, retries included: the numbers never wait more than this for the words.
@@ -554,19 +648,18 @@ Reply with JSON only.`;
         break;
       }
       try {
-        const r = await this.llm(ask, { lane: (process.env.PSIG_NARRATIVE_LANE as "fast" | "deep") || "fast", temperature: 0.2, maxTokens: 8000, attempts: 1, timeoutMs: left });
+        const r = await this.hedged("narrative", (signal) => this.llm(ask, { lane: (process.env.PSIG_NARRATIVE_LANE as "fast" | "deep") || "fast", temperature: 0.2, maxTokens: 8000, attempts: 1, timeoutMs: Math.max(1_000, deadline - Date.now()), signal }));
         const n = extractJson(r.text) as Narrative | null;
         if (!n?.headline) throw new Error(`no headline in reply: ${r.text.replace(/\s+/g, " ").slice(0, 160)}`);
         const bad = checkNarrative(n, allowed, facts, req, policy, noteNumbers);
-        this.log("llm", `narrative (${r.model}, ${r.ms} ms${via(r)})${bad.length ? ` - ungrounded numbers ${bad.join(", ")}` : " - all numbers grounded"}`);
-        if (!bad.length) return { narrative: n };
+        this.log("llm", `narrative (${r.model}, ${r.ms} ms${via(r)})${bad.length ? ` - does not match the facts: ${bad.join(", ")}` : " - numbers and verdicts match the facts"}`);
+        if (!bad.length) return { narrative: { ...n, markets: Object.fromEntries(Object.entries(n.markets ?? {}).map(([k, v]) => [marketKey(k), v])) } };
         issue = "grounding";
-        ask.push({ role: "assistant", content: r.text }, { role: "user", content: `These numbers or ranges do not match the facts for that market: ${bad.join(", ")}. Rewrite using only that market's numbers; a suggested range must be exactly suggested_range_pct low to high. JSON only.` });
+        ask.push({ role: "assistant", content: r.text }, { role: "user", content: `These numbers, ranges or verdicts do not match the facts for that market: ${bad.join(", ")}. Rewrite using only that market's numbers; a suggested range must be exactly suggested_range_pct low to high, and each market's verdict must be exactly its verdict field. JSON only.` });
       } catch (e) {
         this.log("warn", `narrative attempt failed: ${String(e).slice(0, 120)}`);
         issue = /no headline in reply/.test(String(e)) ? "unusable" : "provider";
-        // An empty reply (the model spent its budget thinking) is worth one more try; outages and timeouts are not.
-        if (/Abort|HTTP 5\d\d|fetch failed/i.test(String(e)) && !/empty_response/i.test(String(e))) break;
+        // Failures through Nightshift come and go from one request to the next, so the next attempt runs while the budget lasts.
       }
     }
     return { issue }; // renderBrief falls back to a deterministic summary

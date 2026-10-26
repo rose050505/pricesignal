@@ -50,13 +50,19 @@ export function providerConfig(): ProviderConfig {
   throw new Error(`unknown LLM_PROVIDER ${provider}`);
 }
 
-async function fetchWithTimeout(url: string, init: RequestInit, ms = TIMEOUT_MS): Promise<Response> {
+/** Fetch and read the body under one time limit (a proxy may send headers long before the body); `signal` cancels from outside. */
+async function fetchText(url: string, init: RequestInit, ms = TIMEOUT_MS, signal?: AbortSignal): Promise<{ status: number; ok: boolean; text: string }> {
   const ctl = new AbortController();
   const t = setTimeout(() => ctl.abort(), ms);
+  const onAbort = () => ctl.abort(signal!.reason);
+  if (signal?.aborted) onAbort();
+  else signal?.addEventListener("abort", onAbort, { once: true });
   try {
-    return await fetch(url, { ...init, signal: ctl.signal });
+    const r = await fetch(url, { ...init, signal: ctl.signal });
+    return { status: r.status, ok: r.ok, text: await r.text() };
   } finally {
     clearTimeout(t);
+    signal?.removeEventListener("abort", onAbort);
   }
 }
 
@@ -64,10 +70,10 @@ export type ProviderStatus = { state: "online" | "unauthorized" | "offline"; mod
 
 export async function providerStatus(cfg = providerConfig()): Promise<ProviderStatus> {
   try {
-    const r = await fetchWithTimeout(`${cfg.baseUrl}/models`, { headers: { Authorization: `Bearer ${cfg.token}`, ...cfg.headers } }, 15_000);
+    const r = await fetchText(`${cfg.baseUrl}/models`, { headers: { Authorization: `Bearer ${cfg.token}`, ...cfg.headers } }, 15_000);
     if (r.status === 401 || r.status === 403) return { state: "unauthorized", models: [] };
     if (r.status !== 200) return { state: "offline", models: [], detail: `HTTP ${r.status}` };
-    const j: any = await r.json();
+    const j: any = JSON.parse(r.text);
     const models: string[] = (j.data ?? []).map((m: any) => String(m.id));
     if (cfg.provider === "meterless" && !models.some((m) => m.startsWith("meterless/"))) return { state: "offline", models, detail: "no meterless/* routes" };
     return { state: "online", models };
@@ -80,7 +86,7 @@ export function stripThinking(text: string): string {
   return text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
 }
 
-export async function chat(messages: ChatMessage[], opts: { lane?: "fast" | "deep"; temperature?: number; maxTokens?: number; attempts?: number; timeoutMs?: number } = {}): Promise<ChatResult> {
+export async function chat(messages: ChatMessage[], opts: { lane?: "fast" | "deep"; temperature?: number; maxTokens?: number; attempts?: number; timeoutMs?: number; signal?: AbortSignal } = {}): Promise<ChatResult> {
   const cfg = providerConfig();
   const model = opts.lane === "deep" ? cfg.deep : cfg.fast;
   const headers: Record<string, string> = { "Content-Type": "application/json", Authorization: `Bearer ${cfg.token}`, ...cfg.headers };
@@ -98,7 +104,7 @@ export async function chat(messages: ChatMessage[], opts: { lane?: "fast" | "dee
   for (let attempt = 0; attempt < attempts; attempt++) {
     try {
       if (process.env.PSIG_VERBOSE !== "0") process.stderr.write(`    … ${cfg.provider} ${model} (attempt ${attempt + 1})\n`);
-      const r = await fetchWithTimeout(`${cfg.baseUrl}/chat/completions`, {
+      const r = await fetchText(`${cfg.baseUrl}/chat/completions`, {
         method: "POST",
         headers,
         // Nemotron is a reasoning model: thinking tokens count against max_tokens, so keep a generous floor.
@@ -109,9 +115,9 @@ export async function chat(messages: ChatMessage[], opts: { lane?: "fast" | "dee
           max_tokens: Math.max(opts.maxTokens ?? 2048, Number(process.env.PSIG_MIN_MAX_TOKENS || 6000)),
           ...(sendReasoningHint ? { reasoning: { effort: process.env.PSIG_REASONING_EFFORT || "low", exclude: true }, reasoning_effort: process.env.PSIG_REASONING_EFFORT || "low", provider: { sort: "throughput" } } : {}),
         }),
-      }, opts.timeoutMs);
+      }, opts.timeoutMs, opts.signal);
       if (r.status === 429 || r.status >= 500) {
-        lastErr = new Error(`HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
+        lastErr = new Error(`HTTP ${r.status}: ${r.text.slice(0, 200)}`);
         if (attempt + 1 < attempts) await new Promise((res) => setTimeout(res, 2000 * (attempt + 1)));
         continue;
       }
@@ -121,8 +127,8 @@ export async function chat(messages: ChatMessage[], opts: { lane?: "fast" | "dee
         attempt--;
         continue;
       }
-      if (!r.ok) throw new Error(`LLM HTTP ${r.status}: ${(await r.text()).slice(0, 300)}`);
-      const j: any = await r.json();
+      if (!r.ok) throw new Error(`LLM HTTP ${r.status}: ${r.text.slice(0, 300)}`);
+      const j: any = JSON.parse(r.text);
       const msg = j.choices?.[0]?.message ?? {};
       const text = stripThinking(String(msg.content ?? ""));
       if (!text) {
@@ -133,7 +139,7 @@ export async function chat(messages: ChatMessage[], opts: { lane?: "fast" | "dee
     } catch (e) {
       lastErr = e;
       process.stderr.write(`    … failed: ${String(e).slice(0, 160)}\n`);
-      if (String(e).includes("LLM HTTP 4")) break;
+      if (String(e).includes("LLM HTTP 4") || opts.signal?.aborted) break;
     }
   }
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));

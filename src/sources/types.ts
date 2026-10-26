@@ -57,14 +57,15 @@ export const COUNTRY_ALIASES: Record<string, Country> = {
   czechia: "CZ", czech: "CZ", "체코": "CZ",
 };
 
-export function normalizeCountry(raw: string): Country | null {
+/** `fuzzy` (one typo in names of 5+ letters) is for country names the model extracted; words scanned from the question itself must match exactly ("inland" is not Finland). */
+export function normalizeCountry(raw: string, fuzzy = true): Country | null {
   const t = raw.trim();
   // Upper-case ISO codes ("FR", "IT") only; lower-case "it", "be", "at" are ordinary words.
   if (/^[A-Z]{2}$/.test(t) && (SUPPORTED_COUNTRIES as string[]).includes(t)) return t as Country;
   const k = t.toLowerCase();
-  if (COUNTRY_ALIASES[k]) return COUNTRY_ALIASES[k];
+  if (Object.hasOwn(COUNTRY_ALIASES, k)) return COUNTRY_ALIASES[k];
   // Tolerate one typo in names of 5+ letters ("canda", "austrlia", "germny").
-  if (k.length >= 4) {
+  if (fuzzy && k.length >= 4) {
     for (const [alias, c] of Object.entries(COUNTRY_ALIASES)) if (alias.length >= 5 && editDistance(k, alias) <= 1) return c;
   }
   return null;

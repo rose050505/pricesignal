@@ -261,3 +261,197 @@ test("a concept from the model cannot break the SQL literal it lands in; the tra
   assert.equal(r.concept, "childrens snacks --");
   assert.ok(agent.trace.some((e) => e.title === "parsed request (openrouter/nvidia/nemotron-3.5-lightning, 1 ms via Meterless Nightshift)"), agent.trace.map((e) => e.title).join("\n"));
 });
+
+test("a slow model call is hedged: a second identical request is sent and the first good reply wins", async () => {
+  // 26 Oct 22:51-23:05: the same narrative call took 2 s at one minute and failed after 40 s (502 empty_response) at another.
+  let narrativeCalls = 0;
+  const agent = new PriceSignalAgent({
+    hedgeMs: 40,
+    llm: async (m: any[]) => {
+      const last = m.at(-1).content as string;
+      if (last.startsWith("Extract")) return { text: '{"countries":["DE"],"concept":"food","proposed_change_pct":5}', model: "f", provider: "f", ms: 1 };
+      if (m[0].content.startsWith("You write short")) {
+        if (++narrativeCalls === 1) {
+          await new Promise((r) => setTimeout(r, 300));
+          throw new Error("AbortError: This operation was aborted"); // the time budget ran out waiting for this one reply
+        }
+        return { text: '{"headline":"+5% is above the evidence in DE.","markets":{"DE":"Food is easing."},"watch":"Re-check next month."}', model: "f", provider: "f", ms: 1 };
+      }
+      return { text: '{"actions":[{"action":"discover_and_onboard","args":{"country":"DE","concept":"food"}},{"action":"discover_and_onboard","args":{"country":"DE","concept":"all_items"}}]}', model: "f", provider: "f", ms: 1 };
+    },
+    sql: new FakeZ(),
+    memory: new AgentMemory(fs.mkdtempSync(path.join(os.tmpdir(), "psig-"))),
+    discoverFn: async (country: any, concept: string) => ({ country, concept, candidates: [cand(country, concept)], notes: [] }),
+    onboardFn: async (_z: any, c: Candidate, concept: string) => ({ view: `v_${c.country.toLowerCase()}_${concept}`, table: "t", ok: true, existed: false, rows: 9, latest: "2026-09", sql: [] }),
+  });
+  const b = await agent.run("DE food +5%");
+  assert.equal(b.narrative?.headline, "+5% is above the evidence in DE.");
+  assert.equal(narrativeCalls, 2);
+  assert.ok(b.trace.some((e) => /^narrative: no reply after .* - sent the same request again/.test(e.title)), b.trace.map((e) => e.title).join("\n"));
+});
+
+test("hedging gives up only when both requests fail, and can be switched off", async () => {
+  const mk = (hedgeMs: number, replies: (() => Promise<any>)[]) => {
+    let i = 0;
+    const a = new PriceSignalAgent({ hedgeMs, llm: () => replies[i++](), sql: new FakeZ(), memory: new AgentMemory(fs.mkdtempSync(path.join(os.tmpdir(), "psig-"))) });
+    return { a, calls: () => i };
+  };
+  const fail = (ms: number) => () => new Promise((_, rej) => setTimeout(() => rej(new Error("HTTP 502")), ms));
+  const ok = (ms: number) => () => new Promise((res) => setTimeout(() => res({ text: '{"countries":["DE"],"concept":"food","proposed_change_pct":2}', model: "f", provider: "f", ms }), ms));
+  // first fails fast -> second goes out at once and answers
+  const x = mk(10_000, [fail(5), ok(5)]);
+  assert.equal((await x.a.parse("DE food +2%")).proposedChangePct, 2);
+  assert.equal(x.calls(), 2);
+  // both fail -> the rules take over (parse never throws)
+  const y = mk(10, [fail(30), fail(40)]);
+  const ry = await y.a.parse("germany food +2%");
+  assert.equal(y.calls(), 2);
+  assert.deepEqual(ry.countries, ["DE"]);
+  assert.ok(y.a.trace.some((e) => /LLM parse failed/.test(e.title)));
+  // the first reply wins even when the second request is already out
+  const z = mk(10, [ok(40), ok(400)]);
+  const t0 = Date.now();
+  await z.a.parse("DE food +2%");
+  assert.ok(Date.now() - t0 < 300, "did not wait for the slower second request");
+  // switched off: exactly one request
+  const w = mk(Infinity, [fail(5), ok(5)]);
+  await w.a.parse("germany food +2%");
+  assert.equal(w.calls(), 1);
+});
+
+test("market parsing: no stray words as 'not covered' markets, no silent substitution of unasked markets", async () => {
+  const memory = new AgentMemory(fs.mkdtempSync(path.join(os.tmpdir(), "psig-")));
+  const reply = (j: string) => new PriceSignalAgent({ llm: async () => ({ text: j, model: "f", provider: "f", ms: 1 }), sql: new FakeZ(), memory });
+  // "same as last time": the model rightly names no market, and no word of the question becomes a market.
+  memory.rememberRequest({ countries: ["DE", "CA", "AU"], concept: "food", conceptWords: ["food"], proposedChangePct: 5, raw: "first" });
+  const a = await reply('{"countries":[],"concept":null,"proposed_change_pct":3}').parse("same as last time, but what if we only go +3%?");
+  assert.deepEqual(a.countries, ["DE", "CA", "AU"]);
+  assert.deepEqual(a.unknownCountries, []);
+  // No market named at all: the default markets are used, and the brief says so.
+  const fresh = new AgentMemory(fs.mkdtempSync(path.join(os.tmpdir(), "psig-")));
+  const agentB = new PriceSignalAgent({ llm: async (m: any[]) => (m.at(-1).content.startsWith("Extract") ? { text: '{"countries":[],"concept":"food","proposed_change_pct":5}', model: "f", provider: "f", ms: 1 } : scriptedLlm()(m)), sql: new FakeZ(), memory: fresh, discoverFn: async (country: any, concept: string) => ({ country, concept, candidates: [cand(country, concept)], notes: [] }), onboardFn: async (_z: any, c: Candidate, concept: string) => ({ view: `v_${c.country.toLowerCase()}_${concept}`, table: "t", ok: true, existed: false, rows: 9, latest: "2026-09", sql: [] }) });
+  const bb = await agentB.run("is food inflation still hot? thinking +5%");
+  assert.deepEqual(bb.request.countries, ["DE", "CA", "AU"]);
+  assert.deepEqual(bb.request.unknownCountries, []);
+  assert.ok(bb.notes.some((n) => /No market was named/.test(n)), bb.notes.join("\n"));
+  // Only unsupported markets: say so, do not answer for markets nobody asked about.
+  const agentC = new PriceSignalAgent({ llm: async () => ({ text: '{"countries":["japan"],"concept":"food","proposed_change_pct":5}', model: "f", provider: "f", ms: 1 }), sql: new FakeZ(), memory: fresh });
+  const c = await agentC.run("japan food prices, ok to raise 5%?");
+  assert.deepEqual(c.facts, []);
+  assert.deepEqual(c.request.countries, []);
+  assert.match(c.markdown!, /japan: not covered yet/);
+  assert.doesNotMatch(c.markdown!, /\| DE /);
+});
+
+test("the losing hedged request is cancelled and leaves no warning in the trace", async () => {
+  let cancelled = false;
+  let n = 0;
+  const agent = new PriceSignalAgent({
+    hedgeMs: 20,
+    llm: (_m: any, opts: any = {}) => {
+      if (++n === 1) {
+        // the slow first request: fails later unless it is cancelled first
+        return new Promise((_, rej) => {
+          const t = setTimeout(() => rej(new Error("AbortError: This operation was aborted")), 200);
+          opts.signal?.addEventListener("abort", () => { cancelled = true; clearTimeout(t); rej(opts.signal.reason); });
+        });
+      }
+      return Promise.resolve({ text: '{"countries":["DE"],"concept":"food","proposed_change_pct":2}', model: "f", provider: "f", ms: 1 });
+    },
+    sql: new FakeZ(),
+    memory: new AgentMemory(fs.mkdtempSync(path.join(os.tmpdir(), "psig-"))),
+  });
+  await agent.parse("DE food +2%");
+  await new Promise((r) => setTimeout(r, 300));
+  assert.ok(cancelled, "the slower request was cancelled");
+  assert.ok(!agent.trace.some((e) => /provider is slow/.test(e.title)), agent.trace.map((e) => e.title).join("\n"));
+  assert.ok(agent.trace.some((e) => /the second request answered first/.test(e.title)));
+});
+
+test("ordinary words in the question are not read as markets ('inland' is not Finland, 'pain' is not Spain)", async () => {
+  const memory = new AgentMemory(fs.mkdtempSync(path.join(os.tmpdir(), "psig-")));
+  memory.rememberRequest({ countries: ["FR", "IT", "ES"], concept: "food", conceptWords: ["food"], proposedChangePct: 5, raw: "first" });
+  const parseWith = (j: string, q: string) => new PriceSignalAgent({ llm: async () => ({ text: j, model: "f", provider: "f", ms: 1 }), sql: new FakeZ(), memory }).parse(q);
+  const q = "same as last time, but inland freight is a pain - can we do +4%?";
+  assert.deepEqual((await parseWith('{"countries":[],"proposed_change_pct":4}', q)).countries, ["FR", "IT", "ES"]);
+  // The model guessed markets the user never wrote (seen in examples/02): the remembered ones still win.
+  assert.deepEqual((await parseWith('{"countries":["DE","CA","AU"],"proposed_change_pct":4}', q)).countries, ["FR", "IT", "ES"]);
+  const c = await parseWith('{"countries":[],"proposed_change_pct":4}', "same as last time - our constructor client wants +4%");
+  assert.ok(c.countries.every((x) => typeof x === "string"), "no prototype property became a market");
+  // A typo in the model's own list is still resolved.
+  assert.deepEqual((await parseWith('{"countries":["canda"],"proposed_change_pct":4}', "canda snacks +4%")).countries, ["CA"]);
+});
+
+test("'same as last time': a cost increase in the question is not taken as the proposed change", async () => {
+  const memory = new AgentMemory(fs.mkdtempSync(path.join(os.tmpdir(), "psig-")));
+  memory.rememberRequest({ countries: ["DE", "CA", "AU"], concept: "food", conceptWords: ["food"], proposedChangePct: 5, raw: "first" });
+  const parseWith = (j: string | Error, q: string) => new PriceSignalAgent({ llm: async () => { if (j instanceof Error) throw j; return { text: j, model: "f", provider: "f", ms: 1 }; }, sql: new FakeZ(), memory }).parse(q);
+  assert.equal((await parseWith('{"countries":[],"proposed_change_pct":4}', "same as last time, but our costs rose 8% - is +4% ok?")).proposedChangePct, 4);
+  assert.equal((await parseWith('{"countries":[],"proposed_change_pct":4}', "지난번이랑 같은 조건, 원가가 8% 올랐는데 4프로 올려도 돼?")).proposedChangePct, 4);
+  // without the model, a signed "+N%" is the proposal
+  assert.equal((await parseWith(new Error("HTTP 502"), "same as last time, but our costs rose 8% - is +4% ok?")).proposedChangePct, 4);
+});
+
+test("an agency that does not answer is tried once, reported, and the other markets still get a brief", async () => {
+  const calls: Record<string, number> = {};
+  const agent = new PriceSignalAgent({
+    llm: async (m: any[]) => {
+      const last = m.at(-1).content as string;
+      if (last.startsWith("Extract")) return { text: '{"countries":["DE","AU"],"concept":"food","proposed_change_pct":5}', model: "f", provider: "f", ms: 1 };
+      if (m[0].content.startsWith("You write short")) return { text: '{"headline":"ok","markets":{},"watch":"x"}', model: "f", provider: "f", ms: 1 };
+      return { text: '{"actions":[{"action":"discover_and_onboard","args":{"country":"DE","concept":"food"}},{"action":"discover_and_onboard","args":{"country":"DE","concept":"all_items"}},{"action":"discover_and_onboard","args":{"country":"AU","concept":"food"}},{"action":"discover_and_onboard","args":{"country":"AU","concept":"all_items"}},{"action":"finish","args":{}}]}', model: "f", provider: "f", ms: 1 };
+    },
+    sql: new FakeZ(),
+    memory: new AgentMemory(fs.mkdtempSync(path.join(os.tmpdir(), "psig-"))),
+    discoverFn: async (country: any, concept: string) => {
+      const k = `${country} ${concept}`;
+      calls[k] = (calls[k] ?? 0) + 1;
+      if (k === "AU food") throw new Error("fetch failed: ABS timed out");
+      return { country, concept, candidates: [cand(country, concept)], notes: [] };
+    },
+    onboardFn: async (_z: any, c: Candidate, concept: string) => ({ view: `v_${c.country.toLowerCase()}_${concept}`, table: "t", ok: true, existed: false, rows: 9, latest: "2026-09", sql: [] }),
+  });
+  const b = await agent.run("DE and AU food +5%");
+  assert.ok(calls["AU food"] <= 2, JSON.stringify(calls));
+  assert.ok(b.facts.find((f) => f.country === "DE")?.category, "DE still answered");
+  assert.ok(b.notes.some((n) => /AU: Australian Bureau of Statistics \(CPI\) did not answer/.test(n)), b.notes.join("\n"));
+});
+
+test("each agent numbers its own Zetaris statements, does not rewire a shared runner, and blocks stacked statements", async () => {
+  const z = new FakeZ();
+  const mk = () => new PriceSignalAgent({ sql: z, memory: new AgentMemory(fs.mkdtempSync(path.join(os.tmpdir(), "psig-"))), llm: async () => ({ text: "{}", model: "f", provider: "f", ms: 1 }) });
+  const a1 = mk();
+  const a2 = mk();
+  const run = (a: any, sql: string) => a.sql.run(sql);
+  const q1 = await run(a1, "SELECT country, concept FROM psig.v_x");
+  const q2 = await run(a2, "SELECT country, concept FROM psig.v_y");
+  assert.equal(q1.id, "Q1");
+  assert.equal(q2.id, "Q1", "two concurrent runs do not share one counter");
+  assert.equal(a1.sqlLog.length, 1, "the second agent's query is not logged by the first");
+  await assert.rejects(run(a1, "SELECT 1; DROP VIEW psig.v_de_food"), /allowlist/);
+  await assert.rejects(run(a1, "select * from t /* */; insert into x values (1)"), /allowlist/);
+  // a semicolon inside a quoted label is fine
+  await run(a1, "SELECT 'Food; beverages' AS category_label FROM psig.v_x");
+});
+
+test("grounding also checks verdict words, stray 6/12, 'supports X to Y' ranges, non-text prose and market names", () => {
+  const s = (latestYoy: number, avg12: number) => ({ concept: "snacks", label: "x", frequency: "M", sourceId: "x", latestPeriod: "2026-09", latestYoy, avg12, yoy6Back: undefined, trend: "easing" as const, points: [] });
+  const facts: any[] = [
+    { country: "DE", agency: "Eurostat", category: s(1.4, 6.1), suggested: { low: 1.0, high: 4.3, basis: "" }, verdict: "above the evidence", cite: "Q8", monthsStale: 1 },
+    { country: "CA", agency: "StatCan", category: s(2.2, 4.1), suggested: { low: 1.5, high: 2.9, basis: "" }, verdict: "above the evidence", cite: "Q8", monthsStale: 1 },
+  ];
+  const req: any = { raw: "", countries: ["DE", "CA"], concept: "snacks", conceptWords: [], proposedChangePct: 5, unknownCountries: [] };
+  const allowed = allowedNumbers(facts, req, 0.7);
+  const chk = (n: any) => checkNarrative(n, allowed, facts, req, 0.7);
+  // found by the 26 Oct review (all passed before)
+  assert.ok(chk({ headline: "+5% is within the evidence in DE and CA - go ahead.", markets: { DE: "+5% is within the evidence." } }).length, "verdict flipped");
+  assert.ok(chk({ headline: "ok", markets: { DE: "German snack prices are up 12% and climbing 6% a quarter." } }).length, "invented 12% / 6%");
+  assert.ok(chk({ headline: "ok", markets: { DE: "A 70% pass-through supports 1.4% to 6.1%, so +5% is above the evidence." } }).length, "latest/average pair called the supported range");
+  assert.ok(chk({ headline: "ok", markets: { DE: { text: "Snacks up 99.9%" } } }).length, "prose that is not text");
+  assert.ok(chk({ headline: "ok", markets: { Germany: "Range is 2.2% to 4.1%." } }).length, "market keyed by name is checked as that market");
+  // what real briefs say keeps passing
+  assert.deepEqual(chk({ headline: "+5% Q1 increase exceeds food inflation evidence across DE and CA.", markets: {
+    DE: "German food inflation for Sugar, confectionery and desserts was 1.4% YoY in September 2026, with a 12-month average of 6.1%. The proposed +5% increase falls above the evidence range of 1.0% to 4.3%, placing it above the evidence.",
+    CA: "Canadian food inflation was 2.2% YoY, down from a 12-month average of 4.1%; it eased from 4.1% to 2.2% over 6 months. The proposed +5% exceeds the evidence range of 1.5% to 2.9%, so it is above the evidence.",
+  }, watch: "Re-check the 12-period averages next month." }), []);
+});

@@ -51,7 +51,7 @@ export class AgentMemory {
   rememberRequest(r: { countries: string[]; concept: string; conceptWords: string[]; proposedChangePct?: number; raw: string }): string {
     const slim = { countries: r.countries, concept: r.concept, conceptWords: r.conceptWords, proposedChangePct: r.proposedChangePct };
     return this.hmem.add({
-      content: `Last pricing request: markets ${r.countries.join(", ")}, category ${r.concept}${r.proposedChangePct !== undefined ? `, proposed +${r.proposedChangePct}%` : ""} ("${r.raw.slice(0, 160)}")`,
+      content: `Last pricing request: markets ${r.countries.join(", ")}, category ${r.concept}${r.proposedChangePct !== undefined ? `, proposed ${r.proposedChangePct > 0 ? "+" : ""}${r.proposedChangePct}%` : ""} ("${r.raw.slice(0, 160)}")`,
       type: "general",
       source: "pricesignal:user",
       confidence: 0.9,
@@ -72,7 +72,7 @@ export class AgentMemory {
   /** What a brief concluded for one market, so the next brief can say what changed since. */
   rememberOutcome(o: Outcome): string {
     return this.hmem.add({
-      content: `Brief outcome: ${o.country} ${o.concept} ${o.period} ${o.yoy}% YoY, suggested ${o.low}-${o.high}% at ${Math.round(o.policy * 100)}% pass-through${o.proposed !== undefined ? `, +${o.proposed}% was ${o.verdict}` : ""} (${o.at.slice(0, 10)})`,
+      content: `Brief outcome: ${o.country} ${o.concept} ${o.period} ${o.yoy}% YoY, suggested ${o.low}-${o.high}% at ${Math.round(o.policy * 100)}% pass-through${o.proposed !== undefined ? `, ${o.proposed > 0 ? "+" : ""}${o.proposed}% was ${o.verdict}` : ""} (${o.at.slice(0, 10)})`,
       type: "general",
       source: "pricesignal:agent",
       confidence: 0.9,

@@ -3,7 +3,7 @@
 // that introduces numbers not present in the facts.
 import type { Request, TraceEvent } from "./agent.ts";
 import type { SqlResult } from "./zetaris.ts";
-import { AGENCY_FOR, Country } from "./sources/index.ts";
+import { AGENCY_FOR, Country, normalizeCountry } from "./sources/index.ts";
 import { priceView } from "./sources/pricelist.ts";
 
 export interface SeriesFacts {
@@ -42,7 +42,7 @@ export interface Narrative { headline: string; markets: Record<string, string>; 
 /** Why a brief has no model-written prose. */
 export type NarrativeIssue = "grounding" | "unusable" | "provider" | "budget";
 const NARRATIVE_ISSUE: Record<NarrativeIssue, string> = {
-  grounding: "the model's text did not pass the number-grounding check",
+  grounding: "the model's text did not match the computed numbers and verdicts",
   unusable: "the model's reply was not usable JSON",
   provider: "the model provider returned an error or timed out",
   budget: "the narrative time budget ran out",
@@ -69,6 +69,8 @@ export interface Brief {
 }
 
 const r1 = (x: number) => Math.round(x * 10 + (x >= 0 ? 1e-9 : -1e-9)) / 10;
+/** A proposed change as the user would write it: "+5%", "-2%". */
+export const signedPct = (x: number) => `${x > 0 ? "+" : ""}${x}%`;
 
 function periodIndex(p: string): number {
   const m = p.match(/^(\d{4})-(\d{2})$/);
@@ -129,7 +131,7 @@ export function buildFacts(rows: Record<string, unknown>[], req: Request, cite: 
 
 /** Numbers one market's prose may use: that market's own facts, the request and the policy - not the whole history. */
 export function marketNumbers(f: MarketFacts | undefined, req: Request, policy?: number): number[] {
-  const out = new Set<number>([6, 12]);
+  const out = new Set<number>();
   const add = (x?: number) => {
     if (x === undefined || !Number.isFinite(x)) return;
     out.add(r1(x));
@@ -165,30 +167,55 @@ export function allowedNumbers(facts: MarketFacts[], req: Request, policy?: numb
 }
 
 const stripYears = (t: string) => t.replace(/\b(19|20)\d{2}(-(Q[1-4]|\d{2}))?\b/g, " ");
+// "12-month average", "over 6 months", "4-quarter average" describe the window, not a rate; a bare 6 or 12 is checked like any number.
+const stripWindows = (t: string) => t.replace(/\b(?:6|12)[- ]?(?:months?|periods?)\b|\b4[- ]?quarters?\b/gi, " ");
 const near = (a: number, b: number) => Math.abs(a - b) < 0.051;
 
 function unknownNumbers(text: string, allowed: number[]): string[] {
   const bad: string[] = [];
-  for (const m of stripYears(text).matchAll(/(?<![\w.])\d+(?:\.\d+)?/g)) {
+  for (const m of stripWindows(stripYears(text)).matchAll(/(?<![\w.])\d+(?:\.\d+)?/g)) {
     const x = Number(m[0]);
     if (!allowed.some((a) => near(a, x))) bad.push(m[0]);
   }
   return bad;
 }
 
-/** A stated "X% to Y%" range must be the computed suggested range (or a latest/average pair describing the data). */
+/**
+ * A stated "X% to Y%" range must be the computed suggested range. A latest/average pair may describe the data
+ * ("eased from 4.1% to 2.2%"), but not where the sentence presents it as what is supported ("supports 1.4% to 6.1%").
+ */
 function rangeErrors(text: string, f: MarketFacts): string[] {
   const bad: string[] = [];
   const data: number[] = [];
   for (const s of [f.category, f.allItems]) if (s) data.push(s.latestYoy, s.avg12, ...(s.yoy6Back !== undefined ? [s.yoy6Back] : []));
   const isData = (x: number) => data.some((d) => near(Math.abs(d), x));
-  for (const m of stripYears(text).matchAll(/(\d+(?:\.\d+)?)\s*%?\s*(?:to|–|—|-|and)\s*(\d+(?:\.\d+)?)\s*%/g)) {
+  const t = stripYears(text);
+  for (const m of t.matchAll(/(\d+(?:\.\d+)?)\s*%?\s*(?:to|–|—|-|and)\s*(\d+(?:\.\d+)?)\s*%/g)) {
     const a = Number(m[1]);
     const b = Number(m[2]);
     const isRange = !!f.suggested && near(Math.min(a, b), f.suggested.low) && near(Math.max(a, b), f.suggested.high);
-    if (!isRange && !(isData(a) && isData(b))) bad.push(`${m[1]}–${m[2]}%`);
+    const sentence = t.slice(Math.max(0, m.index! - 60), m.index).split(/[.;!?]\s/).pop() ?? "";
+    const presentedAsRange = /support|suggest|justif|range|room|evidence|band/i.test(sentence);
+    if (!isRange && (presentedAsRange || !(isData(a) && isData(b)))) bad.push(`${m[1]}–${m[2]}%`);
   }
   return bad;
+}
+
+/** "within / above / below the evidence (range)" in the prose must be the verdict the code computed. */
+function verdictErrors(text: string, verdict?: MarketFacts["verdict"]): string[] {
+  if (!verdict) return [];
+  const bad: string[] = [];
+  for (const m of text.matchAll(/\b(within|inside|above|exceeds?|exceeding|below|under|outside)\s+(?:the\s+)?(?:suggested\s+|computed\s+)?(?:evidence|range)\b/gi)) {
+    const w = m[1].toLowerCase();
+    const ok = w === "outside" ? verdict !== "within the evidence" : verdict === (/within|inside/.test(w) ? "within the evidence" : /below|under/.test(w) ? "below the evidence" : "above the evidence");
+    if (!ok) bad.push(`"${m[0]}" (computed: ${verdict})`);
+  }
+  return bad;
+}
+
+/** The market a prose key refers to ("DE", "de", "Germany"). */
+export function marketKey(code: string): string {
+  return normalizeCountry(code) ?? code.toUpperCase();
 }
 
 /**
@@ -200,13 +227,21 @@ export function checkNarrative(n: Narrative, allowed: number[], facts?: MarketFa
   const bad: string[] = [];
   if (facts && req) {
     for (const [code, text] of Object.entries(n.markets ?? {})) {
-      const f = facts.find((x) => x.country === code.toUpperCase());
-      bad.push(...unknownNumbers(String(text), f ? [...marketNumbers(f, req, policy), ...extra] : allowed));
-      if (f) bad.push(...rangeErrors(String(text), f));
+      if (typeof text !== "string") {
+        bad.push(`${code}: not text`);
+        continue;
+      }
+      const f = facts.find((x) => x.country === marketKey(code));
+      bad.push(...unknownNumbers(text, f ? [...marketNumbers(f, req, policy), ...extra] : allowed));
+      if (f) bad.push(...rangeErrors(text, f), ...verdictErrors(text, f.verdict));
     }
+    if (typeof n.headline !== "string" || (n.watch !== undefined && typeof n.watch !== "string")) bad.push("headline or watch: not text");
     const general = [n.headline, n.watch ?? ""].join(" ");
     bad.push(...unknownNumbers(general, allowed));
     if (facts.length === 1) bad.push(...rangeErrors(general, facts[0]));
+    // When every market has the same verdict, the headline may not say another one.
+    const verdicts = [...new Set(facts.map((f) => f.verdict).filter(Boolean))];
+    if (verdicts.length === 1 && facts.every((f) => f.verdict)) bad.push(...verdictErrors(general, verdicts[0]));
   } else {
     bad.push(...unknownNumbers([n.headline, ...Object.values(n.markets ?? {}), n.watch ?? ""].join(" "), allowed));
   }
@@ -248,7 +283,7 @@ export function fallbackHeadline(b: Brief): string | undefined {
   if (p !== undefined && withVerdict.length) {
     const groups = new Map<string, string[]>();
     for (const f of withVerdict) groups.set(f.verdict!, [...(groups.get(f.verdict!) ?? []), f.country]);
-    return `+${p}% is ${[...groups.entries()].map(([v, cs]) => `${v} in ${cs.length > 1 ? `${cs.slice(0, -1).join(", ")} and ${cs.at(-1)}` : cs[0]}`).join("; ")}.`;
+    return `${signedPct(p)} is ${[...groups.entries()].map(([v, cs]) => `${v} in ${cs.length > 1 ? `${cs.slice(0, -1).join(", ")} and ${cs.at(-1)}` : cs[0]}`).join("; ")}.`;
   }
   const parts = b.facts.map((f) => (f.category ?? f.allItems) && `${f.country} ${fmt((f.category ?? f.allItems)!.latestYoy)}`).filter(Boolean);
   return parts.length ? `Latest year-on-year rates: ${parts.join(", ")}.` : undefined;
@@ -260,9 +295,13 @@ export function renderBrief(b: Brief): string {
   L.push(`# PriceSignal brief`);
   L.push(`> ${req.raw.replace(/\n/g, " ")}`);
   L.push("");
+  if (!b.facts.length) {
+    L.push(`**None of the markets in this question is covered yet.**`, "", `## Fragmentation the agent found`, ...mergeNotes(b.notes).map((n) => `- ${n}`));
+    return L.join("\n");
+  }
   const headline = b.narrative?.headline ?? fallbackHeadline(b);
   if (headline) L.push(`**${headline}**`, "");
-  L.push(`Policy used: pass through ${Math.round(b.passThrough * 100)}% of category inflation${b.policySource ? ` (${b.policySource})` : ""}${req.proposedChangePct !== undefined ? ` · proposed change: +${req.proposedChangePct}%` : ""}.`, "");
+  L.push(`Policy used: pass through ${Math.round(b.passThrough * 100)}% of category inflation${b.policySource ? ` (${b.policySource})` : ""}${req.proposedChangePct !== undefined ? ` · proposed change: ${signedPct(req.proposedChangePct)}` : ""}.`, "");
   L.push(`| Market | Official category | Latest period | YoY | 12-period avg | Trend | All-items YoY | Suggested range | Proposed change |`);
   L.push(`|---|---|---|---|---|---|---|---|---|`);
   for (const f of b.facts) {
@@ -279,7 +318,7 @@ export function renderBrief(b: Brief): string {
     L.push(perSku
       ? `Internal SKUs (Zetaris view \`psig.${priceView()}\`) joined in query **${b.pricingQuery?.id}** with the official series of each product's own category in its market (sauces, snacks, food); each SKU's range uses that series, computed in code.`
       : `Internal SKUs (Zetaris view \`psig.${priceView()}\`) joined with the latest official category rate in query **${b.pricingQuery?.id}**.`, "");
-    L.push(`| SKU | Product | Market | Current price | Suggested new price | At +${req.proposedChangePct ?? "-"}% | Rate used |`);
+    L.push(`| SKU | Product | Market | Current price | Suggested new price | At ${req.proposedChangePct !== undefined ? signedPct(req.proposedChangePct) : "-"} | Rate used |`);
     L.push(`|---|---|---|---|---|---|---|`);
     for (const s of b.skus) L.push(`| ${s.sku} | ${s.product} | ${s.country} | ${money(s.currentPrice, s.currency)} | ${s.low !== undefined ? `${s.low.toFixed(2)}–${money(s.high, s.currency)}${s.rangeLow !== undefined ? ` (+${s.rangeLow.toFixed(1)}–${s.rangeHigh!.toFixed(1)}%)` : ""}` : "-"} | ${money(s.atProposed, s.currency)}${s.verdict ? ` (${s.verdict})` : ""} | ${fmt(s.yoy)} ${s.period}${s.rateLabel ? ` · ${s.rateLabel}${s.coarser ? " (coarser)" : ""}` : ""} |`);
     L.push("");
