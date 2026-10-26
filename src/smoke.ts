@@ -32,7 +32,12 @@ await check("llm provider status", async () => {
 });
 await check("llm chat", async () => {
   const r = await chat([{ role: "user", content: "Reply with the single word: ready" }], { lane: "fast", maxTokens: 20 });
-  return `${r.provider} model=${r.model} ${r.ms} ms -> ${r.text.slice(0, 40)}`;
+  const u: any = r.usage ?? {};
+  // A realistic call: the request parser prompt. Output tokens show how much hidden reasoning the model spends.
+  const ask = "Extract the pricing request as JSON with keys countries, concept, proposed_change_pct, pass_through. Request: our gochujang & snacks: is food inflation in deutschland, canada & aus still hot?? thinking +5%, we pass on ~70%. Reply with JSON only.";
+  const p = await chat([{ role: "user", content: ask }], { lane: "fast", temperature: 0, attempts: 1, timeoutMs: 90_000 });
+  const pu: any = p.usage ?? {};
+  return `${r.provider} model=${r.model} ${r.ms} ms -> ${r.text.slice(0, 40)} (out ${u.completion_tokens ?? "?"} tok) | parse-size call: ${p.ms} ms, out ${pu.completion_tokens ?? "?"} tok, model=${p.model}`;
 });
 for (const c of ["DE", "CA", "AU"] as const) {
   await check(`sources ${c}`, async () => {

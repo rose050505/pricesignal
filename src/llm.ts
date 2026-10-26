@@ -11,6 +11,10 @@ export interface ChatResult { text: string; model: string; provider: string; ms:
 
 const APP_ID = "pricesignal";
 const TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS || 90_000);
+// Nemotron reasons before it answers; through OpenRouter that can be 1-4k hidden tokens per call.
+// Ask for low effort on every provider (OpenAI-style and OpenRouter-style fields). If a runtime
+// rejects the extra fields, drop them once and keep going.
+let sendReasoningHint = (process.env.PSIG_REASONING_EFFORT ?? "low") !== "off";
 
 export function normalizeBaseUrl(raw: string): string {
   let u = raw.trim().replace(/\/+$/, "");
@@ -76,14 +80,22 @@ export function stripThinking(text: string): string {
   return text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
 }
 
-export async function chat(messages: ChatMessage[], opts: { lane?: "fast" | "deep"; temperature?: number; maxTokens?: number } = {}): Promise<ChatResult> {
+export async function chat(messages: ChatMessage[], opts: { lane?: "fast" | "deep"; temperature?: number; maxTokens?: number; attempts?: number; timeoutMs?: number } = {}): Promise<ChatResult> {
   const cfg = providerConfig();
   const model = opts.lane === "deep" ? cfg.deep : cfg.fast;
   const headers: Record<string, string> = { "Content-Type": "application/json", Authorization: `Bearer ${cfg.token}`, ...cfg.headers };
   if (cfg.provider === "meterless") headers["meterless-scope"] = "user";
   const t0 = Date.now();
   let lastErr: unknown;
-  for (let attempt = 0; attempt < 3; attempt++) {
+  // Nemotron models accept "/no_think" in the system prompt to skip the hidden reasoning pass,
+  // which otherwise costs 1-4k tokens (30-60 s on slower upstreams) per call.
+  if ((process.env.PSIG_NO_THINK ?? "1") !== "0") {
+    messages = messages[0]?.role === "system"
+      ? [{ ...messages[0], content: `/no_think\n${messages[0].content}` }, ...messages.slice(1)]
+      : [{ role: "system", content: "/no_think" }, ...messages];
+  }
+  const attempts = opts.attempts ?? 3;
+  for (let attempt = 0; attempt < attempts; attempt++) {
     try {
       if (process.env.PSIG_VERBOSE !== "0") process.stderr.write(`    … ${cfg.provider} ${model} (attempt ${attempt + 1})\n`);
       const r = await fetchWithTimeout(`${cfg.baseUrl}/chat/completions`, {
@@ -94,13 +106,19 @@ export async function chat(messages: ChatMessage[], opts: { lane?: "fast" | "dee
           model,
           messages,
           temperature: opts.temperature ?? 0.2,
-          max_tokens: Math.max(opts.maxTokens ?? 2048, 1500),
-          ...(cfg.provider === "openrouter" ? { reasoning: { effort: "low", exclude: true } } : {}),
+          max_tokens: Math.max(opts.maxTokens ?? 2048, Number(process.env.PSIG_MIN_MAX_TOKENS || 6000)),
+          ...(sendReasoningHint ? { reasoning: { effort: process.env.PSIG_REASONING_EFFORT || "low", exclude: true }, reasoning_effort: process.env.PSIG_REASONING_EFFORT || "low", provider: { sort: "throughput" } } : {}),
         }),
-      });
+      }, opts.timeoutMs);
       if (r.status === 429 || r.status >= 500) {
         lastErr = new Error(`HTTP ${r.status}: ${(await r.text()).slice(0, 200)}`);
-        await new Promise((res) => setTimeout(res, 2000 * (attempt + 1)));
+        if (attempt + 1 < attempts) await new Promise((res) => setTimeout(res, 2000 * (attempt + 1)));
+        continue;
+      }
+      if ((r.status === 400 || r.status === 422) && sendReasoningHint) {
+        sendReasoningHint = false;
+        process.stderr.write(`    … runtime rejected the reasoning hint (HTTP ${r.status}); retrying without it\n`);
+        attempt--;
         continue;
       }
       if (!r.ok) throw new Error(`LLM HTTP ${r.status}: ${(await r.text()).slice(0, 300)}`);

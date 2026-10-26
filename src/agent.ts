@@ -48,13 +48,26 @@ export class PriceSignalAgent extends EventEmitter {
   private discoverFn: typeof discover;
   private onboardFn: typeof onboard;
   private maxSteps: number;
+  private providerSlow = false;
   readonly trace: TraceEvent[] = [];
   readonly sqlLog: SqlResult[] = [];
 
   constructor(private deps: AgentDeps) {
     super();
     resetCiteIds();
-    this.llm = deps.llm ?? chat;
+    const base = deps.llm ?? chat;
+    this.llm = (async (messages: any, opts: any = {}) => {
+      const o = this.providerSlow ? { ...opts, attempts: 1, timeoutMs: Math.min(opts.timeoutMs ?? 45_000, 45_000) } : opts;
+      try {
+        return await base(messages, o);
+      } catch (e) {
+        if (/Abort|HTTP 5\d\d|fetch failed|ETIMEDOUT/i.test(String(e)) && !this.providerSlow) {
+          this.providerSlow = true;
+          this.log("warn", "model provider is slow right now - shorter time budget for the rest of this run (deterministic fallbacks keep the brief complete)");
+        }
+        throw e;
+      }
+    }) as typeof chat;
     this.discoverFn = deps.discoverFn ?? discover;
     this.onboardFn = deps.onboardFn ?? onboard;
     this.maxSteps = deps.maxSteps ?? 18;
@@ -82,7 +95,7 @@ Request: """${raw}"""
 Reply with JSON only.`;
     let j: any = {};
     try {
-      const r = await this.llm([{ role: "user", content: prompt }], { lane: "fast", temperature: 0 });
+      const r = await this.llm([{ role: "user", content: prompt }], { lane: "fast", temperature: 0, attempts: 2, timeoutMs: 60_000 });
       j = extractJson(r.text) ?? {};
       this.log("llm", `parsed request (${r.model}, ${r.ms} ms)`, j);
     } catch (e) {
@@ -153,7 +166,7 @@ Reply with JSON only.`;
       let batch: { action: string; args: any }[] = [];
       if (!autopilot) {
         try {
-          const r = await this.llm(messages, { lane: "fast", temperature: 0.1, maxTokens: 2500 });
+          const r = await this.llm(messages, { lane: "fast", temperature: 0.1, maxTokens: 6000, attempts: 2, timeoutMs: 75_000 });
           const j = extractJson(r.text);
           batch = Array.isArray(j?.actions) ? j.actions.filter((a: any) => a?.action).slice(0, 8) : j?.action ? [j] : [];
           if (!batch.length) throw new Error(`no action in: ${r.text.slice(0, 120)}`);
@@ -345,12 +358,12 @@ Reply with JSON only.`;
     const allowed = allowedNumbers(facts, req, policy);
     const payload = { request: req.raw, proposed_change_pct: req.proposedChangePct ?? null, pass_through_pct: Math.round(policy * 100), facts, caveats: [...new Set(notes)] };
     const ask: ChatMessage[] = [
-      { role: "system", content: "You write short, plain-English pricing briefs for an exporter's pricing manager. Use ONLY numbers that appear in the facts JSON (same rounding). No new numbers, no forecasts. Each market's verdict field is final: say it as given (above, within or below the evidence) and keep the headline consistent with every market's verdict. Mention caveats such as markets that are not covered." },
+      { role: "system", content: "You write short, plain-English pricing briefs for an exporter's pricing manager. Use ONLY numbers that appear in the facts JSON (same rounding). No new numbers, no forecasts. Each market's verdict field is final: say it as given (above, within or below the evidence) and keep the headline consistent with every market's verdict. Mention only the caveats listed in the facts JSON (for example markets that are not covered); do not add claims about methodology or data sources that are not in it." },
       { role: "user", content: `Facts: ${JSON.stringify(payload)}\nReply with JSON only: {"headline": str (<= 25 words), "markets": {"<country code>": str (2-3 sentences: what the data says and what it means for the proposed change)}, "watch": str (one sentence on what to re-check next month)}` },
     ];
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
-        const r = await this.llm(ask, { lane: (process.env.PSIG_NARRATIVE_LANE as "fast" | "deep") || "fast", temperature: 0.2, maxTokens: 4000 });
+        const r = await this.llm(ask, { lane: (process.env.PSIG_NARRATIVE_LANE as "fast" | "deep") || "fast", temperature: 0.2, maxTokens: 8000, attempts: 1, timeoutMs: 75_000 });
         const n = extractJson(r.text) as Narrative | null;
         if (!n?.headline) throw new Error("no headline");
         const bad = checkNarrative(n, allowed);
@@ -359,6 +372,7 @@ Reply with JSON only.`;
         ask.push({ role: "assistant", content: r.text }, { role: "user", content: `These numbers are not in the facts: ${bad.join(", ")}. Rewrite using only fact numbers. JSON only.` });
       } catch (e) {
         this.log("warn", `narrative attempt failed: ${String(e).slice(0, 120)}`);
+        if (/Abort|HTTP 5\d\d|fetch failed/i.test(String(e))) break;
       }
     }
     return undefined; // renderBrief falls back to a deterministic summary

@@ -18,7 +18,7 @@ A small food exporter selling into Germany, Canada and Australia wants to know w
 | Category scheme | ECOICOP v2 (`coicop18`) | product/vector ids | ABS index codes |
 | Gotcha we hit | the dataset everyone links to (`prc_hicp_manr`) stopped at 2025-12 and was replaced by `prc_hicp_minr` | the data methods used in public recipes are POST-only; the GET method returns a top-level array | a broad query is too large for one fetch; series must be scoped to one key |
 
-Assembling a comparable answer by hand means three APIs, three formats and three category schemes every pricing round, so small exporters often just pick a round number. PriceSignal answers in under a minute (well under 30 seconds once it remembers the sources) and keeps the receipts.
+Assembling a comparable answer by hand means three APIs, three formats and three category schemes every pricing round, so small exporters often just pick a round number. PriceSignal answers in about two to three minutes, most of it the model's reasoning time, and keeps the receipts; a repeat question skips discovery and onboarding entirely.
 
 ## What it does
 

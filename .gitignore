@@ -10,6 +10,7 @@ zetaris-platform/
 __pycache__/
 # personal working files (not part of the product)
 docs/DESIGN.md
+docs/DEMO_SCRIPT.md
 docs/narration.txt
 scripts/voice.py
 scripts/11_voice_setup.sh
