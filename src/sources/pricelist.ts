@@ -18,10 +18,9 @@ export function skuCategoriesSql(countries: string[]): string {
 }
 
 /**
- * One federated join: every SKU with the official series of ITS OWN category in its market
- * (gochujang -> condiments, chips -> snacks, ramen -> food), last ~15 periods.
- * The latest rate, 12-period average and suggested price range are then computed in code,
- * exactly like the market facts.
+ * One federated join: every SKU with its selected official category or a marked broader proxy
+ * in its market, retaining history for the recent one-year average. Latest rates, coverage
+ * and historical benchmark price scenarios are computed in code like the market facts.
  */
 export function skuRatesSql(views: string[], countries: string[], sincePeriod: string): string {
   const series = views

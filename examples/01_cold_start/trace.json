@@ -1,10 +1,15 @@
 {
-  "question": "our gochujang & snacks: is food inflation in deutschland, canada & aus still running hot?? thinking +5% for Q1, too much? we usually pass on ~70% of cost increases",
+  "question": "our gochujang & snacks: is food inflation in deutschland, canada & aus still running hot?? costs rose 8%; unit costs are 60% of our selling price; thinking +5% for Q1; we usually pass on ~70% of cost increases",
   "trace": [
     {
-      "t": 1793022687331,
+      "t": 1793031800051,
+      "kind": "warn",
+      "title": "request parsing: no reply after 10 s - sent the same request again; the first reply wins"
+    },
+    {
+      "t": 1793031801181,
       "kind": "llm",
-      "title": "parsed request (openrouter/nvidia/nemotron-3.5-lightning, 1064 ms via Meterless Nightshift)",
+      "title": "parsed request (openrouter/nvidia/nemotron-3.5-lightning, 11139 ms via Meterless Nightshift)",
       "detail": {
         "countries": [
           "deutschland",
@@ -14,16 +19,18 @@
         "concept": "snacks",
         "concept_words": "food price inflation",
         "proposed_change_pct": 5,
+        "cost_increase_pct": 8,
+        "cost_share_pct": 60,
         "pass_through": 0.7,
         "policy_statement": null
       }
     },
     {
-      "t": 1793022687335,
+      "t": 1793031801185,
       "kind": "request",
-      "title": "markets DE, CA, AU | category \"snacks\" | proposed +5%",
+      "title": "markets DE, CA, AU | category \"snacks\" | proposed +5% | costs +8%",
       "detail": {
-        "raw": "our gochujang & snacks: is food inflation in deutschland, canada & aus still running hot?? thinking +5% for Q1, too much? we usually pass on ~70% of cost increases",
+        "raw": "our gochujang & snacks: is food inflation in deutschland, canada & aus still running hot?? costs rose 8%; unit costs are 60% of our selling price; thinking +5% for Q1; we usually pass on ~70% of cost increases",
         "countries": [
           "DE",
           "CA",
@@ -37,28 +44,93 @@
         ],
         "proposedChangePct": 5,
         "passThrough": 0.7,
+        "costIncreasePct": 8,
+        "costSharePct": 60,
         "unknownCountries": []
       }
     },
     {
-      "t": 1793022687336,
+      "t": 1793031801186,
       "kind": "memory",
       "title": "stored pricing policy mem-1"
     },
     {
-      "t": 1793022688618,
+      "t": 1793031809158,
       "kind": "plan",
-      "title": "discover_and_onboard {\"country\":\"DE\",\"concept\":\"snacks\"} · discover_and_onboard {\"country\":\"DE\",\"concept\":\"all_items\"} · discover_and_onboard {\"country\":\"CA\",\"concept\":\"snacks\"} · discover_and_onboard {\"country\":\"CA\",\"concept\":\"all_items\"} · discover_and_onboard {\"country\":\"AU\",\"concept\":\"snacks\"} · discover_and_onboard {\"country\":\"AU\",\"concept\":\"all_items\"}  [openrouter/nvidia/nemotron-3.5-lightning via Meterless Nightshift]",
+      "title": "discover_and_onboard {\"country\":\"DE\",\"concept\":\"snacks\"} · discover_and_onboard {\"country\":\"DE\",\"concept\":\"all_items\"} · discover_and_onboard {\"country\":\"CA\",\"concept\":\"snacks\"} · discover_and_onboard {\"country\":\"CA\",\"concept\":\"all_items\"} · discover_and_onboard {\"country\":\"AU\",\"concept\":\"snacks\"} · discover_and_onboard {\"country\":\"AU\",\"concept\":\"all_items\"} · compare {}  [openrouter/nvidia/nemotron-3.5-lightning via Meterless Nightshift]",
       "detail": {
-        "thought": "All six (country,concept) pairs are missing from memory. Need to discover and onboard snacks and all_items for DE, CA, and AU in parallel batches.",
+        "thought": "Onboard missing snack and all_items views for DE, CA, AU, then run federated comparison.",
         "model": "openrouter/nvidia/nemotron-3.5-lightning",
-        "ms": 1281
+        "ms": 7971
       }
     },
     {
-      "t": 1793022689791,
+      "t": 1793031810226,
       "kind": "discover",
-      "title": "Australian Bureau of Statistics (CPI): 1 candidate(s) for \"snacks\"",
+      "title": "Statistics Canada (CPI): 1 candidate(s) for \"snacks\"",
+      "detail": {
+        "country": "CA",
+        "concept": "snacks",
+        "candidates": [
+          {
+            "agency": "statcan",
+            "country": "CA",
+            "dataset": "18100004",
+            "code": "v41690974",
+            "label": "Food",
+            "frequency": "M",
+            "measure": "index",
+            "lastPeriod": "2026-09",
+            "status": "active",
+            "isBroadFallback": true,
+            "sourceUrl": "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01"
+          }
+        ],
+        "notes": [
+          "For Canada this agent maps only StatCan's \"Food\" and \"All-items\" CPI vectors, so \"snacks\" is compared at the Food level (coarser than the other markets)."
+        ]
+      }
+    },
+    {
+      "t": 1793031810302,
+      "kind": "sql",
+      "title": "already in Zetaris (not created again): CREATE LIGHTNING DATABASE PSIG_EUROSTAT DESCRIBE BY \"PriceSignal-Eurostat-HICP\"",
+      "detail": {
+        "sql": "CREATE LIGHTNING DATABASE PSIG_EUROSTAT DESCRIBE BY \"PriceSignal-Eurostat-HICP\"",
+        "existed": true
+      }
+    },
+    {
+      "t": 1793031810356,
+      "kind": "sql",
+      "title": "already in Zetaris (not created again): CREATE LIGHTNING DATABASE PSIG_ABS DESCRIBE BY \"PriceSignal-ABS-CPI\"",
+      "detail": {
+        "sql": "CREATE LIGHTNING DATABASE PSIG_ABS DESCRIBE BY \"PriceSignal-ABS-CPI\"",
+        "existed": true
+      }
+    },
+    {
+      "t": 1793031810377,
+      "kind": "sql",
+      "title": "already in Zetaris (not created again): CREATE LIGHTNING DATABASE PSIG_STATCAN DESCRIBE BY \"PriceSignal-StatCan-CPI\"",
+      "detail": {
+        "sql": "CREATE LIGHTNING DATABASE PSIG_STATCAN DESCRIBE BY \"PriceSignal-StatCan-CPI\"",
+        "existed": true
+      }
+    },
+    {
+      "t": 1793031810417,
+      "kind": "sql",
+      "title": "already in Zetaris (not created again): CREATE SCHEMASTORE CONTAINER psig",
+      "detail": {
+        "sql": "CREATE SCHEMASTORE CONTAINER psig",
+        "existed": true
+      }
+    },
+    {
+      "t": 1793031811100,
+      "kind": "discover",
+      "title": "Australian Bureau of Statistics (CPI): 2 candidate(s) for \"snacks\"",
       "detail": {
         "country": "AU",
         "concept": "snacks",
@@ -74,73 +146,72 @@
             "lastPeriod": "2026-08",
             "status": "active",
             "sourceUrl": "https://data.api.abs.gov.au/rest/data/ABS,CPI/1.115501.10.50.M?startPeriod=2024-08&detail=dataonly"
+          },
+          {
+            "agency": "abs",
+            "country": "AU",
+            "dataset": "ABS,CPI",
+            "code": "20001",
+            "label": "Food and non-alcoholic beverages",
+            "frequency": "M",
+            "measure": "index",
+            "lastPeriod": "2026-08",
+            "status": "active",
+            "isBroadFallback": true,
+            "sourceUrl": "https://data.api.abs.gov.au/rest/data/ABS,CPI/1.20001.10.50.M?startPeriod=2024-08&detail=dataonly"
           }
         ],
         "notes": []
       }
     },
     {
-      "t": 1793022689866,
+      "t": 1793031811449,
       "kind": "sql",
-      "title": "already in Zetaris (registered by an earlier run): CREATE LIGHTNING DATABASE PSIG_EUROSTAT DESCRIBE BY \"PriceSignal-Eurostat-HICP\"",
-      "detail": {
-        "sql": "CREATE LIGHTNING DATABASE PSIG_EUROSTAT DESCRIBE BY \"PriceSignal-Eurostat-HICP\"",
-        "existed": true
-      }
-    },
-    {
-      "t": 1793022689925,
-      "kind": "sql",
-      "title": "already in Zetaris (registered by an earlier run): CREATE LIGHTNING DATABASE PSIG_ABS DESCRIBE BY \"PriceSignal-ABS-CPI\"",
-      "detail": {
-        "sql": "CREATE LIGHTNING DATABASE PSIG_ABS DESCRIBE BY \"PriceSignal-ABS-CPI\"",
-        "existed": true
-      }
-    },
-    {
-      "t": 1793022689957,
-      "kind": "sql",
-      "title": "already in Zetaris (registered by an earlier run): CREATE LIGHTNING DATABASE PSIG_STATCAN DESCRIBE BY \"PriceSignal-StatCan-CPI\"",
-      "detail": {
-        "sql": "CREATE LIGHTNING DATABASE PSIG_STATCAN DESCRIBE BY \"PriceSignal-StatCan-CPI\"",
-        "existed": true
-      }
-    },
-    {
-      "t": 1793022689983,
-      "kind": "sql",
-      "title": "already in Zetaris (registered by an earlier run): CREATE SCHEMASTORE CONTAINER psig",
-      "detail": {
-        "sql": "CREATE SCHEMASTORE CONTAINER psig",
-        "existed": true
-      }
-    },
-    {
-      "t": 1793022690345,
-      "kind": "sql",
-      "title": "Q1: CREATE LIGHTNING REST TABLE abs_au_cpi_115501_m_ex1027 FROM PSIG_ABS REQUEST(",
+      "title": "Q1: CREATE LIGHTNING REST TABLE abs_au_cpi_115501_m_night1027c7 FROM PSIG_ABS REQUEST(",
       "detail": {
         "id": "Q1",
-        "sql": "CREATE LIGHTNING REST TABLE abs_au_cpi_115501_m_ex1027 FROM PSIG_ABS REQUEST(\n    endpoint \"https://data.api.abs.gov.au/rest/data/ABS,CPI/1.115501.10.50.M?startPeriod=2024-08&detail=dataonly\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n    accept \"application/vnd.sdmx.data+json\"\n) BODY ()",
+        "sql": "CREATE LIGHTNING REST TABLE abs_au_cpi_115501_m_night1027c7 FROM PSIG_ABS REQUEST(\n    endpoint \"https://data.api.abs.gov.au/rest/data/ABS,CPI/1.115501.10.50.M?startPeriod=2024-08&detail=dataonly\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n    accept \"application/vnd.sdmx.data+json\"\n) BODY ()",
         "rows": 0,
-        "ms": 362
+        "ms": 349
       }
     },
     {
-      "t": 1793022690456,
+      "t": 1793031811452,
       "kind": "sql",
-      "title": "Q2: CREATE SCHEMASTORE VIEW v_au_snacks_115501_ex1027 WITH CONTAINER psig AS",
+      "title": "Q2: CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_night1027c7 FROM PSIG_STATCAN REQUES",
       "detail": {
         "id": "Q2",
-        "sql": "CREATE SCHEMASTORE VIEW v_au_snacks_115501_ex1027 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'snacks' AS concept, '115501' AS category_code, 'Snacks and confectionery' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.115501.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_115501_m_ex1027\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s",
+        "sql": "CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_night1027c7 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
         "rows": 0,
-        "ms": 111
+        "ms": 1034
       }
     },
     {
-      "t": 1793022691029,
+      "t": 1793031811529,
+      "kind": "sql",
+      "title": "Q3: CREATE SCHEMASTORE VIEW v_ca_snacks_v41690974_live_night1027c7 WITH CONTAINER psig AS",
+      "detail": {
+        "id": "Q3",
+        "sql": "CREATE SCHEMASTORE VIEW v_ca_snacks_v41690974_live_night1027c7 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'snacks' AS concept, 'v41690974' AS category_code, 'Food' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'statcan:18100004:v41690974' AS source_id\nFROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690974_live_night1027c7\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n) s",
+        "rows": 0,
+        "ms": 77
+      }
+    },
+    {
+      "t": 1793031811535,
+      "kind": "sql",
+      "title": "Q4: CREATE SCHEMASTORE VIEW v_au_snacks_115501_night1027c7 WITH CONTAINER psig AS",
+      "detail": {
+        "id": "Q4",
+        "sql": "CREATE SCHEMASTORE VIEW v_au_snacks_115501_night1027c7 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'snacks' AS concept, '115501' AS category_code, 'Snacks and confectionery' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.115501.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_115501_m_night1027c7\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s",
+        "rows": 0,
+        "ms": 86
+      }
+    },
+    {
+      "t": 1793031811650,
       "kind": "discover",
-      "title": "Eurostat (HICP): 2 candidate(s) for \"snacks\"",
+      "title": "Eurostat (HICP): 3 candidate(s) for \"snacks\"",
       "detail": {
         "country": "DE",
         "concept": "snacks",
@@ -168,6 +239,19 @@
             "lastPeriod": "2026-09",
             "status": "active",
             "sourceUrl": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP01189&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN"
+          },
+          {
+            "agency": "eurostat",
+            "country": "DE",
+            "dataset": "prc_hicp_minr",
+            "code": "CP01",
+            "label": "Food and non-alcoholic beverages",
+            "frequency": "M",
+            "measure": "yoy_pct",
+            "lastPeriod": "2026-09",
+            "status": "active",
+            "isBroadFallback": true,
+            "sourceUrl": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN"
           }
         ],
         "notes": [
@@ -176,20 +260,68 @@
       }
     },
     {
-      "t": 1793022691091,
+      "t": 1793031811955,
       "kind": "sql",
-      "title": "Q3: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_snacks_115501_ex1027 WHERE yoy_",
+      "title": "Q5: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_night1027",
       "detail": {
-        "id": "Q3",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_snacks_115501_ex1027 WHERE yoy_pct IS NOT NULL",
+        "id": "Q5",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_night1027c7 WHERE yoy_pct IS NOT NULL",
         "rows": 1,
-        "ms": 635
+        "ms": 426
       }
     },
     {
-      "t": 1793022691091,
+      "t": 1793031811955,
       "kind": "onboard",
-      "title": "onboarded abs 115501 -> psig.v_au_snacks_115501_ex1027 (created REST table + view: 13 rows, latest 2026-08)",
+      "title": "onboarded statcan v41690974 -> psig.v_ca_snacks_v41690974_live_night1027c7 (created REST table + view: 14 rows, latest 2026-09)",
+      "detail": {
+        "candidate": {
+          "agency": "statcan",
+          "country": "CA",
+          "dataset": "18100004",
+          "code": "v41690974",
+          "label": "Food",
+          "frequency": "M",
+          "measure": "index",
+          "lastPeriod": "2026-09",
+          "status": "active",
+          "isBroadFallback": true,
+          "sourceUrl": "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01"
+        },
+        "result": {
+          "view": "v_ca_snacks_v41690974_live_night1027c7",
+          "table": "statcan_ca_v41690974_live_night1027c7",
+          "ok": true,
+          "existed": false,
+          "rows": 14,
+          "latest": "2026-09",
+          "sql": [
+            "CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_night1027c7 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+            "CREATE SCHEMASTORE VIEW v_ca_snacks_v41690974_live_night1027c7 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'snacks' AS concept, 'v41690974' AS category_code, 'Food' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'statcan:18100004:v41690974' AS source_id\nFROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690974_live_night1027c7\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n) s"
+          ]
+        }
+      }
+    },
+    {
+      "t": 1793031811961,
+      "kind": "memory",
+      "title": "stored mapping mem-2"
+    },
+    {
+      "t": 1793031812124,
+      "kind": "sql",
+      "title": "Q6: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_snacks_115501_night1027c7 WHERE",
+      "detail": {
+        "id": "Q6",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_snacks_115501_night1027c7 WHERE yoy_pct IS NOT NULL",
+        "rows": 1,
+        "ms": 588
+      }
+    },
+    {
+      "t": 1793031812124,
+      "kind": "onboard",
+      "title": "onboarded abs 115501 -> psig.v_au_snacks_115501_night1027c7 (created REST table + view: 13 rows, latest 2026-08)",
       "detail": {
         "candidate": {
           "agency": "abs",
@@ -204,26 +336,37 @@
           "sourceUrl": "https://data.api.abs.gov.au/rest/data/ABS,CPI/1.115501.10.50.M?startPeriod=2024-08&detail=dataonly"
         },
         "result": {
-          "view": "v_au_snacks_115501_ex1027",
-          "table": "abs_au_cpi_115501_m_ex1027",
+          "view": "v_au_snacks_115501_night1027c7",
+          "table": "abs_au_cpi_115501_m_night1027c7",
           "ok": true,
           "existed": false,
           "rows": 13,
           "latest": "2026-08",
           "sql": [
-            "CREATE LIGHTNING REST TABLE abs_au_cpi_115501_m_ex1027 FROM PSIG_ABS REQUEST(\n    endpoint \"https://data.api.abs.gov.au/rest/data/ABS,CPI/1.115501.10.50.M?startPeriod=2024-08&detail=dataonly\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n    accept \"application/vnd.sdmx.data+json\"\n) BODY ()",
-            "CREATE SCHEMASTORE VIEW v_au_snacks_115501_ex1027 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'snacks' AS concept, '115501' AS category_code, 'Snacks and confectionery' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.115501.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_115501_m_ex1027\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s"
+            "CREATE LIGHTNING REST TABLE abs_au_cpi_115501_m_night1027c7 FROM PSIG_ABS REQUEST(\n    endpoint \"https://data.api.abs.gov.au/rest/data/ABS,CPI/1.115501.10.50.M?startPeriod=2024-08&detail=dataonly\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n    accept \"application/vnd.sdmx.data+json\"\n) BODY ()",
+            "CREATE SCHEMASTORE VIEW v_au_snacks_115501_night1027c7 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'snacks' AS concept, '115501' AS category_code, 'Snacks and confectionery' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.115501.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_115501_m_night1027c7\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s"
           ]
         }
       }
     },
     {
-      "t": 1793022691096,
+      "t": 1793031812126,
       "kind": "memory",
-      "title": "stored mapping mem-2"
+      "title": "stored mapping mem-3"
     },
     {
-      "t": 1793022691531,
+      "t": 1793031812551,
+      "kind": "sql",
+      "title": "Q7: CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_cp0118_night1027c7 FROM PSIG_EUROSTA",
+      "detail": {
+        "id": "Q7",
+        "sql": "CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_cp0118_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP0118&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+        "rows": 0,
+        "ms": 901
+      }
+    },
+    {
+      "t": 1793031812635,
       "kind": "discover",
       "title": "Australian Bureau of Statistics (CPI): 1 candidate(s) for \"all_items\"",
       "detail": {
@@ -247,90 +390,77 @@
       }
     },
     {
-      "t": 1793022691900,
+      "t": 1793031812641,
       "kind": "sql",
-      "title": "Q4: CREATE LIGHTNING REST TABLE abs_au_cpi_10001_m_ex1027 FROM PSIG_ABS REQUEST(",
+      "title": "Q8: CREATE SCHEMASTORE VIEW v_de_snacks_prc_hicp_minr_cp0118_night1027c7 WITH CONTAINER psig A",
       "detail": {
-        "id": "Q4",
-        "sql": "CREATE LIGHTNING REST TABLE abs_au_cpi_10001_m_ex1027 FROM PSIG_ABS REQUEST(\n    endpoint \"https://data.api.abs.gov.au/rest/data/ABS,CPI/1.10001.10.50.M?startPeriod=2024-08&detail=dataonly\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n    accept \"application/vnd.sdmx.data+json\"\n) BODY ()",
+        "id": "Q8",
+        "sql": "CREATE SCHEMASTORE VIEW v_de_snacks_prc_hicp_minr_cp0118_night1027c7 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'snacks' AS concept, 'CP0118' AS category_code, 'Sugar, confectionery and desserts (ND)' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP0118:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_cp0118_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
         "rows": 0,
-        "ms": 368
+        "ms": 90
       }
     },
     {
-      "t": 1793022691918,
+      "t": 1793031812923,
       "kind": "sql",
-      "title": "Q5: CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_cp0118_ex1027 FROM PSIG_EUROSTAT REQ",
+      "title": "Q9: CREATE LIGHTNING REST TABLE abs_au_cpi_10001_m_night1027c7 FROM PSIG_ABS REQUEST(",
       "detail": {
-        "id": "Q5",
-        "sql": "CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_cp0118_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP0118&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+        "id": "Q9",
+        "sql": "CREATE LIGHTNING REST TABLE abs_au_cpi_10001_m_night1027c7 FROM PSIG_ABS REQUEST(\n    endpoint \"https://data.api.abs.gov.au/rest/data/ABS,CPI/1.10001.10.50.M?startPeriod=2024-08&detail=dataonly\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n    accept \"application/vnd.sdmx.data+json\"\n) BODY ()",
         "rows": 0,
-        "ms": 889
+        "ms": 288
       }
     },
     {
-      "t": 1793022691945,
+      "t": 1793031813001,
       "kind": "sql",
-      "title": "Q6: CREATE SCHEMASTORE VIEW v_au_all_items_10001_ex1027 WITH CONTAINER psig AS",
+      "title": "Q10: CREATE SCHEMASTORE VIEW v_au_all_items_10001_night1027c7 WITH CONTAINER psig AS",
       "detail": {
-        "id": "Q6",
-        "sql": "CREATE SCHEMASTORE VIEW v_au_all_items_10001_ex1027 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'all_items' AS concept, '10001' AS category_code, 'All groups CPI' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.10001.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_10001_m_ex1027\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s",
+        "id": "Q10",
+        "sql": "CREATE SCHEMASTORE VIEW v_au_all_items_10001_night1027c7 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'all_items' AS concept, '10001' AS category_code, 'All groups CPI' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.10001.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_10001_m_night1027c7\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s",
         "rows": 0,
-        "ms": 45
+        "ms": 78
       }
     },
     {
-      "t": 1793022691969,
-      "kind": "sql",
-      "title": "Q7: CREATE SCHEMASTORE VIEW v_de_snacks_prc_hicp_minr_cp0118_ex1027 WITH CONTAINER psig AS",
-      "detail": {
-        "id": "Q7",
-        "sql": "CREATE SCHEMASTORE VIEW v_de_snacks_prc_hicp_minr_cp0118_ex1027 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'snacks' AS concept, 'CP0118' AS category_code, 'Sugar, confectionery and desserts (ND)' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP0118:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_cp0118_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
-        "rows": 0,
-        "ms": 51
-      }
-    },
-    {
-      "t": 1793022692136,
+      "t": 1793031813160,
       "kind": "discover",
-      "title": "Statistics Canada (CPI): 1 candidate(s) for \"snacks\"",
+      "title": "Statistics Canada (CPI): 1 candidate(s) for \"all_items\"",
       "detail": {
         "country": "CA",
-        "concept": "snacks",
+        "concept": "all_items",
         "candidates": [
           {
             "agency": "statcan",
             "country": "CA",
             "dataset": "18100004",
-            "code": "v41690974",
-            "label": "Food",
+            "code": "v41690973",
+            "label": "All-items",
             "frequency": "M",
             "measure": "index",
             "lastPeriod": "2026-09",
             "status": "active",
-            "sourceUrl": "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01"
+            "sourceUrl": "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690973%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01"
           }
         ],
-        "notes": [
-          "For Canada this agent maps only StatCan's \"Food\" and \"All-items\" CPI vectors, so \"snacks\" is compared at the Food level (coarser than the other markets)."
-        ]
+        "notes": []
       }
     },
     {
-      "t": 1793022692452,
+      "t": 1793031813188,
       "kind": "sql",
-      "title": "Q8: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_snacks_prc_hicp_minr_cp0118_ex1",
+      "title": "Q11: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_snacks_prc_hicp_minr_cp0118_nig",
       "detail": {
-        "id": "Q8",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_snacks_prc_hicp_minr_cp0118_ex1027 WHERE yoy_pct IS NOT NULL",
+        "id": "Q11",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_snacks_prc_hicp_minr_cp0118_night1027c7 WHERE yoy_pct IS NOT NULL",
         "rows": 1,
-        "ms": 483
+        "ms": 547
       }
     },
     {
-      "t": 1793022692452,
+      "t": 1793031813189,
       "kind": "onboard",
-      "title": "onboarded eurostat CP0118 -> psig.v_de_snacks_prc_hicp_minr_cp0118_ex1027 (created REST table + view: 26 rows, latest 2026-09)",
+      "title": "onboarded eurostat CP0118 -> psig.v_de_snacks_prc_hicp_minr_cp0118_night1027c7 (created REST table + view: 26 rows, latest 2026-09)",
       "detail": {
         "candidate": {
           "agency": "eurostat",
@@ -345,39 +475,61 @@
           "sourceUrl": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP0118&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN"
         },
         "result": {
-          "view": "v_de_snacks_prc_hicp_minr_cp0118_ex1027",
-          "table": "eurostat_de_prc_hicp_minr_cp0118_ex1027",
+          "view": "v_de_snacks_prc_hicp_minr_cp0118_night1027c7",
+          "table": "eurostat_de_prc_hicp_minr_cp0118_night1027c7",
           "ok": true,
           "existed": false,
           "rows": 26,
           "latest": "2026-09",
           "sql": [
-            "CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_cp0118_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP0118&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-            "CREATE SCHEMASTORE VIEW v_de_snacks_prc_hicp_minr_cp0118_ex1027 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'snacks' AS concept, 'CP0118' AS category_code, 'Sugar, confectionery and desserts (ND)' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP0118:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_cp0118_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx"
+            "CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_cp0118_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP0118&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+            "CREATE SCHEMASTORE VIEW v_de_snacks_prc_hicp_minr_cp0118_night1027c7 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'snacks' AS concept, 'CP0118' AS category_code, 'Sugar, confectionery and desserts (ND)' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP0118:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_cp0118_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx"
           ]
         }
       }
     },
     {
-      "t": 1793022692453,
+      "t": 1793031813189,
       "kind": "memory",
-      "title": "stored mapping mem-3"
+      "title": "stored mapping mem-4"
     },
     {
-      "t": 1793022692587,
+      "t": 1793031813407,
       "kind": "sql",
-      "title": "Q9: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_all_items_10001_ex1027 WHERE yo",
+      "title": "Q12: CREATE LIGHTNING REST TABLE statcan_ca_v41690973_live_night1027c7 FROM PSIG_STATCAN REQUES",
       "detail": {
-        "id": "Q9",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_all_items_10001_ex1027 WHERE yoy_pct IS NOT NULL",
-        "rows": 1,
-        "ms": 642
+        "id": "Q12",
+        "sql": "CREATE LIGHTNING REST TABLE statcan_ca_v41690973_live_night1027c7 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690973%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+        "rows": 0,
+        "ms": 247
       }
     },
     {
-      "t": 1793022692587,
+      "t": 1793031813449,
+      "kind": "sql",
+      "title": "Q13: CREATE SCHEMASTORE VIEW v_ca_all_items_v41690973_live_night1027c7 WITH CONTAINER psig AS",
+      "detail": {
+        "id": "Q13",
+        "sql": "CREATE SCHEMASTORE VIEW v_ca_all_items_v41690973_live_night1027c7 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'all_items' AS concept, 'v41690973' AS category_code, 'All-items' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'statcan:18100004:v41690973' AS source_id\nFROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690973_live_night1027c7\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n) s",
+        "rows": 0,
+        "ms": 42
+      }
+    },
+    {
+      "t": 1793031813573,
+      "kind": "sql",
+      "title": "Q14: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_all_items_10001_night1027c7 WHE",
+      "detail": {
+        "id": "Q14",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_all_items_10001_night1027c7 WHERE yoy_pct IS NOT NULL",
+        "rows": 1,
+        "ms": 572
+      }
+    },
+    {
+      "t": 1793031813573,
       "kind": "onboard",
-      "title": "onboarded abs 10001 -> psig.v_au_all_items_10001_ex1027 (created REST table + view: 13 rows, latest 2026-08)",
+      "title": "onboarded abs 10001 -> psig.v_au_all_items_10001_night1027c7 (created REST table + view: 13 rows, latest 2026-08)",
       "detail": {
         "candidate": {
           "agency": "abs",
@@ -392,26 +544,73 @@
           "sourceUrl": "https://data.api.abs.gov.au/rest/data/ABS,CPI/1.10001.10.50.M?startPeriod=2024-08&detail=dataonly"
         },
         "result": {
-          "view": "v_au_all_items_10001_ex1027",
-          "table": "abs_au_cpi_10001_m_ex1027",
+          "view": "v_au_all_items_10001_night1027c7",
+          "table": "abs_au_cpi_10001_m_night1027c7",
           "ok": true,
           "existed": false,
           "rows": 13,
           "latest": "2026-08",
           "sql": [
-            "CREATE LIGHTNING REST TABLE abs_au_cpi_10001_m_ex1027 FROM PSIG_ABS REQUEST(\n    endpoint \"https://data.api.abs.gov.au/rest/data/ABS,CPI/1.10001.10.50.M?startPeriod=2024-08&detail=dataonly\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n    accept \"application/vnd.sdmx.data+json\"\n) BODY ()",
-            "CREATE SCHEMASTORE VIEW v_au_all_items_10001_ex1027 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'all_items' AS concept, '10001' AS category_code, 'All groups CPI' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.10001.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_10001_m_ex1027\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s"
+            "CREATE LIGHTNING REST TABLE abs_au_cpi_10001_m_night1027c7 FROM PSIG_ABS REQUEST(\n    endpoint \"https://data.api.abs.gov.au/rest/data/ABS,CPI/1.10001.10.50.M?startPeriod=2024-08&detail=dataonly\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n    accept \"application/vnd.sdmx.data+json\"\n) BODY ()",
+            "CREATE SCHEMASTORE VIEW v_au_all_items_10001_night1027c7 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'all_items' AS concept, '10001' AS category_code, 'All groups CPI' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.10001.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_10001_m_night1027c7\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s"
           ]
         }
       }
     },
     {
-      "t": 1793022692588,
+      "t": 1793031813574,
       "kind": "memory",
-      "title": "stored mapping mem-4"
+      "title": "stored mapping mem-5"
     },
     {
-      "t": 1793022693359,
+      "t": 1793031813825,
+      "kind": "sql",
+      "title": "Q15: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_all_items_v41690973_live_night1",
+      "detail": {
+        "id": "Q15",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_all_items_v41690973_live_night1027c7 WHERE yoy_pct IS NOT NULL",
+        "rows": 1,
+        "ms": 376
+      }
+    },
+    {
+      "t": 1793031813825,
+      "kind": "onboard",
+      "title": "onboarded statcan v41690973 -> psig.v_ca_all_items_v41690973_live_night1027c7 (created REST table + view: 14 rows, latest 2026-09)",
+      "detail": {
+        "candidate": {
+          "agency": "statcan",
+          "country": "CA",
+          "dataset": "18100004",
+          "code": "v41690973",
+          "label": "All-items",
+          "frequency": "M",
+          "measure": "index",
+          "lastPeriod": "2026-09",
+          "status": "active",
+          "sourceUrl": "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690973%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01"
+        },
+        "result": {
+          "view": "v_ca_all_items_v41690973_live_night1027c7",
+          "table": "statcan_ca_v41690973_live_night1027c7",
+          "ok": true,
+          "existed": false,
+          "rows": 14,
+          "latest": "2026-09",
+          "sql": [
+            "CREATE LIGHTNING REST TABLE statcan_ca_v41690973_live_night1027c7 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690973%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+            "CREATE SCHEMASTORE VIEW v_ca_all_items_v41690973_live_night1027c7 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'all_items' AS concept, 'v41690973' AS category_code, 'All-items' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'statcan:18100004:v41690973' AS source_id\nFROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690973_live_night1027c7\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n) s"
+          ]
+        }
+      }
+    },
+    {
+      "t": 1793031813826,
+      "kind": "memory",
+      "title": "stored mapping mem-6"
+    },
+    {
+      "t": 1793031814068,
       "kind": "discover",
       "title": "Eurostat (HICP): 1 candidate(s) for \"all_items\"",
       "detail": {
@@ -437,111 +636,42 @@
       }
     },
     {
-      "t": 1793022693460,
+      "t": 1793031814430,
       "kind": "sql",
-      "title": "Q10: CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_ex1027 FROM PSIG_STATCAN REQUEST(",
+      "title": "Q16: CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_total_night1027c7 FROM PSIG_EUROSTAT",
       "detail": {
-        "id": "Q10",
-        "sql": "CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_ex1027 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+        "id": "Q16",
+        "sql": "CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_total_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
         "rows": 0,
-        "ms": 1324
+        "ms": 361
       }
     },
     {
-      "t": 1793022693533,
+      "t": 1793031814484,
       "kind": "sql",
-      "title": "Q11: CREATE SCHEMASTORE VIEW v_ca_snacks_v41690974_live_ex1027 WITH CONTAINER psig AS",
+      "title": "Q17: CREATE SCHEMASTORE VIEW v_de_all_items_prc_hicp_minr_total_night1027c7 WITH CONTAINER psig",
       "detail": {
-        "id": "Q11",
-        "sql": "CREATE SCHEMASTORE VIEW v_ca_snacks_v41690974_live_ex1027 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'snacks' AS concept, 'v41690974' AS category_code, 'Food' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'statcan:18100004:v41690974' AS source_id\nFROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690974_live_ex1027\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n) s",
+        "id": "Q17",
+        "sql": "CREATE SCHEMASTORE VIEW v_de_all_items_prc_hicp_minr_total_night1027c7 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'all_items' AS concept, 'TOTAL' AS category_code, 'Total' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:TOTAL:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_total_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
         "rows": 0,
-        "ms": 73
+        "ms": 54
       }
     },
     {
-      "t": 1793022693751,
+      "t": 1793031814960,
       "kind": "sql",
-      "title": "Q12: CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_total_ex1027 FROM PSIG_EUROSTAT REQU",
+      "title": "Q18: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_all_items_prc_hicp_minr_total_n",
       "detail": {
-        "id": "Q12",
-        "sql": "CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_total_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-        "rows": 0,
-        "ms": 392
-      }
-    },
-    {
-      "t": 1793022693848,
-      "kind": "sql",
-      "title": "Q13: CREATE SCHEMASTORE VIEW v_de_all_items_prc_hicp_minr_total_ex1027 WITH CONTAINER psig AS",
-      "detail": {
-        "id": "Q13",
-        "sql": "CREATE SCHEMASTORE VIEW v_de_all_items_prc_hicp_minr_total_ex1027 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'all_items' AS concept, 'TOTAL' AS category_code, 'Total' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:TOTAL:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_total_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
-        "rows": 0,
-        "ms": 97
-      }
-    },
-    {
-      "t": 1793022693930,
-      "kind": "sql",
-      "title": "Q14: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_ex1027 WH",
-      "detail": {
-        "id": "Q14",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_ex1027 WHERE yoy_pct IS NOT NULL",
+        "id": "Q18",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_all_items_prc_hicp_minr_total_night1027c7 WHERE yoy_pct IS NOT NULL",
         "rows": 1,
-        "ms": 397
+        "ms": 476
       }
     },
     {
-      "t": 1793022693930,
+      "t": 1793031814960,
       "kind": "onboard",
-      "title": "onboarded statcan v41690974 -> psig.v_ca_snacks_v41690974_live_ex1027 (created REST table + view: 14 rows, latest 2026-09)",
-      "detail": {
-        "candidate": {
-          "agency": "statcan",
-          "country": "CA",
-          "dataset": "18100004",
-          "code": "v41690974",
-          "label": "Food",
-          "frequency": "M",
-          "measure": "index",
-          "lastPeriod": "2026-09",
-          "status": "active",
-          "sourceUrl": "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01"
-        },
-        "result": {
-          "view": "v_ca_snacks_v41690974_live_ex1027",
-          "table": "statcan_ca_v41690974_live_ex1027",
-          "ok": true,
-          "existed": false,
-          "rows": 14,
-          "latest": "2026-09",
-          "sql": [
-            "CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_ex1027 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-            "CREATE SCHEMASTORE VIEW v_ca_snacks_v41690974_live_ex1027 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'snacks' AS concept, 'v41690974' AS category_code, 'Food' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'statcan:18100004:v41690974' AS source_id\nFROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690974_live_ex1027\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n) s"
-          ]
-        }
-      }
-    },
-    {
-      "t": 1793022693931,
-      "kind": "memory",
-      "title": "stored mapping mem-5"
-    },
-    {
-      "t": 1793022694420,
-      "kind": "sql",
-      "title": "Q15: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_all_items_prc_hicp_minr_total_e",
-      "detail": {
-        "id": "Q15",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_all_items_prc_hicp_minr_total_ex1027 WHERE yoy_pct IS NOT NULL",
-        "rows": 1,
-        "ms": 571
-      }
-    },
-    {
-      "t": 1793022694420,
-      "kind": "onboard",
-      "title": "onboarded eurostat TOTAL -> psig.v_de_all_items_prc_hicp_minr_total_ex1027 (created REST table + view: 26 rows, latest 2026-09)",
+      "title": "onboarded eurostat TOTAL -> psig.v_de_all_items_prc_hicp_minr_total_night1027c7 (created REST table + view: 26 rows, latest 2026-09)",
       "detail": {
         "candidate": {
           "agency": "eurostat",
@@ -556,202 +686,112 @@
           "sourceUrl": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN"
         },
         "result": {
-          "view": "v_de_all_items_prc_hicp_minr_total_ex1027",
-          "table": "eurostat_de_prc_hicp_minr_total_ex1027",
+          "view": "v_de_all_items_prc_hicp_minr_total_night1027c7",
+          "table": "eurostat_de_prc_hicp_minr_total_night1027c7",
           "ok": true,
           "existed": false,
           "rows": 26,
           "latest": "2026-09",
           "sql": [
-            "CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_total_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-            "CREATE SCHEMASTORE VIEW v_de_all_items_prc_hicp_minr_total_ex1027 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'all_items' AS concept, 'TOTAL' AS category_code, 'Total' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:TOTAL:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_total_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx"
+            "CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_total_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+            "CREATE SCHEMASTORE VIEW v_de_all_items_prc_hicp_minr_total_night1027c7 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'all_items' AS concept, 'TOTAL' AS category_code, 'Total' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:TOTAL:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_total_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx"
           ]
         }
       }
     },
     {
-      "t": 1793022694420,
-      "kind": "memory",
-      "title": "stored mapping mem-6"
-    },
-    {
-      "t": 1793022694588,
-      "kind": "discover",
-      "title": "Statistics Canada (CPI): 1 candidate(s) for \"all_items\"",
-      "detail": {
-        "country": "CA",
-        "concept": "all_items",
-        "candidates": [
-          {
-            "agency": "statcan",
-            "country": "CA",
-            "dataset": "18100004",
-            "code": "v41690973",
-            "label": "All-items",
-            "frequency": "M",
-            "measure": "index",
-            "lastPeriod": "2026-09",
-            "status": "active",
-            "sourceUrl": "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690973%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01"
-          }
-        ],
-        "notes": []
-      }
-    },
-    {
-      "t": 1793022695324,
-      "kind": "sql",
-      "title": "Q16: CREATE LIGHTNING REST TABLE statcan_ca_v41690973_live_ex1027 FROM PSIG_STATCAN REQUEST(",
-      "detail": {
-        "id": "Q16",
-        "sql": "CREATE LIGHTNING REST TABLE statcan_ca_v41690973_live_ex1027 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690973%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-        "rows": 0,
-        "ms": 735
-      }
-    },
-    {
-      "t": 1793022695372,
-      "kind": "sql",
-      "title": "Q17: CREATE SCHEMASTORE VIEW v_ca_all_items_v41690973_live_ex1027 WITH CONTAINER psig AS",
-      "detail": {
-        "id": "Q17",
-        "sql": "CREATE SCHEMASTORE VIEW v_ca_all_items_v41690973_live_ex1027 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'all_items' AS concept, 'v41690973' AS category_code, 'All-items' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'statcan:18100004:v41690973' AS source_id\nFROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690973_live_ex1027\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n) s",
-        "rows": 0,
-        "ms": 48
-      }
-    },
-    {
-      "t": 1793022695756,
-      "kind": "sql",
-      "title": "Q18: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_all_items_v41690973_live_ex1027",
-      "detail": {
-        "id": "Q18",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_all_items_v41690973_live_ex1027 WHERE yoy_pct IS NOT NULL",
-        "rows": 1,
-        "ms": 384
-      }
-    },
-    {
-      "t": 1793022695756,
-      "kind": "onboard",
-      "title": "onboarded statcan v41690973 -> psig.v_ca_all_items_v41690973_live_ex1027 (created REST table + view: 14 rows, latest 2026-09)",
-      "detail": {
-        "candidate": {
-          "agency": "statcan",
-          "country": "CA",
-          "dataset": "18100004",
-          "code": "v41690973",
-          "label": "All-items",
-          "frequency": "M",
-          "measure": "index",
-          "lastPeriod": "2026-09",
-          "status": "active",
-          "sourceUrl": "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690973%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01"
-        },
-        "result": {
-          "view": "v_ca_all_items_v41690973_live_ex1027",
-          "table": "statcan_ca_v41690973_live_ex1027",
-          "ok": true,
-          "existed": false,
-          "rows": 14,
-          "latest": "2026-09",
-          "sql": [
-            "CREATE LIGHTNING REST TABLE statcan_ca_v41690973_live_ex1027 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690973%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-            "CREATE SCHEMASTORE VIEW v_ca_all_items_v41690973_live_ex1027 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'all_items' AS concept, 'v41690973' AS category_code, 'All-items' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'statcan:18100004:v41690973' AS source_id\nFROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690973_live_ex1027\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n) s"
-          ]
-        }
-      }
-    },
-    {
-      "t": 1793022695757,
+      "t": 1793031814961,
       "kind": "memory",
       "title": "stored mapping mem-7"
     },
     {
-      "t": 1793022695757,
-      "kind": "plan",
-      "title": "all needed series are ready - running the federated comparison"
-    },
-    {
-      "t": 1793022699753,
+      "t": 1793031819179,
       "kind": "sql",
       "title": "Q19: SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v",
       "detail": {
         "id": "Q19",
-        "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_snacks_115501_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_de_snacks_prc_hicp_minr_cp0118_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_all_items_10001_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_de_all_items_prc_hicp_minr_total_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_all_items_v41690973_live_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nORDER BY country, concept, period",
+        "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_snacks_115501_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_de_snacks_prc_hicp_minr_cp0118_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_all_items_10001_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_all_items_v41690973_live_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_de_all_items_prc_hicp_minr_total_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nORDER BY country, concept, period",
         "rows": 84,
-        "ms": 3996
+        "ms": 4218
       }
     },
     {
-      "t": 1793022699754,
+      "t": 1793031819180,
       "kind": "compare",
       "title": "federated query Q19 over 6 views -> 84 rows"
     },
     {
-      "t": 1793022699754,
+      "t": 1793031819180,
       "kind": "plan",
       "title": "all markets compared - finishing without another planner turn"
     },
     {
-      "t": 1793022699794,
+      "t": 1793031819181,
+      "kind": "progress",
+      "title": "market numbers ready in 29.1 s - pricing SKUs and writing the summary"
+    },
+    {
+      "t": 1793031819209,
       "kind": "sql",
-      "title": "already in Zetaris (registered by an earlier run): CREATE LIGHTNING DATABASE PSIG_INTERNAL DESCRIBE BY \"PriceSignal-internal-price-list\"",
+      "title": "already in Zetaris (not created again): CREATE LIGHTNING DATABASE PSIG_INTERNAL DESCRIBE BY \"PriceSignal-internal-price-list\"",
       "detail": {
         "sql": "CREATE LIGHTNING DATABASE PSIG_INTERNAL DESCRIBE BY \"PriceSignal-internal-price-list\"",
         "existed": true
       }
     },
     {
-      "t": 1793022700202,
+      "t": 1793031819558,
       "kind": "sql",
-      "title": "Q20: CREATE LIGHTNING REST TABLE internal_price_list_ex1027 FROM PSIG_INTERNAL REQUEST(",
+      "title": "Q20: CREATE LIGHTNING REST TABLE internal_price_list_night1027c7 FROM PSIG_INTERNAL REQUEST(",
       "detail": {
         "id": "Q20",
-        "sql": "CREATE LIGHTNING REST TABLE internal_price_list_ex1027 FROM PSIG_INTERNAL REQUEST(\n    endpoint \"https://raw.githubusercontent.com/rose050505/pricesignal/main/data/price_list.json\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+        "sql": "CREATE LIGHTNING REST TABLE internal_price_list_night1027c7 FROM PSIG_INTERNAL REQUEST(\n    endpoint \"https://raw.githubusercontent.com/rose050505/pricesignal/main/data/price_list.json\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
         "rows": 0,
-        "ms": 408
+        "ms": 349
       }
     },
     {
-      "t": 1793022700302,
+      "t": 1793031819660,
       "kind": "sql",
-      "title": "Q21: CREATE SCHEMASTORE VIEW v_price_list_ex1027 WITH CONTAINER psig AS",
+      "title": "Q21: CREATE SCHEMASTORE VIEW v_price_list_night1027c7 WITH CONTAINER psig AS",
       "detail": {
         "id": "Q21",
-        "sql": "CREATE SCHEMASTORE VIEW v_price_list_ex1027 WITH CONTAINER psig AS\nSELECT sku, product, market AS country, category AS sku_category, currency, CAST(current_price AS DOUBLE) AS current_price\nFROM psig_internal.internal_price_list_ex1027",
+        "sql": "CREATE SCHEMASTORE VIEW v_price_list_night1027c7 WITH CONTAINER psig AS\nSELECT sku, product, market AS country, category AS sku_category, currency, CAST(current_price AS DOUBLE) AS current_price\nFROM psig_internal.internal_price_list_night1027c7",
         "rows": 0,
-        "ms": 100
+        "ms": 102
       }
     },
     {
-      "t": 1793022700302,
+      "t": 1793031819661,
       "kind": "onboard",
-      "title": "registered the internal price list as Zetaris REST table psig_internal.internal_price_list_ex1027 + view psig.v_price_list_ex1027"
+      "title": "registered the internal price list as Zetaris REST table psig_internal.internal_price_list_night1027c7 + view psig.v_price_list_night1027c7"
     },
     {
-      "t": 1793022700542,
+      "t": 1793031819958,
       "kind": "sql",
-      "title": "Q22: SELECT DISTINCT country, sku_category FROM psig.v_price_list_ex1027 WHERE country IN ('DE'",
+      "title": "Q22: SELECT DISTINCT country, sku_category, product FROM psig.v_price_list_night1027c7 WHERE co",
       "detail": {
         "id": "Q22",
-        "sql": "SELECT DISTINCT country, sku_category FROM psig.v_price_list_ex1027 WHERE country IN ('DE', 'CA', 'AU') ORDER BY country, sku_category",
+        "sql": "SELECT DISTINCT country, sku_category, product FROM psig.v_price_list_night1027c7 WHERE country IN ('DE', 'CA', 'AU') ORDER BY country, sku_category, product",
         "rows": 9,
-        "ms": 240
+        "ms": 297
       }
     },
     {
-      "t": 1793022700543,
+      "t": 1793031819958,
       "kind": "pricing",
-      "title": "the price list sells condiments, food, snacks in AU, CA, DE - pricing each SKU on its own category"
+      "title": "the price list sells condiments, food, snacks in AU, CA, DE - checking official category coverage for its products"
     },
     {
-      "t": 1793022700955,
+      "t": 1793031820798,
       "kind": "discover",
-      "title": "Australian Bureau of Statistics (CPI): 1 candidate(s) for \"condiments\"",
+      "title": "Australian Bureau of Statistics (CPI): 2 SKU candidate(s) for condiments",
       "detail": {
         "country": "AU",
         "concept": "condiments",
+        "products": [
+          "Gochujang 500 g"
+        ],
         "candidates": [
           {
             "agency": "abs",
@@ -764,29 +804,33 @@
             "lastPeriod": "2026-08",
             "status": "active",
             "sourceUrl": "https://data.api.abs.gov.au/rest/data/ABS,CPI/1.97549.10.50.M?startPeriod=2024-08&detail=dataonly"
+          },
+          {
+            "agency": "abs",
+            "country": "AU",
+            "dataset": "ABS,CPI",
+            "code": "20001",
+            "label": "Food and non-alcoholic beverages",
+            "frequency": "M",
+            "measure": "index",
+            "lastPeriod": "2026-08",
+            "status": "active",
+            "isBroadFallback": true,
+            "sourceUrl": "https://data.api.abs.gov.au/rest/data/ABS,CPI/1.20001.10.50.M?startPeriod=2024-08&detail=dataonly"
           }
-        ],
-        "notes": []
+        ]
       }
     },
     {
-      "t": 1793022701287,
-      "kind": "sql",
-      "title": "Q23: CREATE LIGHTNING REST TABLE abs_au_cpi_97549_m_ex1027 FROM PSIG_ABS REQUEST(",
-      "detail": {
-        "id": "Q23",
-        "sql": "CREATE LIGHTNING REST TABLE abs_au_cpi_97549_m_ex1027 FROM PSIG_ABS REQUEST(\n    endpoint \"https://data.api.abs.gov.au/rest/data/ABS,CPI/1.97549.10.50.M?startPeriod=2024-08&detail=dataonly\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n    accept \"application/vnd.sdmx.data+json\"\n) BODY ()",
-        "rows": 0,
-        "ms": 332
-      }
-    },
-    {
-      "t": 1793022701289,
+      "t": 1793031820980,
       "kind": "discover",
-      "title": "Statistics Canada (CPI): 1 candidate(s) for \"condiments\"",
+      "title": "Statistics Canada (CPI): 1 SKU candidate(s) for condiments",
       "detail": {
         "country": "CA",
         "concept": "condiments",
+        "products": [
+          "Gochujang 500 g"
+        ],
         "candidates": [
           {
             "agency": "statcan",
@@ -798,60 +842,269 @@
             "measure": "index",
             "lastPeriod": "2026-09",
             "status": "active",
+            "isBroadFallback": true,
             "sourceUrl": "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01"
           }
-        ],
-        "notes": [
-          "For Canada this agent maps only StatCan's \"Food\" and \"All-items\" CPI vectors, so \"condiments\" is compared at the Food level (coarser than the other markets)."
         ]
       }
     },
     {
-      "t": 1793022701336,
-      "kind": "sql",
-      "title": "already in Zetaris (registered by an earlier run): CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_ex1027 FROM PSIG_STATCAN REQUEST(",
+      "t": 1793031821172,
+      "kind": "discover",
+      "title": "Statistics Canada (CPI): 1 SKU candidate(s) for snacks",
       "detail": {
-        "sql": "CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_ex1027 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+        "country": "CA",
+        "concept": "snacks",
+        "products": [
+          "Honey butter chips 60 g"
+        ],
+        "candidates": [
+          {
+            "agency": "statcan",
+            "country": "CA",
+            "dataset": "18100004",
+            "code": "v41690974",
+            "label": "Food",
+            "frequency": "M",
+            "measure": "index",
+            "lastPeriod": "2026-09",
+            "status": "active",
+            "isBroadFallback": true,
+            "sourceUrl": "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01"
+          }
+        ]
+      }
+    },
+    {
+      "t": 1793031821360,
+      "kind": "discover",
+      "title": "Australian Bureau of Statistics (CPI): 2 SKU candidate(s) for snacks",
+      "detail": {
+        "country": "AU",
+        "concept": "snacks",
+        "products": [
+          "Honey butter chips 60 g"
+        ],
+        "candidates": [
+          {
+            "agency": "abs",
+            "country": "AU",
+            "dataset": "ABS,CPI",
+            "code": "115501",
+            "label": "Snacks and confectionery",
+            "frequency": "M",
+            "measure": "index",
+            "lastPeriod": "2026-08",
+            "status": "active",
+            "sourceUrl": "https://data.api.abs.gov.au/rest/data/ABS,CPI/1.115501.10.50.M?startPeriod=2024-08&detail=dataonly"
+          },
+          {
+            "agency": "abs",
+            "country": "AU",
+            "dataset": "ABS,CPI",
+            "code": "20001",
+            "label": "Food and non-alcoholic beverages",
+            "frequency": "M",
+            "measure": "index",
+            "lastPeriod": "2026-08",
+            "status": "active",
+            "isBroadFallback": true,
+            "sourceUrl": "https://data.api.abs.gov.au/rest/data/ABS,CPI/1.20001.10.50.M?startPeriod=2024-08&detail=dataonly"
+          }
+        ]
+      }
+    },
+    {
+      "t": 1793031821871,
+      "kind": "discover",
+      "title": "Eurostat (HICP): 2 SKU candidate(s) for condiments",
+      "detail": {
+        "country": "DE",
+        "concept": "condiments",
+        "products": [
+          "Gochujang 500 g"
+        ],
+        "candidates": [
+          {
+            "agency": "eurostat",
+            "country": "DE",
+            "dataset": "prc_hicp_minr",
+            "code": "CP01193",
+            "label": "Salt, condiments and sauces (ND)",
+            "frequency": "M",
+            "measure": "yoy_pct",
+            "lastPeriod": "2026-09",
+            "status": "active",
+            "sourceUrl": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP01193&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN"
+          },
+          {
+            "agency": "eurostat",
+            "country": "DE",
+            "dataset": "prc_hicp_minr",
+            "code": "CP01",
+            "label": "Food and non-alcoholic beverages",
+            "frequency": "M",
+            "measure": "yoy_pct",
+            "lastPeriod": "2026-09",
+            "status": "active",
+            "isBroadFallback": true,
+            "sourceUrl": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN"
+          }
+        ]
+      }
+    },
+    {
+      "t": 1793031822784,
+      "kind": "discover",
+      "title": "Eurostat (HICP): 4 SKU candidate(s) for snacks",
+      "detail": {
+        "country": "DE",
+        "concept": "snacks",
+        "products": [
+          "Honey butter chips 60 g"
+        ],
+        "candidates": [
+          {
+            "agency": "eurostat",
+            "country": "DE",
+            "dataset": "prc_hicp_minr",
+            "code": "CP0118",
+            "label": "Sugar, confectionery and desserts (ND)",
+            "frequency": "M",
+            "measure": "yoy_pct",
+            "lastPeriod": "2026-09",
+            "status": "active",
+            "sourceUrl": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP0118&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN"
+          },
+          {
+            "agency": "eurostat",
+            "country": "DE",
+            "dataset": "prc_hicp_minr",
+            "code": "CP01189",
+            "label": "Other sugar confectionery and desserts n.e.c. (ND)",
+            "frequency": "M",
+            "measure": "yoy_pct",
+            "lastPeriod": "2026-09",
+            "status": "active",
+            "sourceUrl": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP01189&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN"
+          },
+          {
+            "agency": "eurostat",
+            "country": "DE",
+            "dataset": "prc_hicp_minr",
+            "code": "CP011751",
+            "label": "Potatoes",
+            "frequency": "M",
+            "measure": "yoy_pct",
+            "lastPeriod": "2026-09",
+            "status": "active",
+            "sourceUrl": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP011751&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN"
+          },
+          {
+            "agency": "eurostat",
+            "country": "DE",
+            "dataset": "prc_hicp_minr",
+            "code": "CP01",
+            "label": "Food and non-alcoholic beverages",
+            "frequency": "M",
+            "measure": "yoy_pct",
+            "lastPeriod": "2026-09",
+            "status": "active",
+            "isBroadFallback": true,
+            "sourceUrl": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN"
+          }
+        ]
+      }
+    },
+    {
+      "t": 1793031829182,
+      "kind": "warn",
+      "title": "narrative: no reply after 10 s - sent the same request again; the first reply wins"
+    },
+    {
+      "t": 1793031842786,
+      "kind": "warn",
+      "title": "SKU category selection unavailable or invalid - using marked Food fallbacks where available (Error: SKU selection time budget expired)"
+    },
+    {
+      "t": 1793031842858,
+      "kind": "sql",
+      "title": "already in Zetaris (not created again): CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_night1027c7 FROM PSIG_STATCAN REQUES",
+      "detail": {
+        "sql": "CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_night1027c7 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
         "existed": true
       }
     },
     {
-      "t": 1793022701362,
+      "t": 1793031842936,
       "kind": "sql",
-      "title": "Q24: CREATE SCHEMASTORE VIEW v_au_condiments_97549_ex1027 WITH CONTAINER psig AS",
+      "title": "Q23: CREATE SCHEMASTORE VIEW v_ca_condiments_v41690974_live_night1027c7 WITH CONTAINER psig AS",
+      "detail": {
+        "id": "Q23",
+        "sql": "CREATE SCHEMASTORE VIEW v_ca_condiments_v41690974_live_night1027c7 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'condiments' AS concept, 'v41690974' AS category_code, 'Food' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'statcan:18100004:v41690974' AS source_id\nFROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690974_live_night1027c7\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n) s",
+        "rows": 0,
+        "ms": 78
+      }
+    },
+    {
+      "t": 1793031843752,
+      "kind": "sql",
+      "title": "Q24: CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_cp01_night1027c7 FROM PSIG_EUROSTAT ",
       "detail": {
         "id": "Q24",
-        "sql": "CREATE SCHEMASTORE VIEW v_au_condiments_97549_ex1027 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'condiments' AS concept, '97549' AS category_code, 'Food additives and condiments' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.97549.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_97549_m_ex1027\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s",
+        "sql": "CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_cp01_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+        "rows": 0,
+        "ms": 960
+      }
+    },
+    {
+      "t": 1793031843759,
+      "kind": "sql",
+      "title": "Q25: CREATE LIGHTNING REST TABLE abs_au_cpi_20001_m_night1027c7 FROM PSIG_ABS REQUEST(",
+      "detail": {
+        "id": "Q25",
+        "sql": "CREATE LIGHTNING REST TABLE abs_au_cpi_20001_m_night1027c7 FROM PSIG_ABS REQUEST(\n    endpoint \"https://data.api.abs.gov.au/rest/data/ABS,CPI/1.20001.10.50.M?startPeriod=2024-08&detail=dataonly\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n    accept \"application/vnd.sdmx.data+json\"\n) BODY ()",
+        "rows": 0,
+        "ms": 969
+      }
+    },
+    {
+      "t": 1793031843825,
+      "kind": "sql",
+      "title": "Q26: CREATE SCHEMASTORE VIEW v_de_condiments_prc_hicp_minr_cp01_night1027c7 WITH CONTAINER psig",
+      "detail": {
+        "id": "Q26",
+        "sql": "CREATE SCHEMASTORE VIEW v_de_condiments_prc_hicp_minr_cp01_night1027c7 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'condiments' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_cp01_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
+        "rows": 0,
+        "ms": 73
+      }
+    },
+    {
+      "t": 1793031843834,
+      "kind": "sql",
+      "title": "Q27: CREATE SCHEMASTORE VIEW v_au_condiments_20001_night1027c7 WITH CONTAINER psig AS",
+      "detail": {
+        "id": "Q27",
+        "sql": "CREATE SCHEMASTORE VIEW v_au_condiments_20001_night1027c7 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'condiments' AS concept, '20001' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.20001.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_20001_m_night1027c7\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s",
         "rows": 0,
         "ms": 75
       }
     },
     {
-      "t": 1793022701391,
+      "t": 1793031843895,
       "kind": "sql",
-      "title": "Q25: CREATE SCHEMASTORE VIEW v_ca_condiments_v41690974_live_ex1027 WITH CONTAINER psig AS",
+      "title": "Q28: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_condiments_v41690974_live_night",
       "detail": {
-        "id": "Q25",
-        "sql": "CREATE SCHEMASTORE VIEW v_ca_condiments_v41690974_live_ex1027 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'condiments' AS concept, 'v41690974' AS category_code, 'Food' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'statcan:18100004:v41690974' AS source_id\nFROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690974_live_ex1027\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n) s",
-        "rows": 0,
-        "ms": 55
-      }
-    },
-    {
-      "t": 1793022701793,
-      "kind": "sql",
-      "title": "Q26: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_condiments_v41690974_live_ex102",
-      "detail": {
-        "id": "Q26",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_condiments_v41690974_live_ex1027 WHERE yoy_pct IS NOT NULL",
+        "id": "Q28",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_condiments_v41690974_live_night1027c7 WHERE yoy_pct IS NOT NULL",
         "rows": 1,
-        "ms": 402
+        "ms": 959
       }
     },
     {
-      "t": 1793022701793,
+      "t": 1793031843895,
       "kind": "onboard",
-      "title": "onboarded statcan v41690974 -> psig.v_ca_condiments_v41690974_live_ex1027 (already registered in Zetaris by an earlier run; verified: 14 rows, latest 2026-09)",
+      "title": "onboarded SKU statcan v41690974 -> psig.v_ca_condiments_v41690974_live_night1027c7 (Zetaris already had it - reused and verified: 14 rows, latest 2026-09)",
       "detail": {
         "candidate": {
           "agency": "statcan",
@@ -863,120 +1116,334 @@
           "measure": "index",
           "lastPeriod": "2026-09",
           "status": "active",
+          "isBroadFallback": true,
           "sourceUrl": "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01"
         },
+        "selection": {
+          "candidate": 0,
+          "fit": "broader",
+          "reason": "Using the official Food series as a broader proxy; a product-specific match was not confirmed.",
+          "by": "fallback"
+        },
         "result": {
-          "view": "v_ca_condiments_v41690974_live_ex1027",
-          "table": "statcan_ca_v41690974_live_ex1027",
+          "view": "v_ca_condiments_v41690974_live_night1027c7",
+          "table": "statcan_ca_v41690974_live_night1027c7",
           "ok": true,
           "existed": true,
           "rows": 14,
           "latest": "2026-09",
           "sql": [
-            "CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_ex1027 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-            "CREATE SCHEMASTORE VIEW v_ca_condiments_v41690974_live_ex1027 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'condiments' AS concept, 'v41690974' AS category_code, 'Food' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'statcan:18100004:v41690974' AS source_id\nFROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690974_live_ex1027\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n) s"
+            "CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_night1027c7 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+            "CREATE SCHEMASTORE VIEW v_ca_condiments_v41690974_live_night1027c7 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'condiments' AS concept, 'v41690974' AS category_code, 'Food' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'statcan:18100004:v41690974' AS source_id\nFROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690974_live_night1027c7\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n) s"
           ]
         }
       }
     },
     {
-      "t": 1793022701794,
-      "kind": "memory",
-      "title": "stored mapping mem-8"
-    },
-    {
-      "t": 1793022701973,
+      "t": 1793031843923,
       "kind": "sql",
-      "title": "Q27: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_condiments_97549_ex1027 WHERE y",
+      "title": "already in Zetaris (not created again): CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_night1027c7 FROM PSIG_STATCAN REQUES",
       "detail": {
-        "id": "Q27",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_condiments_97549_ex1027 WHERE yoy_pct IS NOT NULL",
-        "rows": 1,
-        "ms": 611
+        "sql": "CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_night1027c7 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+        "existed": true
       }
     },
     {
-      "t": 1793022701973,
+      "t": 1793031843970,
+      "kind": "sql",
+      "title": "already in Zetaris (not created again): CREATE SCHEMASTORE VIEW v_ca_snacks_v41690974_live_night1027c7 WITH CONTAINER psig AS",
+      "detail": {
+        "sql": "CREATE SCHEMASTORE VIEW v_ca_snacks_v41690974_live_night1027c7 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'snacks' AS concept, 'v41690974' AS category_code, 'Food' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'statcan:18100004:v41690974' AS source_id\nFROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690974_live_night1027c7\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n) s",
+        "existed": true
+      }
+    },
+    {
+      "t": 1793031844313,
+      "kind": "sql",
+      "title": "Q29: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_condiments_prc_hicp_minr_cp01_n",
+      "detail": {
+        "id": "Q29",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_condiments_prc_hicp_minr_cp01_night1027c7 WHERE yoy_pct IS NOT NULL",
+        "rows": 1,
+        "ms": 488
+      }
+    },
+    {
+      "t": 1793031844313,
       "kind": "onboard",
-      "title": "onboarded abs 97549 -> psig.v_au_condiments_97549_ex1027 (created REST table + view: 13 rows, latest 2026-08)",
+      "title": "onboarded SKU eurostat CP01 -> psig.v_de_condiments_prc_hicp_minr_cp01_night1027c7 (created REST table + view: 26 rows, latest 2026-09)",
+      "detail": {
+        "candidate": {
+          "agency": "eurostat",
+          "country": "DE",
+          "dataset": "prc_hicp_minr",
+          "code": "CP01",
+          "label": "Food and non-alcoholic beverages",
+          "frequency": "M",
+          "measure": "yoy_pct",
+          "lastPeriod": "2026-09",
+          "status": "active",
+          "isBroadFallback": true,
+          "sourceUrl": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN"
+        },
+        "selection": {
+          "candidate": 1,
+          "fit": "broader",
+          "reason": "Using the official Food series as a broader proxy; a product-specific match was not confirmed.",
+          "by": "fallback"
+        },
+        "result": {
+          "view": "v_de_condiments_prc_hicp_minr_cp01_night1027c7",
+          "table": "eurostat_de_prc_hicp_minr_cp01_night1027c7",
+          "ok": true,
+          "existed": false,
+          "rows": 26,
+          "latest": "2026-09",
+          "sql": [
+            "CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_cp01_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+            "CREATE SCHEMASTORE VIEW v_de_condiments_prc_hicp_minr_cp01_night1027c7 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'condiments' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_cp01_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx"
+          ]
+        }
+      }
+    },
+    {
+      "t": 1793031844342,
+      "kind": "sql",
+      "title": "already in Zetaris (not created again): CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_cp01_night1027c7 FROM PSIG_EUROSTAT ",
+      "detail": {
+        "sql": "CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_cp01_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+        "existed": true
+      }
+    },
+    {
+      "t": 1793031844365,
+      "kind": "sql",
+      "title": "Q30: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_night1027",
+      "detail": {
+        "id": "Q30",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_night1027c7 WHERE yoy_pct IS NOT NULL",
+        "rows": 1,
+        "ms": 394
+      }
+    },
+    {
+      "t": 1793031844365,
+      "kind": "onboard",
+      "title": "onboarded SKU statcan v41690974 -> psig.v_ca_snacks_v41690974_live_night1027c7 (Zetaris already had it - reused and verified: 14 rows, latest 2026-09)",
+      "detail": {
+        "candidate": {
+          "agency": "statcan",
+          "country": "CA",
+          "dataset": "18100004",
+          "code": "v41690974",
+          "label": "Food",
+          "frequency": "M",
+          "measure": "index",
+          "lastPeriod": "2026-09",
+          "status": "active",
+          "isBroadFallback": true,
+          "sourceUrl": "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01"
+        },
+        "selection": {
+          "candidate": 0,
+          "fit": "broader",
+          "reason": "Using the official Food series as a broader proxy; a product-specific match was not confirmed.",
+          "by": "fallback"
+        },
+        "result": {
+          "view": "v_ca_snacks_v41690974_live_night1027c7",
+          "table": "statcan_ca_v41690974_live_night1027c7",
+          "ok": true,
+          "existed": true,
+          "rows": 14,
+          "latest": "2026-09",
+          "sql": [
+            "CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_night1027c7 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+            "CREATE SCHEMASTORE VIEW v_ca_snacks_v41690974_live_night1027c7 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'snacks' AS concept, 'v41690974' AS category_code, 'Food' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'statcan:18100004:v41690974' AS source_id\nFROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690974_live_night1027c7\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n) s"
+          ]
+        }
+      }
+    },
+    {
+      "t": 1793031844424,
+      "kind": "sql",
+      "title": "Q31: CREATE SCHEMASTORE VIEW v_de_snacks_prc_hicp_minr_cp01_night1027c7 WITH CONTAINER psig AS",
+      "detail": {
+        "id": "Q31",
+        "sql": "CREATE SCHEMASTORE VIEW v_de_snacks_prc_hicp_minr_cp01_night1027c7 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'snacks' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_cp01_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
+        "rows": 0,
+        "ms": 82
+      }
+    },
+    {
+      "t": 1793031844428,
+      "kind": "sql",
+      "title": "Q32: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_condiments_20001_night1027c7 WH",
+      "detail": {
+        "id": "Q32",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_condiments_20001_night1027c7 WHERE yoy_pct IS NOT NULL",
+        "rows": 1,
+        "ms": 594
+      }
+    },
+    {
+      "t": 1793031844428,
+      "kind": "onboard",
+      "title": "onboarded SKU abs 20001 -> psig.v_au_condiments_20001_night1027c7 (created REST table + view: 13 rows, latest 2026-08)",
       "detail": {
         "candidate": {
           "agency": "abs",
           "country": "AU",
           "dataset": "ABS,CPI",
-          "code": "97549",
-          "label": "Food additives and condiments",
+          "code": "20001",
+          "label": "Food and non-alcoholic beverages",
           "frequency": "M",
           "measure": "index",
           "lastPeriod": "2026-08",
           "status": "active",
-          "sourceUrl": "https://data.api.abs.gov.au/rest/data/ABS,CPI/1.97549.10.50.M?startPeriod=2024-08&detail=dataonly"
+          "isBroadFallback": true,
+          "sourceUrl": "https://data.api.abs.gov.au/rest/data/ABS,CPI/1.20001.10.50.M?startPeriod=2024-08&detail=dataonly"
+        },
+        "selection": {
+          "candidate": 1,
+          "fit": "broader",
+          "reason": "Using the official Food series as a broader proxy; a product-specific match was not confirmed.",
+          "by": "fallback"
         },
         "result": {
-          "view": "v_au_condiments_97549_ex1027",
-          "table": "abs_au_cpi_97549_m_ex1027",
+          "view": "v_au_condiments_20001_night1027c7",
+          "table": "abs_au_cpi_20001_m_night1027c7",
           "ok": true,
           "existed": false,
           "rows": 13,
           "latest": "2026-08",
           "sql": [
-            "CREATE LIGHTNING REST TABLE abs_au_cpi_97549_m_ex1027 FROM PSIG_ABS REQUEST(\n    endpoint \"https://data.api.abs.gov.au/rest/data/ABS,CPI/1.97549.10.50.M?startPeriod=2024-08&detail=dataonly\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n    accept \"application/vnd.sdmx.data+json\"\n) BODY ()",
-            "CREATE SCHEMASTORE VIEW v_au_condiments_97549_ex1027 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'condiments' AS concept, '97549' AS category_code, 'Food additives and condiments' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.97549.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_97549_m_ex1027\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s"
+            "CREATE LIGHTNING REST TABLE abs_au_cpi_20001_m_night1027c7 FROM PSIG_ABS REQUEST(\n    endpoint \"https://data.api.abs.gov.au/rest/data/ABS,CPI/1.20001.10.50.M?startPeriod=2024-08&detail=dataonly\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n    accept \"application/vnd.sdmx.data+json\"\n) BODY ()",
+            "CREATE SCHEMASTORE VIEW v_au_condiments_20001_night1027c7 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'condiments' AS concept, '20001' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.20001.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_20001_m_night1027c7\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s"
           ]
         }
       }
     },
     {
-      "t": 1793022701974,
-      "kind": "memory",
-      "title": "stored mapping mem-9"
-    },
-    {
-      "t": 1793022701979,
-      "kind": "discover",
-      "title": "Statistics Canada (CPI): 1 candidate(s) for \"food\"",
-      "detail": {
-        "country": "CA",
-        "concept": "food",
-        "candidates": [
-          {
-            "agency": "statcan",
-            "country": "CA",
-            "dataset": "18100004",
-            "code": "v41690974",
-            "label": "Food",
-            "frequency": "M",
-            "measure": "index",
-            "lastPeriod": "2026-09",
-            "status": "active",
-            "sourceUrl": "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01"
-          }
-        ],
-        "notes": []
-      }
-    },
-    {
-      "t": 1793022702038,
+      "t": 1793031844453,
       "kind": "sql",
-      "title": "already in Zetaris (registered by an earlier run): CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_ex1027 FROM PSIG_STATCAN REQUEST(",
+      "title": "already in Zetaris (not created again): CREATE LIGHTNING REST TABLE abs_au_cpi_20001_m_night1027c7 FROM PSIG_ABS REQUEST(",
       "detail": {
-        "sql": "CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_ex1027 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+        "sql": "CREATE LIGHTNING REST TABLE abs_au_cpi_20001_m_night1027c7 FROM PSIG_ABS REQUEST(\n    endpoint \"https://data.api.abs.gov.au/rest/data/ABS,CPI/1.20001.10.50.M?startPeriod=2024-08&detail=dataonly\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n    accept \"application/vnd.sdmx.data+json\"\n) BODY ()",
         "existed": true
       }
     },
     {
-      "t": 1793022702136,
+      "t": 1793031844490,
       "kind": "sql",
-      "title": "Q28: CREATE SCHEMASTORE VIEW v_ca_food_v41690974_live_ex1027 WITH CONTAINER psig AS",
+      "title": "Q33: CREATE SCHEMASTORE VIEW v_au_snacks_20001_night1027c7 WITH CONTAINER psig AS",
       "detail": {
-        "id": "Q28",
-        "sql": "CREATE SCHEMASTORE VIEW v_ca_food_v41690974_live_ex1027 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'food' AS concept, 'v41690974' AS category_code, 'Food' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'statcan:18100004:v41690974' AS source_id\nFROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690974_live_ex1027\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n) s",
+        "id": "Q33",
+        "sql": "CREATE SCHEMASTORE VIEW v_au_snacks_20001_night1027c7 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'snacks' AS concept, '20001' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.20001.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_20001_m_night1027c7\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s",
         "rows": 0,
-        "ms": 98
+        "ms": 37
       }
     },
     {
-      "t": 1793022702354,
+      "t": 1793031844952,
+      "kind": "sql",
+      "title": "Q34: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_snacks_20001_night1027c7 WHERE ",
+      "detail": {
+        "id": "Q34",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_snacks_20001_night1027c7 WHERE yoy_pct IS NOT NULL",
+        "rows": 1,
+        "ms": 462
+      }
+    },
+    {
+      "t": 1793031844952,
+      "kind": "onboard",
+      "title": "onboarded SKU abs 20001 -> psig.v_au_snacks_20001_night1027c7 (Zetaris already had it - reused and verified: 13 rows, latest 2026-08)",
+      "detail": {
+        "candidate": {
+          "agency": "abs",
+          "country": "AU",
+          "dataset": "ABS,CPI",
+          "code": "20001",
+          "label": "Food and non-alcoholic beverages",
+          "frequency": "M",
+          "measure": "index",
+          "lastPeriod": "2026-08",
+          "status": "active",
+          "isBroadFallback": true,
+          "sourceUrl": "https://data.api.abs.gov.au/rest/data/ABS,CPI/1.20001.10.50.M?startPeriod=2024-08&detail=dataonly"
+        },
+        "selection": {
+          "candidate": 1,
+          "fit": "broader",
+          "reason": "Using the official Food series as a broader proxy; a product-specific match was not confirmed.",
+          "by": "fallback"
+        },
+        "result": {
+          "view": "v_au_snacks_20001_night1027c7",
+          "table": "abs_au_cpi_20001_m_night1027c7",
+          "ok": true,
+          "existed": true,
+          "rows": 13,
+          "latest": "2026-08",
+          "sql": [
+            "CREATE LIGHTNING REST TABLE abs_au_cpi_20001_m_night1027c7 FROM PSIG_ABS REQUEST(\n    endpoint \"https://data.api.abs.gov.au/rest/data/ABS,CPI/1.20001.10.50.M?startPeriod=2024-08&detail=dataonly\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n    accept \"application/vnd.sdmx.data+json\"\n) BODY ()",
+            "CREATE SCHEMASTORE VIEW v_au_snacks_20001_night1027c7 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'snacks' AS concept, '20001' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.20001.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_20001_m_night1027c7\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s"
+          ]
+        }
+      }
+    },
+    {
+      "t": 1793031844953,
+      "kind": "sql",
+      "title": "Q35: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_snacks_prc_hicp_minr_cp01_night",
+      "detail": {
+        "id": "Q35",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_snacks_prc_hicp_minr_cp01_night1027c7 WHERE yoy_pct IS NOT NULL",
+        "rows": 1,
+        "ms": 529
+      }
+    },
+    {
+      "t": 1793031844953,
+      "kind": "onboard",
+      "title": "onboarded SKU eurostat CP01 -> psig.v_de_snacks_prc_hicp_minr_cp01_night1027c7 (Zetaris already had it - reused and verified: 26 rows, latest 2026-09)",
+      "detail": {
+        "candidate": {
+          "agency": "eurostat",
+          "country": "DE",
+          "dataset": "prc_hicp_minr",
+          "code": "CP01",
+          "label": "Food and non-alcoholic beverages",
+          "frequency": "M",
+          "measure": "yoy_pct",
+          "lastPeriod": "2026-09",
+          "status": "active",
+          "isBroadFallback": true,
+          "sourceUrl": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN"
+        },
+        "selection": {
+          "candidate": 3,
+          "fit": "broader",
+          "reason": "Using the official Food series as a broader proxy; a product-specific match was not confirmed.",
+          "by": "fallback"
+        },
+        "result": {
+          "view": "v_de_snacks_prc_hicp_minr_cp01_night1027c7",
+          "table": "eurostat_de_prc_hicp_minr_cp01_night1027c7",
+          "ok": true,
+          "existed": true,
+          "rows": 26,
+          "latest": "2026-09",
+          "sql": [
+            "CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_cp01_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+            "CREATE SCHEMASTORE VIEW v_de_snacks_prc_hicp_minr_cp01_night1027c7 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'snacks' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_cp01_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx"
+          ]
+        }
+      }
+    },
+    {
+      "t": 1793031845505,
       "kind": "discover",
       "title": "Australian Bureau of Statistics (CPI): 1 candidate(s) for \"food\"",
       "detail": {
@@ -1000,137 +1467,73 @@
       }
     },
     {
-      "t": 1793022702558,
+      "t": 1793031845569,
       "kind": "sql",
-      "title": "Q29: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_food_v41690974_live_ex1027 WHER",
+      "title": "already in Zetaris (not created again): CREATE LIGHTNING REST TABLE abs_au_cpi_20001_m_night1027c7 FROM PSIG_ABS REQUEST(",
       "detail": {
-        "id": "Q29",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_food_v41690974_live_ex1027 WHERE yoy_pct IS NOT NULL",
-        "rows": 1,
-        "ms": 422
+        "sql": "CREATE LIGHTNING REST TABLE abs_au_cpi_20001_m_night1027c7 FROM PSIG_ABS REQUEST(\n    endpoint \"https://data.api.abs.gov.au/rest/data/ABS,CPI/1.20001.10.50.M?startPeriod=2024-08&detail=dataonly\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n    accept \"application/vnd.sdmx.data+json\"\n) BODY ()",
+        "existed": true
       }
     },
     {
-      "t": 1793022702558,
-      "kind": "onboard",
-      "title": "onboarded statcan v41690974 -> psig.v_ca_food_v41690974_live_ex1027 (already registered in Zetaris by an earlier run; verified: 14 rows, latest 2026-09)",
-      "detail": {
-        "candidate": {
-          "agency": "statcan",
-          "country": "CA",
-          "dataset": "18100004",
-          "code": "v41690974",
-          "label": "Food",
-          "frequency": "M",
-          "measure": "index",
-          "lastPeriod": "2026-09",
-          "status": "active",
-          "sourceUrl": "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01"
-        },
-        "result": {
-          "view": "v_ca_food_v41690974_live_ex1027",
-          "table": "statcan_ca_v41690974_live_ex1027",
-          "ok": true,
-          "existed": true,
-          "rows": 14,
-          "latest": "2026-09",
-          "sql": [
-            "CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_ex1027 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-            "CREATE SCHEMASTORE VIEW v_ca_food_v41690974_live_ex1027 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'food' AS concept, 'v41690974' AS category_code, 'Food' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'statcan:18100004:v41690974' AS source_id\nFROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690974_live_ex1027\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n) s"
-          ]
-        }
-      }
-    },
-    {
-      "t": 1793022702559,
-      "kind": "memory",
-      "title": "stored mapping mem-10"
-    },
-    {
-      "t": 1793022702653,
+      "t": 1793031845653,
       "kind": "sql",
-      "title": "Q30: CREATE LIGHTNING REST TABLE abs_au_cpi_20001_m_ex1027 FROM PSIG_ABS REQUEST(",
+      "title": "Q36: CREATE SCHEMASTORE VIEW v_au_food_20001_night1027c7 WITH CONTAINER psig AS",
       "detail": {
-        "id": "Q30",
-        "sql": "CREATE LIGHTNING REST TABLE abs_au_cpi_20001_m_ex1027 FROM PSIG_ABS REQUEST(\n    endpoint \"https://data.api.abs.gov.au/rest/data/ABS,CPI/1.20001.10.50.M?startPeriod=2024-08&detail=dataonly\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n    accept \"application/vnd.sdmx.data+json\"\n) BODY ()",
+        "id": "Q36",
+        "sql": "CREATE SCHEMASTORE VIEW v_au_food_20001_night1027c7 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'food' AS concept, '20001' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.20001.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_20001_m_night1027c7\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s",
         "rows": 0,
-        "ms": 298
+        "ms": 84
       }
     },
     {
-      "t": 1793022702702,
+      "t": 1793031846078,
       "kind": "discover",
-      "title": "Eurostat (HICP): 1 candidate(s) for \"condiments\"",
+      "title": "Statistics Canada (CPI): 1 candidate(s) for \"food\"",
       "detail": {
-        "country": "DE",
-        "concept": "condiments",
+        "country": "CA",
+        "concept": "food",
         "candidates": [
           {
-            "agency": "eurostat",
-            "country": "DE",
-            "dataset": "prc_hicp_minr",
-            "code": "CP01193",
-            "label": "Salt, condiments and sauces (ND)",
+            "agency": "statcan",
+            "country": "CA",
+            "dataset": "18100004",
+            "code": "v41690974",
+            "label": "Food",
             "frequency": "M",
-            "measure": "yoy_pct",
+            "measure": "index",
             "lastPeriod": "2026-09",
             "status": "active",
-            "sourceUrl": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP01193&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN"
+            "sourceUrl": "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01"
           }
         ],
-        "notes": [
-          "Eurostat prc_hicp_manr looks discontinued (no data after 2025-12 (10 months ago); last period 2025-12); switched to its successor prc_hicp_minr."
-        ]
+        "notes": []
       }
     },
     {
-      "t": 1793022702718,
+      "t": 1793031846113,
       "kind": "sql",
-      "title": "Q31: CREATE SCHEMASTORE VIEW v_au_food_20001_ex1027 WITH CONTAINER psig AS",
+      "title": "already in Zetaris (not created again): CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_night1027c7 FROM PSIG_STATCAN REQUES",
       "detail": {
-        "id": "Q31",
-        "sql": "CREATE SCHEMASTORE VIEW v_au_food_20001_ex1027 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'food' AS concept, '20001' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.20001.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_20001_m_ex1027\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s",
-        "rows": 0,
-        "ms": 65
+        "sql": "CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_night1027c7 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+        "existed": true
       }
     },
     {
-      "t": 1793022703092,
+      "t": 1793031846139,
       "kind": "sql",
-      "title": "Q32: CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_cp01193_ex1027 FROM PSIG_EUROSTAT RE",
+      "title": "Q37: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_food_20001_night1027c7 WHERE yo",
       "detail": {
-        "id": "Q32",
-        "sql": "CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_cp01193_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP01193&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-        "rows": 0,
-        "ms": 390
-      }
-    },
-    {
-      "t": 1793022703128,
-      "kind": "sql",
-      "title": "Q33: CREATE SCHEMASTORE VIEW v_de_condiments_prc_hicp_minr_cp01193_ex1027 WITH CONTAINER psig A",
-      "detail": {
-        "id": "Q33",
-        "sql": "CREATE SCHEMASTORE VIEW v_de_condiments_prc_hicp_minr_cp01193_ex1027 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'condiments' AS concept, 'CP01193' AS category_code, 'Salt, condiments and sauces (ND)' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01193:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_cp01193_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
-        "rows": 0,
-        "ms": 36
-      }
-    },
-    {
-      "t": 1793022703171,
-      "kind": "sql",
-      "title": "Q34: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_food_20001_ex1027 WHERE yoy_pct",
-      "detail": {
-        "id": "Q34",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_food_20001_ex1027 WHERE yoy_pct IS NOT NULL",
+        "id": "Q37",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_food_20001_night1027c7 WHERE yoy_pct IS NOT NULL",
         "rows": 1,
-        "ms": 453
+        "ms": 486
       }
     },
     {
-      "t": 1793022703171,
+      "t": 1793031846139,
       "kind": "onboard",
-      "title": "onboarded abs 20001 -> psig.v_au_food_20001_ex1027 (created REST table + view: 13 rows, latest 2026-08)",
+      "title": "onboarded abs 20001 -> psig.v_au_food_20001_night1027c7 (Zetaris already had it - reused and verified: 13 rows, latest 2026-08)",
       "detail": {
         "candidate": {
           "agency": "abs",
@@ -1145,73 +1548,84 @@
           "sourceUrl": "https://data.api.abs.gov.au/rest/data/ABS,CPI/1.20001.10.50.M?startPeriod=2024-08&detail=dataonly"
         },
         "result": {
-          "view": "v_au_food_20001_ex1027",
-          "table": "abs_au_cpi_20001_m_ex1027",
+          "view": "v_au_food_20001_night1027c7",
+          "table": "abs_au_cpi_20001_m_night1027c7",
           "ok": true,
-          "existed": false,
+          "existed": true,
           "rows": 13,
           "latest": "2026-08",
           "sql": [
-            "CREATE LIGHTNING REST TABLE abs_au_cpi_20001_m_ex1027 FROM PSIG_ABS REQUEST(\n    endpoint \"https://data.api.abs.gov.au/rest/data/ABS,CPI/1.20001.10.50.M?startPeriod=2024-08&detail=dataonly\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n    accept \"application/vnd.sdmx.data+json\"\n) BODY ()",
-            "CREATE SCHEMASTORE VIEW v_au_food_20001_ex1027 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'food' AS concept, '20001' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.20001.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_20001_m_ex1027\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s"
+            "CREATE LIGHTNING REST TABLE abs_au_cpi_20001_m_night1027c7 FROM PSIG_ABS REQUEST(\n    endpoint \"https://data.api.abs.gov.au/rest/data/ABS,CPI/1.20001.10.50.M?startPeriod=2024-08&detail=dataonly\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n    accept \"application/vnd.sdmx.data+json\"\n) BODY ()",
+            "CREATE SCHEMASTORE VIEW v_au_food_20001_night1027c7 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'food' AS concept, '20001' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.20001.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_20001_m_night1027c7\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s"
           ]
         }
       }
     },
     {
-      "t": 1793022703171,
+      "t": 1793031846140,
       "kind": "memory",
-      "title": "stored mapping mem-11"
+      "title": "stored mapping mem-8"
     },
     {
-      "t": 1793022703661,
+      "t": 1793031846160,
       "kind": "sql",
-      "title": "Q35: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_condiments_prc_hicp_minr_cp0119",
+      "title": "Q38: CREATE SCHEMASTORE VIEW v_ca_food_v41690974_live_night1027c7 WITH CONTAINER psig AS",
       "detail": {
-        "id": "Q35",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_condiments_prc_hicp_minr_cp01193_ex1027 WHERE yoy_pct IS NOT NULL",
-        "rows": 1,
-        "ms": 533
+        "id": "Q38",
+        "sql": "CREATE SCHEMASTORE VIEW v_ca_food_v41690974_live_night1027c7 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'food' AS concept, 'v41690974' AS category_code, 'Food' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'statcan:18100004:v41690974' AS source_id\nFROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690974_live_night1027c7\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n) s",
+        "rows": 0,
+        "ms": 47
       }
     },
     {
-      "t": 1793022703661,
+      "t": 1793031846553,
+      "kind": "sql",
+      "title": "Q39: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_food_v41690974_live_night1027c7",
+      "detail": {
+        "id": "Q39",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_food_v41690974_live_night1027c7 WHERE yoy_pct IS NOT NULL",
+        "rows": 1,
+        "ms": 393
+      }
+    },
+    {
+      "t": 1793031846553,
       "kind": "onboard",
-      "title": "onboarded eurostat CP01193 -> psig.v_de_condiments_prc_hicp_minr_cp01193_ex1027 (created REST table + view: 26 rows, latest 2026-09)",
+      "title": "onboarded statcan v41690974 -> psig.v_ca_food_v41690974_live_night1027c7 (Zetaris already had it - reused and verified: 14 rows, latest 2026-09)",
       "detail": {
         "candidate": {
-          "agency": "eurostat",
-          "country": "DE",
-          "dataset": "prc_hicp_minr",
-          "code": "CP01193",
-          "label": "Salt, condiments and sauces (ND)",
+          "agency": "statcan",
+          "country": "CA",
+          "dataset": "18100004",
+          "code": "v41690974",
+          "label": "Food",
           "frequency": "M",
-          "measure": "yoy_pct",
+          "measure": "index",
           "lastPeriod": "2026-09",
           "status": "active",
-          "sourceUrl": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP01193&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN"
+          "sourceUrl": "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01"
         },
         "result": {
-          "view": "v_de_condiments_prc_hicp_minr_cp01193_ex1027",
-          "table": "eurostat_de_prc_hicp_minr_cp01193_ex1027",
+          "view": "v_ca_food_v41690974_live_night1027c7",
+          "table": "statcan_ca_v41690974_live_night1027c7",
           "ok": true,
-          "existed": false,
-          "rows": 26,
+          "existed": true,
+          "rows": 14,
           "latest": "2026-09",
           "sql": [
-            "CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_cp01193_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP01193&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-            "CREATE SCHEMASTORE VIEW v_de_condiments_prc_hicp_minr_cp01193_ex1027 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'condiments' AS concept, 'CP01193' AS category_code, 'Salt, condiments and sauces (ND)' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01193:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_cp01193_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx"
+            "CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_night1027c7 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+            "CREATE SCHEMASTORE VIEW v_ca_food_v41690974_live_night1027c7 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'food' AS concept, 'v41690974' AS category_code, 'Food' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'statcan:18100004:v41690974' AS source_id\nFROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690974_live_night1027c7\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n) s"
           ]
         }
       }
     },
     {
-      "t": 1793022703662,
+      "t": 1793031846555,
       "kind": "memory",
-      "title": "stored mapping mem-12"
+      "title": "stored mapping mem-9"
     },
     {
-      "t": 1793022704531,
+      "t": 1793031846888,
       "kind": "discover",
       "title": "Eurostat (HICP): 1 candidate(s) for \"food\"",
       "detail": {
@@ -1237,42 +1651,40 @@
       }
     },
     {
-      "t": 1793022704944,
+      "t": 1793031846940,
       "kind": "sql",
-      "title": "Q36: CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_cp01_ex1027 FROM PSIG_EUROSTAT REQUE",
+      "title": "already in Zetaris (not created again): CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_cp01_night1027c7 FROM PSIG_EUROSTAT ",
       "detail": {
-        "id": "Q36",
-        "sql": "CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_cp01_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-        "rows": 0,
-        "ms": 413
+        "sql": "CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_cp01_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+        "existed": true
       }
     },
     {
-      "t": 1793022705006,
+      "t": 1793031847046,
       "kind": "sql",
-      "title": "Q37: CREATE SCHEMASTORE VIEW v_de_food_prc_hicp_minr_cp01_ex1027 WITH CONTAINER psig AS",
+      "title": "Q40: CREATE SCHEMASTORE VIEW v_de_food_prc_hicp_minr_cp01_night1027c7 WITH CONTAINER psig AS",
       "detail": {
-        "id": "Q37",
-        "sql": "CREATE SCHEMASTORE VIEW v_de_food_prc_hicp_minr_cp01_ex1027 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'food' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_cp01_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
+        "id": "Q40",
+        "sql": "CREATE SCHEMASTORE VIEW v_de_food_prc_hicp_minr_cp01_night1027c7 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'food' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_cp01_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
         "rows": 0,
-        "ms": 62
+        "ms": 106
       }
     },
     {
-      "t": 1793022705523,
+      "t": 1793031847706,
       "kind": "sql",
-      "title": "Q38: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_food_prc_hicp_minr_cp01_ex1027 ",
+      "title": "Q41: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_food_prc_hicp_minr_cp01_night10",
       "detail": {
-        "id": "Q38",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_food_prc_hicp_minr_cp01_ex1027 WHERE yoy_pct IS NOT NULL",
+        "id": "Q41",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_food_prc_hicp_minr_cp01_night1027c7 WHERE yoy_pct IS NOT NULL",
         "rows": 1,
-        "ms": 517
+        "ms": 660
       }
     },
     {
-      "t": 1793022705523,
+      "t": 1793031847706,
       "kind": "onboard",
-      "title": "onboarded eurostat CP01 -> psig.v_de_food_prc_hicp_minr_cp01_ex1027 (created REST table + view: 26 rows, latest 2026-09)",
+      "title": "onboarded eurostat CP01 -> psig.v_de_food_prc_hicp_minr_cp01_night1027c7 (Zetaris already had it - reused and verified: 26 rows, latest 2026-09)",
       "detail": {
         "candidate": {
           "agency": "eurostat",
@@ -1287,285 +1699,318 @@
           "sourceUrl": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN"
         },
         "result": {
-          "view": "v_de_food_prc_hicp_minr_cp01_ex1027",
-          "table": "eurostat_de_prc_hicp_minr_cp01_ex1027",
+          "view": "v_de_food_prc_hicp_minr_cp01_night1027c7",
+          "table": "eurostat_de_prc_hicp_minr_cp01_night1027c7",
           "ok": true,
-          "existed": false,
+          "existed": true,
           "rows": 26,
           "latest": "2026-09",
           "sql": [
-            "CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_cp01_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-            "CREATE SCHEMASTORE VIEW v_de_food_prc_hicp_minr_cp01_ex1027 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'food' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_cp01_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx"
+            "CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_cp01_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+            "CREATE SCHEMASTORE VIEW v_de_food_prc_hicp_minr_cp01_night1027c7 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'food' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_cp01_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx"
           ]
         }
       }
     },
     {
-      "t": 1793022705524,
+      "t": 1793031847708,
       "kind": "memory",
-      "title": "stored mapping mem-13"
+      "title": "stored mapping mem-10"
     },
     {
-      "t": 1793022713362,
+      "t": 1793031850786,
+      "kind": "warn",
+      "title": "model provider is slow right now - shorter time budget for the rest of this run (deterministic fallbacks keep the brief complete)"
+    },
+    {
+      "t": 1793031853704,
       "kind": "sql",
-      "title": "Q39: SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept",
+      "title": "Q42: SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept",
       "detail": {
-        "id": "Q39",
-        "sql": "SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept AS rate_concept, s.category_label, s.frequency, s.period, s.yoy_pct, s.source_id\nFROM psig.v_price_list_ex1027 p\nJOIN (\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_condiments_v41690974_live_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_condiments_97549_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_food_20001_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_snacks_115501_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_de_condiments_prc_hicp_minr_cp01193_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_de_food_prc_hicp_minr_cp01_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_de_snacks_prc_hicp_minr_cp0118_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n) s ON p.country = s.country AND p.sku_category = s.concept\nWHERE p.country IN ('DE', 'CA', 'AU')\nORDER BY p.country, p.sku, s.period",
+        "id": "Q42",
+        "sql": "SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept AS rate_concept, s.category_label, s.frequency, s.period, s.yoy_pct, s.source_id\nFROM psig.v_price_list_night1027c7 p\nJOIN (\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_condiments_v41690974_live_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_de_condiments_prc_hicp_minr_cp01_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_condiments_20001_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_snacks_20001_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_de_snacks_prc_hicp_minr_cp01_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_food_20001_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_de_food_prc_hicp_minr_cp01_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n) s ON p.country = s.country AND p.sku_category = s.concept\nWHERE p.country IN ('DE', 'CA', 'AU')\nORDER BY p.country, p.sku, s.period",
         "rows": 126,
-        "ms": 7838
+        "ms": 5995
       }
     },
     {
-      "t": 1793022713363,
+      "t": 1793031853705,
       "kind": "pricing",
-      "title": "federated query Q39 joined 9 SKUs with the official series of their own category -> 9 SKUs priced"
+      "title": "federated query Q42 joined 9 SKUs with official category series (6 broader proxies) -> 9 SKUs priced"
     },
     {
-      "t": 1793022733931,
-      "kind": "llm",
-      "title": "narrative (openrouter/nvidia/nemotron-3.5-lightning, 34173 ms via Meterless Nightshift) - all numbers grounded"
+      "t": 1793031857518,
+      "kind": "warn",
+      "title": "narrative attempt failed: Error: HTTP 502: {\"error\":{\"message\":\"All candidate providers failed for this request.\",\"type\":\"api_error\",\"code\":\"provi"
     },
     {
-      "t": 1793022733937,
+      "t": 1793031867520,
+      "kind": "warn",
+      "title": "narrative: no reply after 10 s - sent the same request again; the first reply wins"
+    },
+    {
+      "t": 1793031874185,
+      "kind": "warn",
+      "title": "narrative attempt failed: AbortError: This operation was aborted"
+    },
+    {
+      "t": 1793031874191,
       "kind": "done",
-      "title": "brief ready in 48 s (39 SQL statements, 0 views reused from memory)"
+      "title": "brief ready in 84 s (42 SQL statements, 0 views reused from memory; 8 model calls, 1 planner calls, 15 discoveries)"
     }
   ],
   "sql": [
     {
       "id": "Q1",
-      "sql": "CREATE LIGHTNING REST TABLE abs_au_cpi_115501_m_ex1027 FROM PSIG_ABS REQUEST(\n    endpoint \"https://data.api.abs.gov.au/rest/data/ABS,CPI/1.115501.10.50.M?startPeriod=2024-08&detail=dataonly\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n    accept \"application/vnd.sdmx.data+json\"\n) BODY ()",
+      "sql": "CREATE LIGHTNING REST TABLE abs_au_cpi_115501_m_night1027c7 FROM PSIG_ABS REQUEST(\n    endpoint \"https://data.api.abs.gov.au/rest/data/ABS,CPI/1.115501.10.50.M?startPeriod=2024-08&detail=dataonly\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n    accept \"application/vnd.sdmx.data+json\"\n) BODY ()",
       "rows": 0,
-      "ms": 362
+      "ms": 349
     },
     {
       "id": "Q2",
-      "sql": "CREATE SCHEMASTORE VIEW v_au_snacks_115501_ex1027 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'snacks' AS concept, '115501' AS category_code, 'Snacks and confectionery' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.115501.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_115501_m_ex1027\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s",
+      "sql": "CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_night1027c7 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
       "rows": 0,
-      "ms": 111
+      "ms": 1034
     },
     {
       "id": "Q3",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_snacks_115501_ex1027 WHERE yoy_pct IS NOT NULL",
-      "rows": 1,
-      "ms": 635
+      "sql": "CREATE SCHEMASTORE VIEW v_ca_snacks_v41690974_live_night1027c7 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'snacks' AS concept, 'v41690974' AS category_code, 'Food' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'statcan:18100004:v41690974' AS source_id\nFROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690974_live_night1027c7\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n) s",
+      "rows": 0,
+      "ms": 77
     },
     {
       "id": "Q4",
-      "sql": "CREATE LIGHTNING REST TABLE abs_au_cpi_10001_m_ex1027 FROM PSIG_ABS REQUEST(\n    endpoint \"https://data.api.abs.gov.au/rest/data/ABS,CPI/1.10001.10.50.M?startPeriod=2024-08&detail=dataonly\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n    accept \"application/vnd.sdmx.data+json\"\n) BODY ()",
+      "sql": "CREATE SCHEMASTORE VIEW v_au_snacks_115501_night1027c7 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'snacks' AS concept, '115501' AS category_code, 'Snacks and confectionery' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.115501.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_115501_m_night1027c7\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s",
       "rows": 0,
-      "ms": 368
+      "ms": 86
     },
     {
       "id": "Q5",
-      "sql": "CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_cp0118_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP0118&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-      "rows": 0,
-      "ms": 889
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_night1027c7 WHERE yoy_pct IS NOT NULL",
+      "rows": 1,
+      "ms": 426
     },
     {
       "id": "Q6",
-      "sql": "CREATE SCHEMASTORE VIEW v_au_all_items_10001_ex1027 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'all_items' AS concept, '10001' AS category_code, 'All groups CPI' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.10001.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_10001_m_ex1027\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s",
-      "rows": 0,
-      "ms": 45
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_snacks_115501_night1027c7 WHERE yoy_pct IS NOT NULL",
+      "rows": 1,
+      "ms": 588
     },
     {
       "id": "Q7",
-      "sql": "CREATE SCHEMASTORE VIEW v_de_snacks_prc_hicp_minr_cp0118_ex1027 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'snacks' AS concept, 'CP0118' AS category_code, 'Sugar, confectionery and desserts (ND)' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP0118:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_cp0118_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
+      "sql": "CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_cp0118_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP0118&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
       "rows": 0,
-      "ms": 51
+      "ms": 901
     },
     {
       "id": "Q8",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_snacks_prc_hicp_minr_cp0118_ex1027 WHERE yoy_pct IS NOT NULL",
-      "rows": 1,
-      "ms": 483
+      "sql": "CREATE SCHEMASTORE VIEW v_de_snacks_prc_hicp_minr_cp0118_night1027c7 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'snacks' AS concept, 'CP0118' AS category_code, 'Sugar, confectionery and desserts (ND)' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP0118:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_cp0118_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
+      "rows": 0,
+      "ms": 90
     },
     {
       "id": "Q9",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_all_items_10001_ex1027 WHERE yoy_pct IS NOT NULL",
-      "rows": 1,
-      "ms": 642
+      "sql": "CREATE LIGHTNING REST TABLE abs_au_cpi_10001_m_night1027c7 FROM PSIG_ABS REQUEST(\n    endpoint \"https://data.api.abs.gov.au/rest/data/ABS,CPI/1.10001.10.50.M?startPeriod=2024-08&detail=dataonly\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n    accept \"application/vnd.sdmx.data+json\"\n) BODY ()",
+      "rows": 0,
+      "ms": 288
     },
     {
       "id": "Q10",
-      "sql": "CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_ex1027 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+      "sql": "CREATE SCHEMASTORE VIEW v_au_all_items_10001_night1027c7 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'all_items' AS concept, '10001' AS category_code, 'All groups CPI' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.10001.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_10001_m_night1027c7\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s",
       "rows": 0,
-      "ms": 1324
+      "ms": 78
     },
     {
       "id": "Q11",
-      "sql": "CREATE SCHEMASTORE VIEW v_ca_snacks_v41690974_live_ex1027 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'snacks' AS concept, 'v41690974' AS category_code, 'Food' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'statcan:18100004:v41690974' AS source_id\nFROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690974_live_ex1027\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n) s",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_snacks_prc_hicp_minr_cp0118_night1027c7 WHERE yoy_pct IS NOT NULL",
+      "rows": 1,
+      "ms": 547
+    },
+    {
+      "id": "Q12",
+      "sql": "CREATE LIGHTNING REST TABLE statcan_ca_v41690973_live_night1027c7 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690973%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+      "rows": 0,
+      "ms": 247
+    },
+    {
+      "id": "Q13",
+      "sql": "CREATE SCHEMASTORE VIEW v_ca_all_items_v41690973_live_night1027c7 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'all_items' AS concept, 'v41690973' AS category_code, 'All-items' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'statcan:18100004:v41690973' AS source_id\nFROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690973_live_night1027c7\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n) s",
+      "rows": 0,
+      "ms": 42
+    },
+    {
+      "id": "Q14",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_all_items_10001_night1027c7 WHERE yoy_pct IS NOT NULL",
+      "rows": 1,
+      "ms": 572
+    },
+    {
+      "id": "Q15",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_all_items_v41690973_live_night1027c7 WHERE yoy_pct IS NOT NULL",
+      "rows": 1,
+      "ms": 376
+    },
+    {
+      "id": "Q16",
+      "sql": "CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_total_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+      "rows": 0,
+      "ms": 361
+    },
+    {
+      "id": "Q17",
+      "sql": "CREATE SCHEMASTORE VIEW v_de_all_items_prc_hicp_minr_total_night1027c7 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'all_items' AS concept, 'TOTAL' AS category_code, 'Total' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:TOTAL:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_total_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
+      "rows": 0,
+      "ms": 54
+    },
+    {
+      "id": "Q18",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_all_items_prc_hicp_minr_total_night1027c7 WHERE yoy_pct IS NOT NULL",
+      "rows": 1,
+      "ms": 476
+    },
+    {
+      "id": "Q19",
+      "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_snacks_115501_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_de_snacks_prc_hicp_minr_cp0118_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_all_items_10001_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_all_items_v41690973_live_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_de_all_items_prc_hicp_minr_total_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nORDER BY country, concept, period",
+      "rows": 84,
+      "ms": 4218
+    },
+    {
+      "id": "Q20",
+      "sql": "CREATE LIGHTNING REST TABLE internal_price_list_night1027c7 FROM PSIG_INTERNAL REQUEST(\n    endpoint \"https://raw.githubusercontent.com/rose050505/pricesignal/main/data/price_list.json\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+      "rows": 0,
+      "ms": 349
+    },
+    {
+      "id": "Q21",
+      "sql": "CREATE SCHEMASTORE VIEW v_price_list_night1027c7 WITH CONTAINER psig AS\nSELECT sku, product, market AS country, category AS sku_category, currency, CAST(current_price AS DOUBLE) AS current_price\nFROM psig_internal.internal_price_list_night1027c7",
+      "rows": 0,
+      "ms": 102
+    },
+    {
+      "id": "Q22",
+      "sql": "SELECT DISTINCT country, sku_category, product FROM psig.v_price_list_night1027c7 WHERE country IN ('DE', 'CA', 'AU') ORDER BY country, sku_category, product",
+      "rows": 9,
+      "ms": 297
+    },
+    {
+      "id": "Q23",
+      "sql": "CREATE SCHEMASTORE VIEW v_ca_condiments_v41690974_live_night1027c7 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'condiments' AS concept, 'v41690974' AS category_code, 'Food' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'statcan:18100004:v41690974' AS source_id\nFROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690974_live_night1027c7\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n) s",
+      "rows": 0,
+      "ms": 78
+    },
+    {
+      "id": "Q24",
+      "sql": "CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_cp01_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+      "rows": 0,
+      "ms": 960
+    },
+    {
+      "id": "Q25",
+      "sql": "CREATE LIGHTNING REST TABLE abs_au_cpi_20001_m_night1027c7 FROM PSIG_ABS REQUEST(\n    endpoint \"https://data.api.abs.gov.au/rest/data/ABS,CPI/1.20001.10.50.M?startPeriod=2024-08&detail=dataonly\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n    accept \"application/vnd.sdmx.data+json\"\n) BODY ()",
+      "rows": 0,
+      "ms": 969
+    },
+    {
+      "id": "Q26",
+      "sql": "CREATE SCHEMASTORE VIEW v_de_condiments_prc_hicp_minr_cp01_night1027c7 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'condiments' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_cp01_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
       "rows": 0,
       "ms": 73
     },
     {
-      "id": "Q12",
-      "sql": "CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_total_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-      "rows": 0,
-      "ms": 392
-    },
-    {
-      "id": "Q13",
-      "sql": "CREATE SCHEMASTORE VIEW v_de_all_items_prc_hicp_minr_total_ex1027 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'all_items' AS concept, 'TOTAL' AS category_code, 'Total' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:TOTAL:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_total_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
-      "rows": 0,
-      "ms": 97
-    },
-    {
-      "id": "Q14",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_ex1027 WHERE yoy_pct IS NOT NULL",
-      "rows": 1,
-      "ms": 397
-    },
-    {
-      "id": "Q15",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_all_items_prc_hicp_minr_total_ex1027 WHERE yoy_pct IS NOT NULL",
-      "rows": 1,
-      "ms": 571
-    },
-    {
-      "id": "Q16",
-      "sql": "CREATE LIGHTNING REST TABLE statcan_ca_v41690973_live_ex1027 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690973%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-      "rows": 0,
-      "ms": 735
-    },
-    {
-      "id": "Q17",
-      "sql": "CREATE SCHEMASTORE VIEW v_ca_all_items_v41690973_live_ex1027 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'all_items' AS concept, 'v41690973' AS category_code, 'All-items' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'statcan:18100004:v41690973' AS source_id\nFROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690973_live_ex1027\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n) s",
-      "rows": 0,
-      "ms": 48
-    },
-    {
-      "id": "Q18",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_all_items_v41690973_live_ex1027 WHERE yoy_pct IS NOT NULL",
-      "rows": 1,
-      "ms": 384
-    },
-    {
-      "id": "Q19",
-      "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_snacks_115501_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_de_snacks_prc_hicp_minr_cp0118_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_all_items_10001_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_de_all_items_prc_hicp_minr_total_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_all_items_v41690973_live_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nORDER BY country, concept, period",
-      "rows": 84,
-      "ms": 3996
-    },
-    {
-      "id": "Q20",
-      "sql": "CREATE LIGHTNING REST TABLE internal_price_list_ex1027 FROM PSIG_INTERNAL REQUEST(\n    endpoint \"https://raw.githubusercontent.com/rose050505/pricesignal/main/data/price_list.json\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-      "rows": 0,
-      "ms": 408
-    },
-    {
-      "id": "Q21",
-      "sql": "CREATE SCHEMASTORE VIEW v_price_list_ex1027 WITH CONTAINER psig AS\nSELECT sku, product, market AS country, category AS sku_category, currency, CAST(current_price AS DOUBLE) AS current_price\nFROM psig_internal.internal_price_list_ex1027",
-      "rows": 0,
-      "ms": 100
-    },
-    {
-      "id": "Q22",
-      "sql": "SELECT DISTINCT country, sku_category FROM psig.v_price_list_ex1027 WHERE country IN ('DE', 'CA', 'AU') ORDER BY country, sku_category",
-      "rows": 9,
-      "ms": 240
-    },
-    {
-      "id": "Q23",
-      "sql": "CREATE LIGHTNING REST TABLE abs_au_cpi_97549_m_ex1027 FROM PSIG_ABS REQUEST(\n    endpoint \"https://data.api.abs.gov.au/rest/data/ABS,CPI/1.97549.10.50.M?startPeriod=2024-08&detail=dataonly\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n    accept \"application/vnd.sdmx.data+json\"\n) BODY ()",
-      "rows": 0,
-      "ms": 332
-    },
-    {
-      "id": "Q24",
-      "sql": "CREATE SCHEMASTORE VIEW v_au_condiments_97549_ex1027 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'condiments' AS concept, '97549' AS category_code, 'Food additives and condiments' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.97549.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_97549_m_ex1027\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s",
+      "id": "Q27",
+      "sql": "CREATE SCHEMASTORE VIEW v_au_condiments_20001_night1027c7 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'condiments' AS concept, '20001' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.20001.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_20001_m_night1027c7\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s",
       "rows": 0,
       "ms": 75
     },
     {
-      "id": "Q25",
-      "sql": "CREATE SCHEMASTORE VIEW v_ca_condiments_v41690974_live_ex1027 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'condiments' AS concept, 'v41690974' AS category_code, 'Food' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'statcan:18100004:v41690974' AS source_id\nFROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690974_live_ex1027\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n) s",
-      "rows": 0,
-      "ms": 55
-    },
-    {
-      "id": "Q26",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_condiments_v41690974_live_ex1027 WHERE yoy_pct IS NOT NULL",
-      "rows": 1,
-      "ms": 402
-    },
-    {
-      "id": "Q27",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_condiments_97549_ex1027 WHERE yoy_pct IS NOT NULL",
-      "rows": 1,
-      "ms": 611
-    },
-    {
       "id": "Q28",
-      "sql": "CREATE SCHEMASTORE VIEW v_ca_food_v41690974_live_ex1027 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'food' AS concept, 'v41690974' AS category_code, 'Food' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'statcan:18100004:v41690974' AS source_id\nFROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690974_live_ex1027\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n) s",
-      "rows": 0,
-      "ms": 98
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_condiments_v41690974_live_night1027c7 WHERE yoy_pct IS NOT NULL",
+      "rows": 1,
+      "ms": 959
     },
     {
       "id": "Q29",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_food_v41690974_live_ex1027 WHERE yoy_pct IS NOT NULL",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_condiments_prc_hicp_minr_cp01_night1027c7 WHERE yoy_pct IS NOT NULL",
       "rows": 1,
-      "ms": 422
+      "ms": 488
     },
     {
       "id": "Q30",
-      "sql": "CREATE LIGHTNING REST TABLE abs_au_cpi_20001_m_ex1027 FROM PSIG_ABS REQUEST(\n    endpoint \"https://data.api.abs.gov.au/rest/data/ABS,CPI/1.20001.10.50.M?startPeriod=2024-08&detail=dataonly\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n    accept \"application/vnd.sdmx.data+json\"\n) BODY ()",
-      "rows": 0,
-      "ms": 298
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_night1027c7 WHERE yoy_pct IS NOT NULL",
+      "rows": 1,
+      "ms": 394
     },
     {
       "id": "Q31",
-      "sql": "CREATE SCHEMASTORE VIEW v_au_food_20001_ex1027 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'food' AS concept, '20001' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.20001.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_20001_m_ex1027\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s",
+      "sql": "CREATE SCHEMASTORE VIEW v_de_snacks_prc_hicp_minr_cp01_night1027c7 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'snacks' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_cp01_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
       "rows": 0,
-      "ms": 65
+      "ms": 82
     },
     {
       "id": "Q32",
-      "sql": "CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_cp01193_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP01193&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-      "rows": 0,
-      "ms": 390
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_condiments_20001_night1027c7 WHERE yoy_pct IS NOT NULL",
+      "rows": 1,
+      "ms": 594
     },
     {
       "id": "Q33",
-      "sql": "CREATE SCHEMASTORE VIEW v_de_condiments_prc_hicp_minr_cp01193_ex1027 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'condiments' AS concept, 'CP01193' AS category_code, 'Salt, condiments and sauces (ND)' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01193:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_cp01193_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
+      "sql": "CREATE SCHEMASTORE VIEW v_au_snacks_20001_night1027c7 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'snacks' AS concept, '20001' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.20001.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_20001_m_night1027c7\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s",
       "rows": 0,
-      "ms": 36
+      "ms": 37
     },
     {
       "id": "Q34",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_food_20001_ex1027 WHERE yoy_pct IS NOT NULL",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_snacks_20001_night1027c7 WHERE yoy_pct IS NOT NULL",
       "rows": 1,
-      "ms": 453
+      "ms": 462
     },
     {
       "id": "Q35",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_condiments_prc_hicp_minr_cp01193_ex1027 WHERE yoy_pct IS NOT NULL",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_snacks_prc_hicp_minr_cp01_night1027c7 WHERE yoy_pct IS NOT NULL",
       "rows": 1,
-      "ms": 533
+      "ms": 529
     },
     {
       "id": "Q36",
-      "sql": "CREATE LIGHTNING REST TABLE eurostat_de_prc_hicp_minr_cp01_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=DE&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+      "sql": "CREATE SCHEMASTORE VIEW v_au_food_20001_night1027c7 WITH CONTAINER psig AS\nSELECT 'AU' AS country, 'food' AS concept, '20001' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'abs:CPI:1.20001.10.50.M' AS source_id\nFROM (\n  SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx\n  FROM psig_abs.abs_au_cpi_20001_m_night1027c7\n  LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label\n  LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.`0:0:0:0:0`.observations), 'map<string,array<double>>')) AS obs_key, obs_value\n  WHERE CAST(obs_key AS INT) = obs_position\n) s",
       "rows": 0,
-      "ms": 413
+      "ms": 84
     },
     {
       "id": "Q37",
-      "sql": "CREATE SCHEMASTORE VIEW v_de_food_prc_hicp_minr_cp01_ex1027 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'food' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_cp01_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
-      "rows": 0,
-      "ms": 62
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_food_20001_night1027c7 WHERE yoy_pct IS NOT NULL",
+      "rows": 1,
+      "ms": 486
     },
     {
       "id": "Q38",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_food_prc_hicp_minr_cp01_ex1027 WHERE yoy_pct IS NOT NULL",
-      "rows": 1,
-      "ms": 517
+      "sql": "CREATE SCHEMASTORE VIEW v_ca_food_v41690974_live_night1027c7 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'food' AS concept, 'v41690974' AS category_code, 'Food' AS category_label,\n       'M' AS frequency, period,\n       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,\n       'statcan:18100004:v41690974' AS source_id\nFROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690974_live_night1027c7\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n) s",
+      "rows": 0,
+      "ms": 47
     },
     {
       "id": "Q39",
-      "sql": "SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept AS rate_concept, s.category_label, s.frequency, s.period, s.yoy_pct, s.source_id\nFROM psig.v_price_list_ex1027 p\nJOIN (\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_condiments_v41690974_live_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_condiments_97549_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_food_20001_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_snacks_115501_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_de_condiments_prc_hicp_minr_cp01193_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_de_food_prc_hicp_minr_cp01_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_de_snacks_prc_hicp_minr_cp0118_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n) s ON p.country = s.country AND p.sku_category = s.concept\nWHERE p.country IN ('DE', 'CA', 'AU')\nORDER BY p.country, p.sku, s.period",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_food_v41690974_live_night1027c7 WHERE yoy_pct IS NOT NULL",
+      "rows": 1,
+      "ms": 393
+    },
+    {
+      "id": "Q40",
+      "sql": "CREATE SCHEMASTORE VIEW v_de_food_prc_hicp_minr_cp01_night1027c7 WITH CONTAINER psig AS\nSELECT 'DE' AS country, 'food' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_de_prc_hicp_minr_cp01_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
+      "rows": 0,
+      "ms": 106
+    },
+    {
+      "id": "Q41",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_food_prc_hicp_minr_cp01_night1027c7 WHERE yoy_pct IS NOT NULL",
+      "rows": 1,
+      "ms": 660
+    },
+    {
+      "id": "Q42",
+      "sql": "SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept AS rate_concept, s.category_label, s.frequency, s.period, s.yoy_pct, s.source_id\nFROM psig.v_price_list_night1027c7 p\nJOIN (\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_condiments_v41690974_live_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_de_condiments_prc_hicp_minr_cp01_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_condiments_20001_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_snacks_20001_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_de_snacks_prc_hicp_minr_cp01_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_food_20001_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_de_food_prc_hicp_minr_cp01_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n) s ON p.country = s.country AND p.sku_category = s.concept\nWHERE p.country IN ('DE', 'CA', 'AU')\nORDER BY p.country, p.sku, s.period",
       "rows": 126,
-      "ms": 7838
+      "ms": 5995
     }
   ]
 }

@@ -6,7 +6,7 @@ Open Agent Hackathon 2026 · Track 01 — Solving Fragmented Intelligence · bui
 
 ![PriceSignal: agent trace on the left, a verdict per market and new prices per SKU on the right](docs/img/ui.png)
 
-*A live UI run on 27 Oct 2026: the messy three-market request supplied an 8% cost rise, a 60% unit-cost share and a 70% pass-through policy, producing a separate 3.4% cost recovery target. Market numbers appeared at 30.5 s; the full brief took 85.5 s. It reused 11 views with no planning calls. The provider failed while writing the summary, so the UI retained computed facts. The parser chose snacks for this mixed food/snacks request; market category lookup still uses catalogue matching, while SKU selection checks the actual product names. Earlier runs are in [`examples/`](examples/). These measurements are not speed guarantees.*
+*A live UI run on 27 Oct 2026: the messy three-market request supplied an 8% cost rise, a 60% unit-cost share and a 70% pass-through policy, producing a separate 3.4% cost recovery target. Market numbers appeared at 30.5 s; the full brief took 85.5 s. It reused 11 views with no planning calls. The provider failed while writing the summary, so the UI retained computed facts. The parser chose snacks for this mixed food/snacks request; market category lookup still uses catalogue matching, while SKU selection checks the actual product names. Current CLI recordings are in [`examples/`](examples/). These measurements are not speed guarantees.*
 
 ---
 
@@ -22,12 +22,12 @@ A small food exporter selling into Germany, Canada and Australia wants to check 
 | Category scheme | ECOICOP v2 (`coicop18`) | product/vector ids | ABS index codes |
 | Gotcha we hit | the dataset everyone links to (`prc_hicp_manr`) stopped at 2025-12 and was replaced by `prc_hicp_minr` | the data methods used in public recipes are POST-only; the GET method returns a top-level array | a broad query is too large for one fetch; series must be scoped to one key |
 
-Assembling a comparable answer by hand means three APIs, three formats and three category schemes every pricing round, so small exporters often just pick a round number. PriceSignal answered a cold start (nothing in memory, nothing registered in Zetaris) in 48 s in our recorded run, and keeps the receipts; a repeat question reuses remembered mappings after checking their live rows and freshness. When every requested mapping is remembered, it also skips the planning model call; stale or unavailable views go back through discovery.
+Assembling a comparable answer by hand means three APIs, three formats and three category schemes every pricing round, so small exporters often just pick a round number. Our latest recorded cold run used a fresh memory store and new Zetaris application tables/views: 85 s including CLI startup, with market numbers at 29.1 s. PriceSignal keeps the receipts; a repeat question reuses remembered mappings after checking their live rows and freshness. When every requested mapping is remembered, it also skips the planning model call; stale or unavailable views go back through discovery.
 
 ## What it does
 
 1. **Understands a messy request** — typos, country nicknames (`deutschland`, `aus`), category slang (`gochujang & snacks`), Korean or English, a proposed change (`+5%` or `-2%`), a cost recovery policy (`we pass on ~70% of cost increases`), a stated cost change and an optional cost share (`unit costs are 60% of the current selling price`).
-2. **Finds the matching official series** — by catalogue lookup at Eurostat and ABS, from a vetted vector list at Statistics Canada — and reports what it had to work around (a discontinued dataset, a coarser category, a different frequency).
+2. **Looks up official series** — by catalogue lookup at Eurostat and ABS, from a vetted vector list at Statistics Canada — and reports what it had to work around (a discontinued dataset, a coarser category, a different frequency).
 3. **Onboards each series into Zetaris** as a Lightning REST table plus a decoding view with a common schema — the agency APIs become governed SQL tables.
 4. **Answers with one federated SQL query** across all three agencies in Zetaris.
 5. **Joins the company's own price list.** The exporter's internal price list (SKU, market, product category, current shelf price) is a Zetaris REST table too. For narrow SKU categories, Nemotron chooses from official candidates using the actual product names (for example, honey butter chips rather than the word snacks alone). Code validates that choice before onboarding. A second federated query joins each SKU to the chosen category or an explicitly marked broader Food proxy, then code calculates hypothetical prices at those benchmark rates.
@@ -39,7 +39,7 @@ Assembling a comparable answer by hand means three APIs, three formats and three
 
 **What the cost target means.** Target price change = current unit-cost share of the selling price × stated percentage change in unit costs × share of the cost change passed on. It assumes a consistent unit, currency and selling-price basis and holds sales volume and the cost mix fixed. It does not estimate a target profit margin, taxes, exchange-rate changes or demand response. Missing inputs stay missing.
 
-The sample price list in `data/price_list.json` is illustrative data for a fictional K-food exporter; point `PSIG_PRICE_LIST_URL` at your own endpoint to use real prices.
+The sample price list in `data/price_list.json` is illustrative data for a fictional K-food exporter. To use your own prices, set `PSIG_PRICE_LIST_URL` to an endpoint reachable from Zetaris with the same JSON schema, then start a new app process with a **fresh `PSIG_ZETARIS_NS` and memory directory**. Existing Zetaris REST tables keep their originally registered endpoint: changing the URL alone does not update them.
 
 ## Architecture
 
@@ -76,40 +76,38 @@ verdict on the proposed change, source series id, SQL behind it)
 
 **Meterless H-MEM** gives the agent memory across sessions. We run the Meterless reference engine unchanged (`src/hmem_impl.ts` re-exports it, and `npm run conformance` runs the official suite against that file: 13/13). Our work is in how the agent uses it: series mappings are long-term factual memories with structured tags, so a recalled memory changes what the agent does next (skip discovery and onboarding); a re-onboarded series supersedes the old mapping; reused mappings get `helpful` feedback; the pricing policy is a preference memory and the brief says when it was remembered rather than stated; and the last request is stored so "same as last time" works.
 
-**NVIDIA Nemotron** powers the agent. Nightshift has a pinned lane ("Use tools & agents") serving NVIDIA Nemotron 3.5 Lightning, so every `meterless/fast` call (request parsing, planning, SKU category selection, narrative) is routed through the Nemotron-pinned Nightshift lane. In our robustness run on 26 Oct 2026, every model call in all six questions was served by `nvidia/nemotron-3.5-lightning`, as shown in the trace logs. For narrow SKU categories, one bounded request sees product names and official candidate labels, and selects an index with a coverage reason. It cannot invent a source or query. Code rejects invalid choices, known savoury-chip/confectionery conflicts and reasons containing numeric claims or common price-advice patterns. The choice has a 20-second limit and no hedge; failure uses a verified broad Food series, visibly labelled "Unconfirmed match", or omits those SKU prices when no such alternative is usable. Validated model selections are remembered separately from general market mappings.
+**NVIDIA Nemotron** powers the agent. Nightshift has a pinned lane ("Use tools & agents") serving NVIDIA Nemotron 3.5 Lightning, so every `meterless/fast` call (request parsing, planning, SKU category selection, narrative) is routed through the Nemotron-pinned Nightshift lane. In the six recorded questions on 27 Oct 2026, successful model replies recorded in the traces identify `nvidia/nemotron-3.5-lightning`. Product selection succeeded in examples 03 and 05; narrative generation succeeded in four of the six runs. For narrow SKU categories, one bounded request sees product names and official candidate labels, and selects an index with a coverage reason. It cannot invent a source or query. Code rejects invalid choices, known savoury-chip/confectionery conflicts and reasons containing numeric claims or common price-advice patterns. The choice has a 20-second limit and no hedge; failure uses a verified broad Food series, visibly labelled "Unconfirmed match", or omits those SKU prices when no such alternative is usable. Validated model selections are remembered separately from general market mappings.
 
 ## Markets
 
-Germany, Canada and Australia are the demo markets. Because Eurostat publishes HICP for every EU member through the same API, the same discover-and-onboard path also covers France, Italy, Spain, the Netherlands, Belgium, Austria, Ireland, Portugal, Finland, Sweden, Denmark, Poland and Czechia (market names, local names or ISO codes). Markets outside these are reported as not covered rather than silently dropped. The EU path was verified live on 26 Oct 2026 for France, Italy and Spain (six views registered, one federated query of 90 rows; see `examples/06_eu_markets`). The sample price list only has SKUs for Germany, Canada and Australia.
+Germany, Canada and Australia are the demo markets. Because Eurostat publishes HICP for every EU member through the same API, the same discover-and-onboard path also covers France, Italy, Spain, the Netherlands, Belgium, Austria, Ireland, Portugal, Finland, Sweden, Denmark, Poland and Czechia (market names, local names or ISO codes). Markets outside these are reported as not covered rather than silently dropped. The EU path was verified live on 27 Oct 2026 for France, Italy and Spain (six views registered, one federated query of 90 rows; see `examples/06_eu_markets`). The sample price list only has SKUs for Germany, Canada and Australia.
 
 ## Limits (stated, not hidden)
 
 - **Canada:** our adapter maps only StatCan's Food and All-items CPI vectors, so narrower categories (snacks, sauces) are compared at the Food level and the brief says so.
-- **SKU categories** use product-aware model selection from a bounded official shortlist. A broader series can still be the best available proxy; the table distinguishes model-selected, remembered and unconfirmed matches and names the actual series. This is a coverage check, not a guarantee that an official category precisely describes each product. Earlier examples predate this selection guard and can contain the old German chips/confectionery match.
+- **SKU categories** use product-aware model selection from a bounded official shortlist. A broader series can still be the best available proxy; the table distinguishes model-selected, remembered and unconfirmed matches and names the actual series. This is a coverage check, not a guarantee that an official category precisely describes each product. Market-category lookup is a separate catalogue-matching path: the mixed food/snacks request in example 01 still chose a German confectionery market series even though its chips SKU used a broader Food proxy. The market card is not a validated product match.
 - **Historical benchmarks are descriptive.** A point or narrow span is possible; it does not express confidence, price headroom or a prediction. Cost recovery requires both a stated cost change and the current cost-to-price share.
 - **The price list is sample data** for a fictional exporter.
-- **Speed** depends on the model's response time, which varied from 1 s to 43 s per call in our runs: 36–113 s per question in `examples/`. Market numbers are shown immediately after the federated comparison, before SKU discovery and pricing finish; SKU prices and the checked prose follow. A disconnected UI retries the event stream for up to 10 s, preserving available numbers and replaying the latest snapshot on reconnection.
+- **Speed** depends on the provider and source queries: the current six CLI recordings took 19–85 s per question, with market numbers at 9.2–38.1 s. Market numbers are shown immediately after the federated comparison, before SKU discovery and pricing finish; SKU prices and the checked prose follow. A disconnected UI retries the event stream for up to 10 s, preserving available numbers and replaying the latest snapshot on reconnection.
 
-## Earlier recorded runs in `examples/` (26 Oct 2026, Nemotron via Nightshift)
+## Recorded runs in `examples/` (27 Oct 2026 KST, Nemotron via Nightshift)
 
-These recordings predate the 27 Oct methodology correction and product-selection guard. Their weighted ranges, "evidence" verdicts and SKU matches are historical outputs, not the current benchmark method.
+The six questions were run consecutively by `scripts/15_examples.sh` with a new H-MEM store and fresh Zetaris suffix. Each folder contains the actual brief, full trace and recording metadata. These runs use the current historical-benchmark method and require a cost-to-price share for the cost target.
 
-The six questions below were run back to back by `scripts/15_examples.sh` with an empty H-MEM store and a fresh set of Zetaris object names (`PSIG_ZETARIS_NS`), so the first run really discovers and registers everything; each later run uses what the earlier ones left in memory. Every brief and its full trace is in the folder named.
+| Example | What happened | CLI elapsed / first numbers |
+|---|---|---|
+| `01_cold_start` | Messy DE/CA/AU request, costs +8%, cost share 60%, policy 70%, proposal +5% → cost target 3.4%. Created 9 REST tables and 15 views; 9 SKU scenarios. SKU selection and narrative timed out, so marked Food proxies and a computed summary were used. | 85 s / 29.1 s |
+| `02_same_as_last_time` | Proposal −2%; cost assumptions and markets remembered, nine views reused, no planning or new DDL. SKU selection retried and timed out; provider failure also omitted prose. | 80 s / 24.5 s |
+| `03_typo_market` | “canda” → Canada. Policy changes to 60%; +4% is within the Food benchmark. Nemotron product selection succeeded in 12.7 s, narrative checks passed. | 47 s / 12.2 s |
+| `04_unsupported_market` | Japan explicitly not covered; Canada +5% is above its benchmark. Canadian product mappings reused; narrative checks passed. | 19 s / 9.2 s |
+| `05_within_range` | CA/AU Food, +3% within both benchmarks; separate cost target 3.4%. Australian product selection succeeded in 7.9 s and narrative checks passed. | 47 s / 13.2 s |
+| `06_eu_markets` | FR/IT/ES: six new Eurostat series, 90 comparison rows, +3% above all benchmarks. No matching sample SKUs. Narrative checks passed. | 79 s / 38.1 s |
 
-| Example | Question | What happened | Time |
-|---|---|---|---|
-| `01_cold_start` | "our gochujang & snacks: is food inflation in deutschland, canada & aus still running hot?? thinking +5% … we usually pass on ~70%" | 12 series found at three agencies and registered in Zetaris (11 REST tables, 13 views incl. the price list); 9 SKUs priced on their own category; +5% above the evidence in DE, CA and AU | 48 s (numbers at 27 s) |
-| `02_same_as_last_time` | "same as last time, but what if we only go +3%?" | markets, category and the 70% policy recalled from H-MEM; 12 views reused, nothing registered again; +3% within the evidence in DE and AU, above in CA; "Since your last brief" compares each market with run 01 | 113 s; Nemotron's summary failed (empty response, then timeout), so the computed summary was shown |
-| `03_typo_market` | "canda snacks price hike 4%?? is that ok, we pass thru like 60pct of costs" | "canda" resolved to Canada only; the 60% policy supersedes the remembered 70%; snacks compared at the Food level, and the brief says so | 36 s |
-| `04_unsupported_market` | "japan + canada food prices, ok to raise 5%?" | Canada answered; "japan: not covered yet" stated in the brief | 48 s |
-| `05_within_range` | "canada & australia food: is +2% enough this quarter? we pass on 70%" | within the evidence in CA, below it in AU | 51 s |
-| `06_eu_markets` | "france, italy and spain food prices: can we go +3%? we pass on about 70%" | six more Eurostat series registered and compared in one federated query (90 rows) | 113 s |
-
-Run time is mostly the model: a single Nemotron call through Nightshift took between 1 s and 43 s in these runs. An earlier robustness run of six other messy questions (Korean, all-caps, "oz" for Australia) surfaced four bugs (typo dropped a market, an unsupported market silently ignored, a remembered series not reused before comparison, a verdict with a hidden tolerance contradicting the prose); all four are fixed, and the runs above go through the same cases (a typo, an unsupported market, memory reuse, verdicts other than "above").
+These are measured runs, not speed or completion guarantees. The mixed food/snacks request in 01 selected `snacks` for its market comparison; the German market series and SKU proxies differ, as explained in [the recording notes](examples/README.md). The older policy-scaled recordings remain in Git history. See the actual labels and failure messages instead of assuming every source is a product-specific match or every run includes model-written prose.
 
 ## Run it
 
-Requirements: Node 20+, Docker (for Zetaris), a Zetaris hackathon registry login, and Meterless Nightshift running on a Windows/Mac machine reachable from the app.
+Requirements: Node 20+, npm, Docker with a running Zetaris instance and REST API credentials, and Meterless Nightshift reachable from the app with a runtime token and a configured model provider. Obtaining the Zetaris image requires the hackathon registry login. For the demonstrated NVIDIA route, configure a Nightshift lane to pin NVIDIA Nemotron 3.5 Lightning; the app's `meterless/fast` alias alone does not select that model. The shell helpers and their offline regression tests require Bash; the example recorder also uses `timeout` (GNU coreutils).
 
 ```bash
 npm install
@@ -125,12 +123,15 @@ cp .env.example .env        # then fill in (never commit .env):
 
 npm run smoke               # Zetaris, Nightshift, the three agencies, H-MEM
 npm run ui                  # http://localhost:5177
-# a true cold start: fresh H-MEM store and a fresh set of Zetaris tables/views (names get the suffix)
-PSIG_MEMORY_DIR=.pricesignal/cold PSIG_ZETARIS_NS=cold1 npm run ui
+# a new suffix on EVERY cold recording; keep the same UI process for the memory repeat
+PSIG_RUN_ID=$(date -u +%Y%m%dT%H%M%S)-$$
+PSIG_MEMORY_DIR=".pricesignal/cold-$PSIG_RUN_ID" PSIG_ZETARIS_NS="$PSIG_RUN_ID" npm run ui
 npm run ask -- "is food inflation in deutschland, canada & aus still hot? thinking +5%"
 ```
 
-Helper scripts used on our machine (Ubuntu laptop + Windows desktop running Nightshift) are in `scripts/` (Docker install, Zetaris install, secret entry without echo, smoke tests, integration probe, network check).
+`npm run setup` and `setup:conformance` download the upstream H-MEM reference code and conformance suite; they need network access and are not pinned dependency snapshots. `npm test` and `npm run typecheck` run locally after setup. Do not run multiple app processes against the same memory directory.
+
+Helper scripts used on our machine (Ubuntu laptop + Windows desktop running Nightshift) are in `scripts/` (Docker install, Zetaris install, secret entry without echo, smoke tests, integration probe, network check). `scripts/03_app_setup.sh` stops at the first failed step and returns its exit code. `bash scripts/15_examples.sh` creates a fresh experimental store and Zetaris suffix by default. It replaces the six example folders only after every run exits successfully and saves both a brief and a valid trace. Prior recordings and logs remain under `logs/`; a supplied memory directory must not already exist.
 
 ## Repository layout
 

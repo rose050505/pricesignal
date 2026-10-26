@@ -2,9 +2,14 @@
   "question": "france, italy and spain food prices: can we go +3%? we pass on about 70%",
   "trace": [
     {
-      "t": 1793022994943,
+      "t": 1793032077490,
+      "kind": "warn",
+      "title": "request parsing: no reply after 10 s - sent the same request again; the first reply wins"
+    },
+    {
+      "t": 1793032077858,
       "kind": "llm",
-      "title": "parsed request (openrouter/nvidia/nemotron-3.5-lightning, 11192 ms via Meterless Nightshift)",
+      "title": "parsed request (openrouter/nvidia/nemotron-3.5-lightning, 10377 ms via Meterless Nightshift)",
       "detail": {
         "countries": [
           "france",
@@ -14,12 +19,14 @@
         "concept": "food",
         "concept_words": "food price inflation",
         "proposed_change_pct": 3,
+        "cost_increase_pct": null,
+        "cost_share_pct": null,
         "pass_through": 0.7,
         "policy_statement": null
       }
     },
     {
-      "t": 1793022994946,
+      "t": 1793032077860,
       "kind": "request",
       "title": "markets FR, IT, ES | category \"food\" | proposed +3%",
       "detail": {
@@ -40,22 +47,27 @@
       }
     },
     {
-      "t": 1793022994947,
+      "t": 1793032077860,
       "kind": "memory",
-      "title": "policy unchanged at 70% (mem-27)"
+      "title": "policy unchanged at 70% (mem-26)"
     },
     {
-      "t": 1793023036526,
+      "t": 1793032087862,
+      "kind": "warn",
+      "title": "planner: no reply after 10 s - sent the same request again; the first reply wins"
+    },
+    {
+      "t": 1793032089628,
       "kind": "plan",
-      "title": "discover_and_onboard {\"country\":\"FR\",\"concept\":\"food\"} · discover_and_onboard {\"country\":\"FR\",\"concept\":\"all_items\"} · discover_and_onboard {\"country\":\"IT\",\"concept\":\"food\"} · discover_and_onboard {\"country\":\"IT\",\"concept\":\"all_items\"} · discover_and_onboard {\"country\":\"ES\",\"concept\":\"food\"} · discover_and_onboard {\"country\":\"ES\",\"concept\":\"all_items\"} · compare {} · finish {}  [openrouter/nvidia/nemotron-3.5-lightning via Meterless Nightshift]",
+      "title": "discover_and_onboard {\"country\":\"FR\",\"concept\":\"food\"} · discover_and_onboard {\"country\":\"FR\",\"concept\":\"all_items\"} · discover_and_onboard {\"country\":\"IT\",\"concept\":\"food\"} · discover_and_onboard {\"country\":\"IT\",\"concept\":\"all_items\"} · discover_and_onboard {\"country\":\"ES\",\"concept\":\"food\"} · discover_and_onboard {\"country\":\"ES\",\"concept\":\"all_items\"}  [openrouter/nvidia/nemotron-3.5-lightning via Meterless Nightshift]",
       "detail": {
-        "thought": "All six (country, concept) pairs for FR, IT, ES must be discovered and onboarded before federated comparison can run.",
+        "thought": "Onboard missing food and all_items views for France, Italy, and Spain.",
         "model": "openrouter/nvidia/nemotron-3.5-lightning",
-        "ms": 41578
+        "ms": 11766
       }
     },
     {
-      "t": 1793023038856,
+      "t": 1793032091570,
       "kind": "discover",
       "title": "Eurostat (HICP): 1 candidate(s) for \"food\"",
       "detail": {
@@ -81,78 +93,78 @@
       }
     },
     {
-      "t": 1793023038932,
+      "t": 1793032091652,
       "kind": "sql",
-      "title": "already in Zetaris (registered by an earlier run): CREATE LIGHTNING DATABASE PSIG_EUROSTAT DESCRIBE BY \"PriceSignal-Eurostat-HICP\"",
+      "title": "already in Zetaris (not created again): CREATE LIGHTNING DATABASE PSIG_EUROSTAT DESCRIBE BY \"PriceSignal-Eurostat-HICP\"",
       "detail": {
         "sql": "CREATE LIGHTNING DATABASE PSIG_EUROSTAT DESCRIBE BY \"PriceSignal-Eurostat-HICP\"",
         "existed": true
       }
     },
     {
-      "t": 1793023038995,
+      "t": 1793032091709,
       "kind": "sql",
-      "title": "already in Zetaris (registered by an earlier run): CREATE LIGHTNING DATABASE PSIG_ABS DESCRIBE BY \"PriceSignal-ABS-CPI\"",
+      "title": "already in Zetaris (not created again): CREATE LIGHTNING DATABASE PSIG_ABS DESCRIBE BY \"PriceSignal-ABS-CPI\"",
       "detail": {
         "sql": "CREATE LIGHTNING DATABASE PSIG_ABS DESCRIBE BY \"PriceSignal-ABS-CPI\"",
         "existed": true
       }
     },
     {
-      "t": 1793023039053,
+      "t": 1793032091742,
       "kind": "sql",
-      "title": "already in Zetaris (registered by an earlier run): CREATE LIGHTNING DATABASE PSIG_STATCAN DESCRIBE BY \"PriceSignal-StatCan-CPI\"",
+      "title": "already in Zetaris (not created again): CREATE LIGHTNING DATABASE PSIG_STATCAN DESCRIBE BY \"PriceSignal-StatCan-CPI\"",
       "detail": {
         "sql": "CREATE LIGHTNING DATABASE PSIG_STATCAN DESCRIBE BY \"PriceSignal-StatCan-CPI\"",
         "existed": true
       }
     },
     {
-      "t": 1793023039108,
+      "t": 1793032091761,
       "kind": "sql",
-      "title": "already in Zetaris (registered by an earlier run): CREATE SCHEMASTORE CONTAINER psig",
+      "title": "already in Zetaris (not created again): CREATE SCHEMASTORE CONTAINER psig",
       "detail": {
         "sql": "CREATE SCHEMASTORE CONTAINER psig",
         "existed": true
       }
     },
     {
-      "t": 1793023040181,
+      "t": 1793032092664,
       "kind": "sql",
-      "title": "Q1: CREATE LIGHTNING REST TABLE eurostat_fr_prc_hicp_minr_cp01_ex1027 FROM PSIG_EUROSTAT REQUE",
+      "title": "Q1: CREATE LIGHTNING REST TABLE eurostat_fr_prc_hicp_minr_cp01_night1027c7 FROM PSIG_EUROSTAT ",
       "detail": {
         "id": "Q1",
-        "sql": "CREATE LIGHTNING REST TABLE eurostat_fr_prc_hicp_minr_cp01_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=FR&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+        "sql": "CREATE LIGHTNING REST TABLE eurostat_fr_prc_hicp_minr_cp01_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=FR&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
         "rows": 0,
-        "ms": 1072
+        "ms": 903
       }
     },
     {
-      "t": 1793023040298,
+      "t": 1793032092753,
       "kind": "sql",
-      "title": "Q2: CREATE SCHEMASTORE VIEW v_fr_food_prc_hicp_minr_cp01_ex1027 WITH CONTAINER psig AS",
+      "title": "Q2: CREATE SCHEMASTORE VIEW v_fr_food_prc_hicp_minr_cp01_night1027c7 WITH CONTAINER psig AS",
       "detail": {
         "id": "Q2",
-        "sql": "CREATE SCHEMASTORE VIEW v_fr_food_prc_hicp_minr_cp01_ex1027 WITH CONTAINER psig AS\nSELECT 'FR' AS country, 'food' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_fr_prc_hicp_minr_cp01_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
+        "sql": "CREATE SCHEMASTORE VIEW v_fr_food_prc_hicp_minr_cp01_night1027c7 WITH CONTAINER psig AS\nSELECT 'FR' AS country, 'food' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_fr_prc_hicp_minr_cp01_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
         "rows": 0,
-        "ms": 116
+        "ms": 89
       }
     },
     {
-      "t": 1793023040991,
+      "t": 1793032093421,
       "kind": "sql",
-      "title": "Q3: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_fr_food_prc_hicp_minr_cp01_ex1027 ",
+      "title": "Q3: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_fr_food_prc_hicp_minr_cp01_night10",
       "detail": {
         "id": "Q3",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_fr_food_prc_hicp_minr_cp01_ex1027 WHERE yoy_pct IS NOT NULL",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_fr_food_prc_hicp_minr_cp01_night1027c7 WHERE yoy_pct IS NOT NULL",
         "rows": 1,
-        "ms": 693
+        "ms": 668
       }
     },
     {
-      "t": 1793023040992,
+      "t": 1793032093421,
       "kind": "onboard",
-      "title": "onboarded eurostat CP01 -> psig.v_fr_food_prc_hicp_minr_cp01_ex1027 (created REST table + view: 26 rows, latest 2026-09)",
+      "title": "onboarded eurostat CP01 -> psig.v_fr_food_prc_hicp_minr_cp01_night1027c7 (created REST table + view: 26 rows, latest 2026-09)",
       "detail": {
         "candidate": {
           "agency": "eurostat",
@@ -167,26 +179,26 @@
           "sourceUrl": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=FR&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN"
         },
         "result": {
-          "view": "v_fr_food_prc_hicp_minr_cp01_ex1027",
-          "table": "eurostat_fr_prc_hicp_minr_cp01_ex1027",
+          "view": "v_fr_food_prc_hicp_minr_cp01_night1027c7",
+          "table": "eurostat_fr_prc_hicp_minr_cp01_night1027c7",
           "ok": true,
           "existed": false,
           "rows": 26,
           "latest": "2026-09",
           "sql": [
-            "CREATE LIGHTNING REST TABLE eurostat_fr_prc_hicp_minr_cp01_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=FR&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-            "CREATE SCHEMASTORE VIEW v_fr_food_prc_hicp_minr_cp01_ex1027 WITH CONTAINER psig AS\nSELECT 'FR' AS country, 'food' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_fr_prc_hicp_minr_cp01_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx"
+            "CREATE LIGHTNING REST TABLE eurostat_fr_prc_hicp_minr_cp01_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=FR&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+            "CREATE SCHEMASTORE VIEW v_fr_food_prc_hicp_minr_cp01_night1027c7 WITH CONTAINER psig AS\nSELECT 'FR' AS country, 'food' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_fr_prc_hicp_minr_cp01_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx"
           ]
         }
       }
     },
     {
-      "t": 1793023041006,
+      "t": 1793032093430,
       "kind": "memory",
-      "title": "stored mapping mem-31"
+      "title": "stored mapping mem-32"
     },
     {
-      "t": 1793023041929,
+      "t": 1793032094339,
       "kind": "discover",
       "title": "Eurostat (HICP): 1 candidate(s) for \"all_items\"",
       "detail": {
@@ -212,42 +224,42 @@
       }
     },
     {
-      "t": 1793023042375,
+      "t": 1793032094779,
       "kind": "sql",
-      "title": "Q4: CREATE LIGHTNING REST TABLE eurostat_fr_prc_hicp_minr_total_ex1027 FROM PSIG_EUROSTAT REQU",
+      "title": "Q4: CREATE LIGHTNING REST TABLE eurostat_fr_prc_hicp_minr_total_night1027c7 FROM PSIG_EUROSTAT",
       "detail": {
         "id": "Q4",
-        "sql": "CREATE LIGHTNING REST TABLE eurostat_fr_prc_hicp_minr_total_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=FR&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+        "sql": "CREATE LIGHTNING REST TABLE eurostat_fr_prc_hicp_minr_total_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=FR&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
         "rows": 0,
-        "ms": 446
+        "ms": 439
       }
     },
     {
-      "t": 1793023042485,
+      "t": 1793032094879,
       "kind": "sql",
-      "title": "Q5: CREATE SCHEMASTORE VIEW v_fr_all_items_prc_hicp_minr_total_ex1027 WITH CONTAINER psig AS",
+      "title": "Q5: CREATE SCHEMASTORE VIEW v_fr_all_items_prc_hicp_minr_total_night1027c7 WITH CONTAINER psig",
       "detail": {
         "id": "Q5",
-        "sql": "CREATE SCHEMASTORE VIEW v_fr_all_items_prc_hicp_minr_total_ex1027 WITH CONTAINER psig AS\nSELECT 'FR' AS country, 'all_items' AS concept, 'TOTAL' AS category_code, 'Total' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:TOTAL:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_fr_prc_hicp_minr_total_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
+        "sql": "CREATE SCHEMASTORE VIEW v_fr_all_items_prc_hicp_minr_total_night1027c7 WITH CONTAINER psig AS\nSELECT 'FR' AS country, 'all_items' AS concept, 'TOTAL' AS category_code, 'Total' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:TOTAL:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_fr_prc_hicp_minr_total_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
         "rows": 0,
-        "ms": 110
+        "ms": 100
       }
     },
     {
-      "t": 1793023043118,
+      "t": 1793032095505,
       "kind": "sql",
-      "title": "Q6: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_fr_all_items_prc_hicp_minr_total_e",
+      "title": "Q6: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_fr_all_items_prc_hicp_minr_total_n",
       "detail": {
         "id": "Q6",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_fr_all_items_prc_hicp_minr_total_ex1027 WHERE yoy_pct IS NOT NULL",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_fr_all_items_prc_hicp_minr_total_night1027c7 WHERE yoy_pct IS NOT NULL",
         "rows": 1,
-        "ms": 633
+        "ms": 626
       }
     },
     {
-      "t": 1793023043118,
+      "t": 1793032095505,
       "kind": "onboard",
-      "title": "onboarded eurostat TOTAL -> psig.v_fr_all_items_prc_hicp_minr_total_ex1027 (created REST table + view: 26 rows, latest 2026-09)",
+      "title": "onboarded eurostat TOTAL -> psig.v_fr_all_items_prc_hicp_minr_total_night1027c7 (created REST table + view: 26 rows, latest 2026-09)",
       "detail": {
         "candidate": {
           "agency": "eurostat",
@@ -262,26 +274,26 @@
           "sourceUrl": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=FR&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN"
         },
         "result": {
-          "view": "v_fr_all_items_prc_hicp_minr_total_ex1027",
-          "table": "eurostat_fr_prc_hicp_minr_total_ex1027",
+          "view": "v_fr_all_items_prc_hicp_minr_total_night1027c7",
+          "table": "eurostat_fr_prc_hicp_minr_total_night1027c7",
           "ok": true,
           "existed": false,
           "rows": 26,
           "latest": "2026-09",
           "sql": [
-            "CREATE LIGHTNING REST TABLE eurostat_fr_prc_hicp_minr_total_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=FR&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-            "CREATE SCHEMASTORE VIEW v_fr_all_items_prc_hicp_minr_total_ex1027 WITH CONTAINER psig AS\nSELECT 'FR' AS country, 'all_items' AS concept, 'TOTAL' AS category_code, 'Total' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:TOTAL:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_fr_prc_hicp_minr_total_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx"
+            "CREATE LIGHTNING REST TABLE eurostat_fr_prc_hicp_minr_total_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=FR&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+            "CREATE SCHEMASTORE VIEW v_fr_all_items_prc_hicp_minr_total_night1027c7 WITH CONTAINER psig AS\nSELECT 'FR' AS country, 'all_items' AS concept, 'TOTAL' AS category_code, 'Total' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:TOTAL:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_fr_prc_hicp_minr_total_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx"
           ]
         }
       }
     },
     {
-      "t": 1793023043120,
+      "t": 1793032095507,
       "kind": "memory",
-      "title": "stored mapping mem-32"
+      "title": "stored mapping mem-33"
     },
     {
-      "t": 1793023043775,
+      "t": 1793032096131,
       "kind": "discover",
       "title": "Eurostat (HICP): 1 candidate(s) for \"food\"",
       "detail": {
@@ -307,42 +319,42 @@
       }
     },
     {
-      "t": 1793023044277,
+      "t": 1793032096566,
       "kind": "sql",
-      "title": "Q7: CREATE LIGHTNING REST TABLE eurostat_it_prc_hicp_minr_cp01_ex1027 FROM PSIG_EUROSTAT REQUE",
+      "title": "Q7: CREATE LIGHTNING REST TABLE eurostat_it_prc_hicp_minr_cp01_night1027c7 FROM PSIG_EUROSTAT ",
       "detail": {
         "id": "Q7",
-        "sql": "CREATE LIGHTNING REST TABLE eurostat_it_prc_hicp_minr_cp01_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=IT&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+        "sql": "CREATE LIGHTNING REST TABLE eurostat_it_prc_hicp_minr_cp01_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=IT&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
         "rows": 0,
-        "ms": 501
+        "ms": 435
       }
     },
     {
-      "t": 1793023044357,
+      "t": 1793032096620,
       "kind": "sql",
-      "title": "Q8: CREATE SCHEMASTORE VIEW v_it_food_prc_hicp_minr_cp01_ex1027 WITH CONTAINER psig AS",
+      "title": "Q8: CREATE SCHEMASTORE VIEW v_it_food_prc_hicp_minr_cp01_night1027c7 WITH CONTAINER psig AS",
       "detail": {
         "id": "Q8",
-        "sql": "CREATE SCHEMASTORE VIEW v_it_food_prc_hicp_minr_cp01_ex1027 WITH CONTAINER psig AS\nSELECT 'IT' AS country, 'food' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_it_prc_hicp_minr_cp01_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
+        "sql": "CREATE SCHEMASTORE VIEW v_it_food_prc_hicp_minr_cp01_night1027c7 WITH CONTAINER psig AS\nSELECT 'IT' AS country, 'food' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_it_prc_hicp_minr_cp01_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
         "rows": 0,
-        "ms": 80
+        "ms": 54
       }
     },
     {
-      "t": 1793023044954,
+      "t": 1793032097195,
       "kind": "sql",
-      "title": "Q9: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_it_food_prc_hicp_minr_cp01_ex1027 ",
+      "title": "Q9: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_it_food_prc_hicp_minr_cp01_night10",
       "detail": {
         "id": "Q9",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_it_food_prc_hicp_minr_cp01_ex1027 WHERE yoy_pct IS NOT NULL",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_it_food_prc_hicp_minr_cp01_night1027c7 WHERE yoy_pct IS NOT NULL",
         "rows": 1,
-        "ms": 597
+        "ms": 575
       }
     },
     {
-      "t": 1793023044954,
+      "t": 1793032097195,
       "kind": "onboard",
-      "title": "onboarded eurostat CP01 -> psig.v_it_food_prc_hicp_minr_cp01_ex1027 (created REST table + view: 26 rows, latest 2026-09)",
+      "title": "onboarded eurostat CP01 -> psig.v_it_food_prc_hicp_minr_cp01_night1027c7 (created REST table + view: 26 rows, latest 2026-09)",
       "detail": {
         "candidate": {
           "agency": "eurostat",
@@ -357,26 +369,26 @@
           "sourceUrl": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=IT&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN"
         },
         "result": {
-          "view": "v_it_food_prc_hicp_minr_cp01_ex1027",
-          "table": "eurostat_it_prc_hicp_minr_cp01_ex1027",
+          "view": "v_it_food_prc_hicp_minr_cp01_night1027c7",
+          "table": "eurostat_it_prc_hicp_minr_cp01_night1027c7",
           "ok": true,
           "existed": false,
           "rows": 26,
           "latest": "2026-09",
           "sql": [
-            "CREATE LIGHTNING REST TABLE eurostat_it_prc_hicp_minr_cp01_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=IT&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-            "CREATE SCHEMASTORE VIEW v_it_food_prc_hicp_minr_cp01_ex1027 WITH CONTAINER psig AS\nSELECT 'IT' AS country, 'food' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_it_prc_hicp_minr_cp01_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx"
+            "CREATE LIGHTNING REST TABLE eurostat_it_prc_hicp_minr_cp01_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=IT&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+            "CREATE SCHEMASTORE VIEW v_it_food_prc_hicp_minr_cp01_night1027c7 WITH CONTAINER psig AS\nSELECT 'IT' AS country, 'food' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_it_prc_hicp_minr_cp01_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx"
           ]
         }
       }
     },
     {
-      "t": 1793023044956,
+      "t": 1793032097198,
       "kind": "memory",
-      "title": "stored mapping mem-33"
+      "title": "stored mapping mem-34"
     },
     {
-      "t": 1793023045638,
+      "t": 1793032097841,
       "kind": "discover",
       "title": "Eurostat (HICP): 1 candidate(s) for \"all_items\"",
       "detail": {
@@ -402,42 +414,42 @@
       }
     },
     {
-      "t": 1793023046089,
+      "t": 1793032098320,
       "kind": "sql",
-      "title": "Q10: CREATE LIGHTNING REST TABLE eurostat_it_prc_hicp_minr_total_ex1027 FROM PSIG_EUROSTAT REQU",
+      "title": "Q10: CREATE LIGHTNING REST TABLE eurostat_it_prc_hicp_minr_total_night1027c7 FROM PSIG_EUROSTAT",
       "detail": {
         "id": "Q10",
-        "sql": "CREATE LIGHTNING REST TABLE eurostat_it_prc_hicp_minr_total_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=IT&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+        "sql": "CREATE LIGHTNING REST TABLE eurostat_it_prc_hicp_minr_total_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=IT&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
         "rows": 0,
-        "ms": 450
+        "ms": 479
       }
     },
     {
-      "t": 1793023046211,
+      "t": 1793032098408,
       "kind": "sql",
-      "title": "Q11: CREATE SCHEMASTORE VIEW v_it_all_items_prc_hicp_minr_total_ex1027 WITH CONTAINER psig AS",
+      "title": "Q11: CREATE SCHEMASTORE VIEW v_it_all_items_prc_hicp_minr_total_night1027c7 WITH CONTAINER psig",
       "detail": {
         "id": "Q11",
-        "sql": "CREATE SCHEMASTORE VIEW v_it_all_items_prc_hicp_minr_total_ex1027 WITH CONTAINER psig AS\nSELECT 'IT' AS country, 'all_items' AS concept, 'TOTAL' AS category_code, 'Total' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:TOTAL:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_it_prc_hicp_minr_total_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
+        "sql": "CREATE SCHEMASTORE VIEW v_it_all_items_prc_hicp_minr_total_night1027c7 WITH CONTAINER psig AS\nSELECT 'IT' AS country, 'all_items' AS concept, 'TOTAL' AS category_code, 'Total' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:TOTAL:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_it_prc_hicp_minr_total_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
         "rows": 0,
-        "ms": 122
+        "ms": 87
       }
     },
     {
-      "t": 1793023046802,
+      "t": 1793032099003,
       "kind": "sql",
-      "title": "Q12: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_it_all_items_prc_hicp_minr_total_e",
+      "title": "Q12: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_it_all_items_prc_hicp_minr_total_n",
       "detail": {
         "id": "Q12",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_it_all_items_prc_hicp_minr_total_ex1027 WHERE yoy_pct IS NOT NULL",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_it_all_items_prc_hicp_minr_total_night1027c7 WHERE yoy_pct IS NOT NULL",
         "rows": 1,
-        "ms": 591
+        "ms": 595
       }
     },
     {
-      "t": 1793023046802,
+      "t": 1793032099003,
       "kind": "onboard",
-      "title": "onboarded eurostat TOTAL -> psig.v_it_all_items_prc_hicp_minr_total_ex1027 (created REST table + view: 26 rows, latest 2026-09)",
+      "title": "onboarded eurostat TOTAL -> psig.v_it_all_items_prc_hicp_minr_total_night1027c7 (created REST table + view: 26 rows, latest 2026-09)",
       "detail": {
         "candidate": {
           "agency": "eurostat",
@@ -452,26 +464,26 @@
           "sourceUrl": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=IT&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN"
         },
         "result": {
-          "view": "v_it_all_items_prc_hicp_minr_total_ex1027",
-          "table": "eurostat_it_prc_hicp_minr_total_ex1027",
+          "view": "v_it_all_items_prc_hicp_minr_total_night1027c7",
+          "table": "eurostat_it_prc_hicp_minr_total_night1027c7",
           "ok": true,
           "existed": false,
           "rows": 26,
           "latest": "2026-09",
           "sql": [
-            "CREATE LIGHTNING REST TABLE eurostat_it_prc_hicp_minr_total_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=IT&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-            "CREATE SCHEMASTORE VIEW v_it_all_items_prc_hicp_minr_total_ex1027 WITH CONTAINER psig AS\nSELECT 'IT' AS country, 'all_items' AS concept, 'TOTAL' AS category_code, 'Total' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:TOTAL:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_it_prc_hicp_minr_total_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx"
+            "CREATE LIGHTNING REST TABLE eurostat_it_prc_hicp_minr_total_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=IT&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+            "CREATE SCHEMASTORE VIEW v_it_all_items_prc_hicp_minr_total_night1027c7 WITH CONTAINER psig AS\nSELECT 'IT' AS country, 'all_items' AS concept, 'TOTAL' AS category_code, 'Total' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:TOTAL:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_it_prc_hicp_minr_total_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx"
           ]
         }
       }
     },
     {
-      "t": 1793023046804,
+      "t": 1793032099005,
       "kind": "memory",
-      "title": "stored mapping mem-34"
+      "title": "stored mapping mem-35"
     },
     {
-      "t": 1793023047461,
+      "t": 1793032099671,
       "kind": "discover",
       "title": "Eurostat (HICP): 1 candidate(s) for \"food\"",
       "detail": {
@@ -497,42 +509,42 @@
       }
     },
     {
-      "t": 1793023047947,
+      "t": 1793032100077,
       "kind": "sql",
-      "title": "Q13: CREATE LIGHTNING REST TABLE eurostat_es_prc_hicp_minr_cp01_ex1027 FROM PSIG_EUROSTAT REQUE",
+      "title": "Q13: CREATE LIGHTNING REST TABLE eurostat_es_prc_hicp_minr_cp01_night1027c7 FROM PSIG_EUROSTAT ",
       "detail": {
         "id": "Q13",
-        "sql": "CREATE LIGHTNING REST TABLE eurostat_es_prc_hicp_minr_cp01_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=ES&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+        "sql": "CREATE LIGHTNING REST TABLE eurostat_es_prc_hicp_minr_cp01_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=ES&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
         "rows": 0,
-        "ms": 486
+        "ms": 406
       }
     },
     {
-      "t": 1793023048018,
+      "t": 1793032100201,
       "kind": "sql",
-      "title": "Q14: CREATE SCHEMASTORE VIEW v_es_food_prc_hicp_minr_cp01_ex1027 WITH CONTAINER psig AS",
+      "title": "Q14: CREATE SCHEMASTORE VIEW v_es_food_prc_hicp_minr_cp01_night1027c7 WITH CONTAINER psig AS",
       "detail": {
         "id": "Q14",
-        "sql": "CREATE SCHEMASTORE VIEW v_es_food_prc_hicp_minr_cp01_ex1027 WITH CONTAINER psig AS\nSELECT 'ES' AS country, 'food' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_es_prc_hicp_minr_cp01_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
+        "sql": "CREATE SCHEMASTORE VIEW v_es_food_prc_hicp_minr_cp01_night1027c7 WITH CONTAINER psig AS\nSELECT 'ES' AS country, 'food' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_es_prc_hicp_minr_cp01_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
         "rows": 0,
-        "ms": 71
+        "ms": 124
       }
     },
     {
-      "t": 1793023048577,
+      "t": 1793032100802,
       "kind": "sql",
-      "title": "Q15: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_es_food_prc_hicp_minr_cp01_ex1027 ",
+      "title": "Q15: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_es_food_prc_hicp_minr_cp01_night10",
       "detail": {
         "id": "Q15",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_es_food_prc_hicp_minr_cp01_ex1027 WHERE yoy_pct IS NOT NULL",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_es_food_prc_hicp_minr_cp01_night1027c7 WHERE yoy_pct IS NOT NULL",
         "rows": 1,
-        "ms": 559
+        "ms": 601
       }
     },
     {
-      "t": 1793023048577,
+      "t": 1793032100802,
       "kind": "onboard",
-      "title": "onboarded eurostat CP01 -> psig.v_es_food_prc_hicp_minr_cp01_ex1027 (created REST table + view: 26 rows, latest 2026-09)",
+      "title": "onboarded eurostat CP01 -> psig.v_es_food_prc_hicp_minr_cp01_night1027c7 (created REST table + view: 26 rows, latest 2026-09)",
       "detail": {
         "candidate": {
           "agency": "eurostat",
@@ -547,26 +559,26 @@
           "sourceUrl": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=ES&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN"
         },
         "result": {
-          "view": "v_es_food_prc_hicp_minr_cp01_ex1027",
-          "table": "eurostat_es_prc_hicp_minr_cp01_ex1027",
+          "view": "v_es_food_prc_hicp_minr_cp01_night1027c7",
+          "table": "eurostat_es_prc_hicp_minr_cp01_night1027c7",
           "ok": true,
           "existed": false,
           "rows": 26,
           "latest": "2026-09",
           "sql": [
-            "CREATE LIGHTNING REST TABLE eurostat_es_prc_hicp_minr_cp01_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=ES&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-            "CREATE SCHEMASTORE VIEW v_es_food_prc_hicp_minr_cp01_ex1027 WITH CONTAINER psig AS\nSELECT 'ES' AS country, 'food' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_es_prc_hicp_minr_cp01_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx"
+            "CREATE LIGHTNING REST TABLE eurostat_es_prc_hicp_minr_cp01_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=ES&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+            "CREATE SCHEMASTORE VIEW v_es_food_prc_hicp_minr_cp01_night1027c7 WITH CONTAINER psig AS\nSELECT 'ES' AS country, 'food' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_es_prc_hicp_minr_cp01_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx"
           ]
         }
       }
     },
     {
-      "t": 1793023048580,
+      "t": 1793032100804,
       "kind": "memory",
-      "title": "stored mapping mem-35"
+      "title": "stored mapping mem-36"
     },
     {
-      "t": 1793023049205,
+      "t": 1793032101472,
       "kind": "discover",
       "title": "Eurostat (HICP): 1 candidate(s) for \"all_items\"",
       "detail": {
@@ -592,42 +604,42 @@
       }
     },
     {
-      "t": 1793023049653,
+      "t": 1793032101899,
       "kind": "sql",
-      "title": "Q16: CREATE LIGHTNING REST TABLE eurostat_es_prc_hicp_minr_total_ex1027 FROM PSIG_EUROSTAT REQU",
+      "title": "Q16: CREATE LIGHTNING REST TABLE eurostat_es_prc_hicp_minr_total_night1027c7 FROM PSIG_EUROSTAT",
       "detail": {
         "id": "Q16",
-        "sql": "CREATE LIGHTNING REST TABLE eurostat_es_prc_hicp_minr_total_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=ES&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+        "sql": "CREATE LIGHTNING REST TABLE eurostat_es_prc_hicp_minr_total_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=ES&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
         "rows": 0,
-        "ms": 448
+        "ms": 426
       }
     },
     {
-      "t": 1793023049742,
+      "t": 1793032102001,
       "kind": "sql",
-      "title": "Q17: CREATE SCHEMASTORE VIEW v_es_all_items_prc_hicp_minr_total_ex1027 WITH CONTAINER psig AS",
+      "title": "Q17: CREATE SCHEMASTORE VIEW v_es_all_items_prc_hicp_minr_total_night1027c7 WITH CONTAINER psig",
       "detail": {
         "id": "Q17",
-        "sql": "CREATE SCHEMASTORE VIEW v_es_all_items_prc_hicp_minr_total_ex1027 WITH CONTAINER psig AS\nSELECT 'ES' AS country, 'all_items' AS concept, 'TOTAL' AS category_code, 'Total' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:TOTAL:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_es_prc_hicp_minr_total_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
+        "sql": "CREATE SCHEMASTORE VIEW v_es_all_items_prc_hicp_minr_total_night1027c7 WITH CONTAINER psig AS\nSELECT 'ES' AS country, 'all_items' AS concept, 'TOTAL' AS category_code, 'Total' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:TOTAL:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_es_prc_hicp_minr_total_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
         "rows": 0,
-        "ms": 89
+        "ms": 102
       }
     },
     {
-      "t": 1793023050365,
+      "t": 1793032102592,
       "kind": "sql",
-      "title": "Q18: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_es_all_items_prc_hicp_minr_total_e",
+      "title": "Q18: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_es_all_items_prc_hicp_minr_total_n",
       "detail": {
         "id": "Q18",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_es_all_items_prc_hicp_minr_total_ex1027 WHERE yoy_pct IS NOT NULL",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_es_all_items_prc_hicp_minr_total_night1027c7 WHERE yoy_pct IS NOT NULL",
         "rows": 1,
-        "ms": 623
+        "ms": 591
       }
     },
     {
-      "t": 1793023050365,
+      "t": 1793032102592,
       "kind": "onboard",
-      "title": "onboarded eurostat TOTAL -> psig.v_es_all_items_prc_hicp_minr_total_ex1027 (created REST table + view: 26 rows, latest 2026-09)",
+      "title": "onboarded eurostat TOTAL -> psig.v_es_all_items_prc_hicp_minr_total_night1027c7 (created REST table + view: 26 rows, latest 2026-09)",
       "detail": {
         "candidate": {
           "agency": "eurostat",
@@ -642,231 +654,229 @@
           "sourceUrl": "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=ES&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN"
         },
         "result": {
-          "view": "v_es_all_items_prc_hicp_minr_total_ex1027",
-          "table": "eurostat_es_prc_hicp_minr_total_ex1027",
+          "view": "v_es_all_items_prc_hicp_minr_total_night1027c7",
+          "table": "eurostat_es_prc_hicp_minr_total_night1027c7",
           "ok": true,
           "existed": false,
           "rows": 26,
           "latest": "2026-09",
           "sql": [
-            "CREATE LIGHTNING REST TABLE eurostat_es_prc_hicp_minr_total_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=ES&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-            "CREATE SCHEMASTORE VIEW v_es_all_items_prc_hicp_minr_total_ex1027 WITH CONTAINER psig AS\nSELECT 'ES' AS country, 'all_items' AS concept, 'TOTAL' AS category_code, 'Total' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:TOTAL:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_es_prc_hicp_minr_total_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx"
+            "CREATE LIGHTNING REST TABLE eurostat_es_prc_hicp_minr_total_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=ES&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+            "CREATE SCHEMASTORE VIEW v_es_all_items_prc_hicp_minr_total_night1027c7 WITH CONTAINER psig AS\nSELECT 'ES' AS country, 'all_items' AS concept, 'TOTAL' AS category_code, 'Total' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:TOTAL:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_es_prc_hicp_minr_total_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx"
           ]
         }
       }
     },
     {
-      "t": 1793023050368,
+      "t": 1793032102593,
       "kind": "memory",
-      "title": "stored mapping mem-36"
+      "title": "stored mapping mem-37"
     },
     {
-      "t": 1793023053369,
+      "t": 1793032102593,
+      "kind": "plan",
+      "title": "all needed series are ready - running the federated comparison"
+    },
+    {
+      "t": 1793032105600,
       "kind": "sql",
       "title": "Q19: SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v",
       "detail": {
         "id": "Q19",
-        "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_fr_food_prc_hicp_minr_cp01_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_fr_all_items_prc_hicp_minr_total_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_it_food_prc_hicp_minr_cp01_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_it_all_items_prc_hicp_minr_total_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_es_food_prc_hicp_minr_cp01_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_es_all_items_prc_hicp_minr_total_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nORDER BY country, concept, period",
+        "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_fr_food_prc_hicp_minr_cp01_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_fr_all_items_prc_hicp_minr_total_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_it_food_prc_hicp_minr_cp01_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_it_all_items_prc_hicp_minr_total_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_es_food_prc_hicp_minr_cp01_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_es_all_items_prc_hicp_minr_total_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nORDER BY country, concept, period",
         "rows": 90,
-        "ms": 3001
+        "ms": 3007
       }
     },
     {
-      "t": 1793023053369,
+      "t": 1793032105600,
       "kind": "compare",
       "title": "federated query Q19 over 6 views -> 90 rows"
     },
     {
-      "t": 1793023053418,
+      "t": 1793032105601,
+      "kind": "plan",
+      "title": "all markets compared - finishing without another planner turn"
+    },
+    {
+      "t": 1793032105602,
+      "kind": "progress",
+      "title": "market numbers ready in 38.1 s - pricing SKUs and writing the summary"
+    },
+    {
+      "t": 1793032105655,
       "kind": "sql",
-      "title": "already in Zetaris (registered by an earlier run): CREATE LIGHTNING DATABASE PSIG_INTERNAL DESCRIBE BY \"PriceSignal-internal-price-list\"",
+      "title": "already in Zetaris (not created again): CREATE LIGHTNING DATABASE PSIG_INTERNAL DESCRIBE BY \"PriceSignal-internal-price-list\"",
       "detail": {
         "sql": "CREATE LIGHTNING DATABASE PSIG_INTERNAL DESCRIBE BY \"PriceSignal-internal-price-list\"",
         "existed": true
       }
     },
     {
-      "t": 1793023053463,
+      "t": 1793032105690,
       "kind": "sql",
-      "title": "already in Zetaris (registered by an earlier run): CREATE LIGHTNING REST TABLE internal_price_list_ex1027 FROM PSIG_INTERNAL REQUEST(",
+      "title": "already in Zetaris (not created again): CREATE LIGHTNING REST TABLE internal_price_list_night1027c7 FROM PSIG_INTERNAL REQUEST(",
       "detail": {
-        "sql": "CREATE LIGHTNING REST TABLE internal_price_list_ex1027 FROM PSIG_INTERNAL REQUEST(\n    endpoint \"https://raw.githubusercontent.com/rose050505/pricesignal/main/data/price_list.json\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+        "sql": "CREATE LIGHTNING REST TABLE internal_price_list_night1027c7 FROM PSIG_INTERNAL REQUEST(\n    endpoint \"https://raw.githubusercontent.com/rose050505/pricesignal/main/data/price_list.json\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
         "existed": true
       }
     },
     {
-      "t": 1793023053520,
+      "t": 1793032105730,
       "kind": "sql",
-      "title": "already in Zetaris (registered by an earlier run): CREATE SCHEMASTORE VIEW v_price_list_ex1027 WITH CONTAINER psig AS",
+      "title": "already in Zetaris (not created again): CREATE SCHEMASTORE VIEW v_price_list_night1027c7 WITH CONTAINER psig AS",
       "detail": {
-        "sql": "CREATE SCHEMASTORE VIEW v_price_list_ex1027 WITH CONTAINER psig AS\nSELECT sku, product, market AS country, category AS sku_category, currency, CAST(current_price AS DOUBLE) AS current_price\nFROM psig_internal.internal_price_list_ex1027",
+        "sql": "CREATE SCHEMASTORE VIEW v_price_list_night1027c7 WITH CONTAINER psig AS\nSELECT sku, product, market AS country, category AS sku_category, currency, CAST(current_price AS DOUBLE) AS current_price\nFROM psig_internal.internal_price_list_night1027c7",
         "existed": true
       }
     },
     {
-      "t": 1793023054031,
+      "t": 1793032105948,
       "kind": "sql",
-      "title": "Q20: SELECT DISTINCT country, sku_category FROM psig.v_price_list_ex1027 WHERE country IN ('FR'",
+      "title": "Q20: SELECT DISTINCT country, sku_category, product FROM psig.v_price_list_night1027c7 WHERE co",
       "detail": {
         "id": "Q20",
-        "sql": "SELECT DISTINCT country, sku_category FROM psig.v_price_list_ex1027 WHERE country IN ('FR', 'IT', 'ES') ORDER BY country, sku_category",
+        "sql": "SELECT DISTINCT country, sku_category, product FROM psig.v_price_list_night1027c7 WHERE country IN ('FR', 'IT', 'ES') ORDER BY country, sku_category, product",
         "rows": 0,
-        "ms": 511
+        "ms": 218
       }
     },
     {
-      "t": 1793023055793,
-      "kind": "sql",
-      "title": "Q21: SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.period,",
-      "detail": {
-        "id": "Q21",
-        "sql": "SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.period, s.yoy_pct, s.source_id\nFROM psig.v_price_list_ex1027 p\nJOIN (\n  SELECT country, period, yoy_pct, source_id, ROW_NUMBER() OVER (PARTITION BY country ORDER BY period DESC) AS rn\n  FROM (\n    SELECT country, period, yoy_pct, source_id FROM psig.v_fr_food_prc_hicp_minr_cp01_ex1027 WHERE yoy_pct IS NOT NULL\n    UNION ALL\n    SELECT country, period, yoy_pct, source_id FROM psig.v_it_food_prc_hicp_minr_cp01_ex1027 WHERE yoy_pct IS NOT NULL\n    UNION ALL\n    SELECT country, period, yoy_pct, source_id FROM psig.v_es_food_prc_hicp_minr_cp01_ex1027 WHERE yoy_pct IS NOT NULL\n  ) u\n) s ON p.country = s.country AND s.rn = 1\nWHERE p.country IN ('FR', 'IT', 'ES')\nORDER BY p.country, p.sku",
-        "rows": 0,
-        "ms": 1761
-      }
+      "t": 1793032115603,
+      "kind": "warn",
+      "title": "narrative: no reply after 10 s - sent the same request again; the first reply wins"
     },
     {
-      "t": 1793023055793,
-      "kind": "pricing",
-      "title": "federated query Q21 joined the internal price list with official food inflation -> 0 SKUs priced"
-    },
-    {
-      "t": 1793023096603,
+      "t": 1793032146678,
       "kind": "llm",
-      "title": "narrative (openrouter/nvidia/nemotron-3.5-lightning, 43228 ms via Meterless Nightshift) - all numbers grounded"
+      "title": "narrative (openrouter/nvidia/nemotron-3.5-lightning, 41061 ms via Meterless Nightshift) - numbers and verdicts match the facts"
     },
     {
-      "t": 1793023096612,
+      "t": 1793032146682,
       "kind": "done",
-      "title": "brief ready in 113 s (21 SQL statements, 0 views reused from memory)"
+      "title": "brief ready in 79 s (20 SQL statements, 0 views reused from memory; 6 model calls, 2 planner calls, 6 discoveries)"
     }
   ],
   "sql": [
     {
       "id": "Q1",
-      "sql": "CREATE LIGHTNING REST TABLE eurostat_fr_prc_hicp_minr_cp01_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=FR&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+      "sql": "CREATE LIGHTNING REST TABLE eurostat_fr_prc_hicp_minr_cp01_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=FR&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
       "rows": 0,
-      "ms": 1072
+      "ms": 903
     },
     {
       "id": "Q2",
-      "sql": "CREATE SCHEMASTORE VIEW v_fr_food_prc_hicp_minr_cp01_ex1027 WITH CONTAINER psig AS\nSELECT 'FR' AS country, 'food' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_fr_prc_hicp_minr_cp01_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
-      "rows": 0,
-      "ms": 116
-    },
-    {
-      "id": "Q3",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_fr_food_prc_hicp_minr_cp01_ex1027 WHERE yoy_pct IS NOT NULL",
-      "rows": 1,
-      "ms": 693
-    },
-    {
-      "id": "Q4",
-      "sql": "CREATE LIGHTNING REST TABLE eurostat_fr_prc_hicp_minr_total_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=FR&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-      "rows": 0,
-      "ms": 446
-    },
-    {
-      "id": "Q5",
-      "sql": "CREATE SCHEMASTORE VIEW v_fr_all_items_prc_hicp_minr_total_ex1027 WITH CONTAINER psig AS\nSELECT 'FR' AS country, 'all_items' AS concept, 'TOTAL' AS category_code, 'Total' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:TOTAL:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_fr_prc_hicp_minr_total_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
-      "rows": 0,
-      "ms": 110
-    },
-    {
-      "id": "Q6",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_fr_all_items_prc_hicp_minr_total_ex1027 WHERE yoy_pct IS NOT NULL",
-      "rows": 1,
-      "ms": 633
-    },
-    {
-      "id": "Q7",
-      "sql": "CREATE LIGHTNING REST TABLE eurostat_it_prc_hicp_minr_cp01_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=IT&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-      "rows": 0,
-      "ms": 501
-    },
-    {
-      "id": "Q8",
-      "sql": "CREATE SCHEMASTORE VIEW v_it_food_prc_hicp_minr_cp01_ex1027 WITH CONTAINER psig AS\nSELECT 'IT' AS country, 'food' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_it_prc_hicp_minr_cp01_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
-      "rows": 0,
-      "ms": 80
-    },
-    {
-      "id": "Q9",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_it_food_prc_hicp_minr_cp01_ex1027 WHERE yoy_pct IS NOT NULL",
-      "rows": 1,
-      "ms": 597
-    },
-    {
-      "id": "Q10",
-      "sql": "CREATE LIGHTNING REST TABLE eurostat_it_prc_hicp_minr_total_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=IT&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-      "rows": 0,
-      "ms": 450
-    },
-    {
-      "id": "Q11",
-      "sql": "CREATE SCHEMASTORE VIEW v_it_all_items_prc_hicp_minr_total_ex1027 WITH CONTAINER psig AS\nSELECT 'IT' AS country, 'all_items' AS concept, 'TOTAL' AS category_code, 'Total' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:TOTAL:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_it_prc_hicp_minr_total_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
-      "rows": 0,
-      "ms": 122
-    },
-    {
-      "id": "Q12",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_it_all_items_prc_hicp_minr_total_ex1027 WHERE yoy_pct IS NOT NULL",
-      "rows": 1,
-      "ms": 591
-    },
-    {
-      "id": "Q13",
-      "sql": "CREATE LIGHTNING REST TABLE eurostat_es_prc_hicp_minr_cp01_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=ES&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-      "rows": 0,
-      "ms": 486
-    },
-    {
-      "id": "Q14",
-      "sql": "CREATE SCHEMASTORE VIEW v_es_food_prc_hicp_minr_cp01_ex1027 WITH CONTAINER psig AS\nSELECT 'ES' AS country, 'food' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_es_prc_hicp_minr_cp01_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
-      "rows": 0,
-      "ms": 71
-    },
-    {
-      "id": "Q15",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_es_food_prc_hicp_minr_cp01_ex1027 WHERE yoy_pct IS NOT NULL",
-      "rows": 1,
-      "ms": 559
-    },
-    {
-      "id": "Q16",
-      "sql": "CREATE LIGHTNING REST TABLE eurostat_es_prc_hicp_minr_total_ex1027 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=ES&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-      "rows": 0,
-      "ms": 448
-    },
-    {
-      "id": "Q17",
-      "sql": "CREATE SCHEMASTORE VIEW v_es_all_items_prc_hicp_minr_total_ex1027 WITH CONTAINER psig AS\nSELECT 'ES' AS country, 'all_items' AS concept, 'TOTAL' AS category_code, 'Total' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:TOTAL:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_es_prc_hicp_minr_total_ex1027\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
+      "sql": "CREATE SCHEMASTORE VIEW v_fr_food_prc_hicp_minr_cp01_night1027c7 WITH CONTAINER psig AS\nSELECT 'FR' AS country, 'food' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_fr_prc_hicp_minr_cp01_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
       "rows": 0,
       "ms": 89
     },
     {
-      "id": "Q18",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_es_all_items_prc_hicp_minr_total_ex1027 WHERE yoy_pct IS NOT NULL",
+      "id": "Q3",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_fr_food_prc_hicp_minr_cp01_night1027c7 WHERE yoy_pct IS NOT NULL",
       "rows": 1,
-      "ms": 623
+      "ms": 668
+    },
+    {
+      "id": "Q4",
+      "sql": "CREATE LIGHTNING REST TABLE eurostat_fr_prc_hicp_minr_total_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=FR&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+      "rows": 0,
+      "ms": 439
+    },
+    {
+      "id": "Q5",
+      "sql": "CREATE SCHEMASTORE VIEW v_fr_all_items_prc_hicp_minr_total_night1027c7 WITH CONTAINER psig AS\nSELECT 'FR' AS country, 'all_items' AS concept, 'TOTAL' AS category_code, 'Total' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:TOTAL:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_fr_prc_hicp_minr_total_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
+      "rows": 0,
+      "ms": 100
+    },
+    {
+      "id": "Q6",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_fr_all_items_prc_hicp_minr_total_night1027c7 WHERE yoy_pct IS NOT NULL",
+      "rows": 1,
+      "ms": 626
+    },
+    {
+      "id": "Q7",
+      "sql": "CREATE LIGHTNING REST TABLE eurostat_it_prc_hicp_minr_cp01_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=IT&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+      "rows": 0,
+      "ms": 435
+    },
+    {
+      "id": "Q8",
+      "sql": "CREATE SCHEMASTORE VIEW v_it_food_prc_hicp_minr_cp01_night1027c7 WITH CONTAINER psig AS\nSELECT 'IT' AS country, 'food' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_it_prc_hicp_minr_cp01_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
+      "rows": 0,
+      "ms": 54
+    },
+    {
+      "id": "Q9",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_it_food_prc_hicp_minr_cp01_night1027c7 WHERE yoy_pct IS NOT NULL",
+      "rows": 1,
+      "ms": 575
+    },
+    {
+      "id": "Q10",
+      "sql": "CREATE LIGHTNING REST TABLE eurostat_it_prc_hicp_minr_total_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=IT&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+      "rows": 0,
+      "ms": 479
+    },
+    {
+      "id": "Q11",
+      "sql": "CREATE SCHEMASTORE VIEW v_it_all_items_prc_hicp_minr_total_night1027c7 WITH CONTAINER psig AS\nSELECT 'IT' AS country, 'all_items' AS concept, 'TOTAL' AS category_code, 'Total' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:TOTAL:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_it_prc_hicp_minr_total_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
+      "rows": 0,
+      "ms": 87
+    },
+    {
+      "id": "Q12",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_it_all_items_prc_hicp_minr_total_night1027c7 WHERE yoy_pct IS NOT NULL",
+      "rows": 1,
+      "ms": 595
+    },
+    {
+      "id": "Q13",
+      "sql": "CREATE LIGHTNING REST TABLE eurostat_es_prc_hicp_minr_cp01_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=ES&coicop18=CP01&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+      "rows": 0,
+      "ms": 406
+    },
+    {
+      "id": "Q14",
+      "sql": "CREATE SCHEMASTORE VIEW v_es_food_prc_hicp_minr_cp01_night1027c7 WITH CONTAINER psig AS\nSELECT 'ES' AS country, 'food' AS concept, 'CP01' AS category_code, 'Food and non-alcoholic beverages' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:CP01:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_es_prc_hicp_minr_cp01_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
+      "rows": 0,
+      "ms": 124
+    },
+    {
+      "id": "Q15",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_es_food_prc_hicp_minr_cp01_night1027c7 WHERE yoy_pct IS NOT NULL",
+      "rows": 1,
+      "ms": 601
+    },
+    {
+      "id": "Q16",
+      "sql": "CREATE LIGHTNING REST TABLE eurostat_es_prc_hicp_minr_total_night1027c7 FROM PSIG_EUROSTAT REQUEST(\n    endpoint \"https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data/prc_hicp_minr?format=JSON&geo=ES&coicop18=TOTAL&unit=RCH_A&sinceTimePeriod=2024-08&lang=EN\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+      "rows": 0,
+      "ms": 426
+    },
+    {
+      "id": "Q17",
+      "sql": "CREATE SCHEMASTORE VIEW v_es_all_items_prc_hicp_minr_total_night1027c7 WITH CONTAINER psig AS\nSELECT 'ES' AS country, 'all_items' AS concept, 'TOTAL' AS category_code, 'Total' AS category_label,\n       'M' AS frequency, time_label AS period, CAST(v AS DOUBLE) AS yoy_pct,\n       'eurostat:prc_hicp_minr:TOTAL:RCH_A' AS source_id\nFROM psig_eurostat.eurostat_es_prc_hicp_minr_total_night1027c7\nLATERAL VIEW explode(from_json(to_json(value), 'map<string,double>')) AS k, v\nLATERAL VIEW explode(from_json(to_json(dimension.time.category.index), 'map<string,bigint>')) AS time_label, idx\nWHERE CAST(k AS INT) = idx",
+      "rows": 0,
+      "ms": 102
+    },
+    {
+      "id": "Q18",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_es_all_items_prc_hicp_minr_total_night1027c7 WHERE yoy_pct IS NOT NULL",
+      "rows": 1,
+      "ms": 591
     },
     {
       "id": "Q19",
-      "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_fr_food_prc_hicp_minr_cp01_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_fr_all_items_prc_hicp_minr_total_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_it_food_prc_hicp_minr_cp01_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_it_all_items_prc_hicp_minr_total_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_es_food_prc_hicp_minr_cp01_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_es_all_items_prc_hicp_minr_total_ex1027 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nORDER BY country, concept, period",
+      "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_fr_food_prc_hicp_minr_cp01_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_fr_all_items_prc_hicp_minr_total_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_it_food_prc_hicp_minr_cp01_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_it_all_items_prc_hicp_minr_total_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_es_food_prc_hicp_minr_cp01_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_es_all_items_prc_hicp_minr_total_night1027c7 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nORDER BY country, concept, period",
       "rows": 90,
-      "ms": 3001
+      "ms": 3007
     },
     {
       "id": "Q20",
-      "sql": "SELECT DISTINCT country, sku_category FROM psig.v_price_list_ex1027 WHERE country IN ('FR', 'IT', 'ES') ORDER BY country, sku_category",
+      "sql": "SELECT DISTINCT country, sku_category, product FROM psig.v_price_list_night1027c7 WHERE country IN ('FR', 'IT', 'ES') ORDER BY country, sku_category, product",
       "rows": 0,
-      "ms": 511
-    },
-    {
-      "id": "Q21",
-      "sql": "SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.period, s.yoy_pct, s.source_id\nFROM psig.v_price_list_ex1027 p\nJOIN (\n  SELECT country, period, yoy_pct, source_id, ROW_NUMBER() OVER (PARTITION BY country ORDER BY period DESC) AS rn\n  FROM (\n    SELECT country, period, yoy_pct, source_id FROM psig.v_fr_food_prc_hicp_minr_cp01_ex1027 WHERE yoy_pct IS NOT NULL\n    UNION ALL\n    SELECT country, period, yoy_pct, source_id FROM psig.v_it_food_prc_hicp_minr_cp01_ex1027 WHERE yoy_pct IS NOT NULL\n    UNION ALL\n    SELECT country, period, yoy_pct, source_id FROM psig.v_es_food_prc_hicp_minr_cp01_ex1027 WHERE yoy_pct IS NOT NULL\n  ) u\n) s ON p.country = s.country AND s.rn = 1\nWHERE p.country IN ('FR', 'IT', 'ES')\nORDER BY p.country, p.sku",
-      "rows": 0,
-      "ms": 1761
+      "ms": 218
     }
   ]
 }

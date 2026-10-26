@@ -21,4 +21,4 @@ Code calculates a historical benchmark from the latest YoY rate and recent annua
 
 Meterless H-MEM remembers policies, requests and verified mappings. "Same as last time, but +3%?" reuses fresh evidence, skips unnecessary planning and recalls product-specific choices. Changed products or stale mappings trigger rechecking; past outcomes distinguish source and method changes.
 
-Built with Claude Code and Codex; Cursor was not used. README documents integrations and limits; examples/ contains earlier recorded runs with full traces.
+Built with Claude Code and Codex; Cursor was not used. README documents integrations and limits; examples/ contains recorded runs with full traces.
