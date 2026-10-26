@@ -112,6 +112,7 @@ npm run setup               # vendors the Meterless H-MEM reference engine into 
 npm run setup:conformance   # vendors the H-MEM conformance suite
 npm run conformance         # 13/13 checks pass against src/hmem_impl.ts
 npm test                    # offline agent tests (fake model, fake Zetaris)
+npm run typecheck           # strict TypeScript check of src/ and tests/ (after npm run setup)
 
 cp .env.example .env        # then fill in (never commit .env):
 #   ZETARIS_REST_URL, ZETARIS_ORG_ID, ZETARIS_API_KEY
