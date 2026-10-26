@@ -8,7 +8,7 @@ import { chat, ChatMessage, ChatResult } from "./llm.ts";
 import { AgentMemory } from "./memory.ts";
 import { SqlResult, SqlRunner, rowsAsObjects } from "./zetaris.ts";
 import { AGENCY_FOR, COMPARE_COLUMNS, Candidate, Concept, Country, CONCEPT_WORDS, compareSql, discover, monthsBack, normalizeCountry, onboard, skuSearchWords, isBroadFoodLabel } from "./sources/index.ts";
-import { MarketFacts, Brief, RunMetrics, SkuLine, buildFacts, renderBrief, signedPct, marketKey, allowedNumbers, checkNarrative, factsForNarrative, seriesFacts, Narrative, NarrativeIssue } from "./brief.ts";
+import { MarketFacts, Brief, RunMetrics, SkuLine, buildFacts, renderBrief, signedPct, marketKey, allowedNumbers, checkNarrative, factsForNarrative, seriesFacts, marketBenchmark, Narrative, NarrativeIssue } from "./brief.ts";
 import { PRICE_DB, PRICING_COLUMNS, SKU_RATE_COLUMNS, ensurePriceList, priceTable, priceView, pricingSql, skuCategoriesSql, skuRatesSql } from "./sources/pricelist.ts";
 import { BROADER_COVERAGE_REASON, SELECTION_VERSION, skuScope, selectionMessages, validateSelections, fallbackSelection, type SelectionGroup, type SelectionDecision } from "./selection.ts";
 
@@ -21,7 +21,12 @@ export interface Request {
   /** how much the exporter's own costs rose, if the user said so ("our costs rose 8%") */
   costIncreasePct?: number;
   costRemembered?: boolean;
-  passThrough?: number; // from the request, else memory, else 1.0
+  /** Current unit cost divided by the current selling price, expressed as 0..100%. */
+  costSharePct?: number;
+  costShareRemembered?: boolean;
+  passThrough?: number; // share of the monetary cost increase to recover, from the request, memory, or 1.0
+  invalidPassThrough?: boolean;
+  inputIssues?: string[];
   policyStatement?: string;
   unknownCountries: string[];
   /** no market was named, so the default markets are used (the brief says so) */
@@ -164,7 +169,8 @@ export class PriceSignalAgent extends EventEmitter {
   async parse(raw: string): Promise<Request> {
     const prompt = `Extract the pricing request as JSON with keys:
 countries (array of strings as the user wrote them), concept (one of: food, all_items, snacks, condiments, or a short noun), concept_words (2-4 lowercase words an official statistics label might use),
-proposed_change_pct (number or null), cost_increase_pct (number or null, only if the user states how much their own costs rose), pass_through (0..1 or null, only if the user states how much of inflation they pass on), policy_statement (string or null).
+proposed_change_pct (signed number or null, preserve price reductions), cost_increase_pct (signed number or null, only if the user states how much their own costs changed), cost_share_pct (0..100 or null, only if the user states current unit cost / current selling price as a percentage), pass_through (0..1 or null, the share of the monetary cost increase to recover in selling prices), policy_statement (string or null).
+These percentages have different denominators: never infer cost_share_pct from a cost increase, pass-through policy, or proposed change. For "same as last time", return null for values the user did not change. Do not invent a cost share.
 Request: """${raw}"""
 Reply with JSON only.`;
     let j: any = {};
@@ -198,30 +204,21 @@ Reply with JSON only.`;
     // Nothing named and nothing remembered: the demo markets, said in the brief. Only unsupported markets named: none.
     const defaultMarkets = !countries.length && !unknown.length;
     if (defaultMarkets) countries.push("DE", "CA", "AU");
-    // A percentage stated as the pass-through share ("we pass on 80% now") is not a proposed price change.
-    const passThrough = numOrUndef(j.pass_through);
-    // Each percentage is read with the words just before it (back to the previous percentage):
-    // "pass on 70%" is the policy, "costs rose 8%" / "원가가 8%" is the cost increase, the rest may be the proposal.
-    const found = [...raw.matchAll(/([+＋]?)\s?(\d+(?:\.\d+)?)\s?(?:%|pct\b|percent\b|퍼센트|프로)/gi)].map((m, i, all) => {
-      const from = i ? all[i - 1].index! + all[i - 1][0].length : 0;
-      const before = raw.slice(Math.max(from, m.index! - 30), m.index);
-      return { x: Number(m[2]), signed: !!m[1], pass: /(pass|반영)/i.test(before), cost: /(cost|원가|비용|input|ingredient|material|freight)/i.test(before) };
-    });
-    const pcts = found.filter((p) => !p.pass && !p.cost && (passThrough === undefined || Math.abs(p.x - passThrough * 100) > 1e-9));
-    const costPct = numOrUndef(j.cost_increase_pct) ?? found.find((p) => p.cost)?.x;
-    // Other percentages may be costs ("our costs rose 8% - is +4% ok?"): the model's reading wins when the
-    // question contains it; otherwise a signed "+N%" is the proposal, then the first percentage.
-    const modelPct = numOrUndef(j.proposed_change_pct);
-    const explicitPct = modelPct !== undefined && pcts.some(({ x }) => Math.abs(x - modelPct) < 1e-9) ? modelPct : (pcts.find((p) => p.signed) ?? pcts[0])?.x;
+    const percentages = requestPercentages(raw, j);
+    const { passThrough, costIncreasePct: costPct, costSharePct, proposedChangePct: explicitPct } = percentages;
     const req: Request = {
       raw,
       countries,
       concept: last ? last.request.concept : concept,
       conceptWords: last ? last.request.conceptWords : words,
-      proposedChangePct: last ? (explicitPct ?? numOrUndef(j.proposed_change_pct) ?? last.request.proposedChangePct) : numOrUndef(j.proposed_change_pct) ?? explicitPct,
+      proposedChangePct: explicitPct ?? last?.request.proposedChangePct,
       passThrough,
       costIncreasePct: costPct ?? (last ? last.request.costIncreasePct : undefined),
       costRemembered: costPct === undefined && last?.request.costIncreasePct !== undefined ? true : undefined,
+      costSharePct: percentages.invalidCostShare ? undefined : costSharePct ?? last?.request.costSharePct,
+      costShareRemembered: !percentages.invalidCostShare && costSharePct === undefined && last?.request.costSharePct !== undefined ? true : undefined,
+      invalidPassThrough: percentages.invalidPassThrough || undefined,
+      inputIssues: percentages.issues.length ? percentages.issues : undefined,
       policyStatement: j.policy_statement ? String(j.policy_statement) : undefined,
       unknownCountries: unknown,
       defaultMarkets: defaultMarkets || undefined,
@@ -251,7 +248,7 @@ Reply with JSON only.`;
     const pairs = req.countries.flatMap((country) => concepts.map((concept) => ({ country, concept })));
     const views = new Map<string, { view: string; label: string; via: "memory" | "onboarded"; note?: string; memoryId?: string }>();
     const candidates = new Map<string, Candidate[]>();
-    const notes: string[] = [];
+    const notes: string[] = [...(req.inputIssues ?? [])];
     for (const u of req.unknownCountries) notes.push(`${u}: not covered yet - PriceSignal currently reads Eurostat (EU markets), Statistics Canada (CA) and ABS (AU).`);
     if (req.defaultMarkets) notes.push(`No market was named in the question, so the brief covers the default markets ${req.countries.join(", ")}.`);
     if (!req.countries.length) {
@@ -342,9 +339,9 @@ Reply with JSON only.`;
     if (!compared) throw new Error("No market could be onboarded; see trace.");
 
     // ---------- 3. facts are computed by code, narrative by the model ----------
-    const remembered = req.passThrough === undefined ? memory.latestPolicy() : undefined;
+    const remembered = req.passThrough === undefined && !req.invalidPassThrough ? memory.latestPolicy() : undefined;
     const policy = req.passThrough ?? remembered?.policy ?? 1.0;
-    const policySource = req.passThrough !== undefined ? "stated in this request" : remembered ? `remembered from an earlier request (${remembered.id})` : "default: full pass-through (no policy given)";
+    const policySource = req.invalidPassThrough ? "invalid input; cost-recovery target omitted" : req.passThrough !== undefined ? "stated in this request" : remembered ? `remembered from an earlier request (${remembered.id})` : "default: recover the full monetary cost increase (no policy given)";
     if (remembered) this.log("memory", `using remembered pricing policy ${remembered.id}: ${Math.round(policy * 100)}%`);
     const facts: MarketFacts[] = buildFacts(rowsAsObjects(compared, COMPARE_COLUMNS), req, compared.id, policy);
     for (const p of pairs) if (!views.has(key(p.country, p.concept))) notes.push(`${p.country} ${p.concept}: no usable official series was found.`);
@@ -597,9 +594,7 @@ Reply with JSON only.`;
         if (!sf) continue;
         const price = Number(r0.current_price);
         const at = (pct?: number) => (pct === undefined ? undefined : Math.round(price * (1 + pct / 100) * 100) / 100);
-        const r1 = (x: number) => Math.round(x * 10 + 1e-9) / 10;
-        const lo = Math.max(0, r1(policy * Math.min(sf.latestYoy, sf.avg12)));
-        const hi = Math.max(0, r1(policy * Math.max(sf.latestYoy, sf.avg12)));
+        const { low: lo, high: hi } = marketBenchmark(sf);
         const p = req.proposedChangePct;
         const selectedView = skuViews.get(`${r0.country}:${String(r0.sku_category).toLowerCase()}`);
         const note = selectedView?.note ?? "";
@@ -607,7 +602,7 @@ Reply with JSON only.`;
           sku: String(r0.sku), product: String(r0.product), country: String(r0.country), skuCategory: String(r0.sku_category), currency: String(r0.currency),
           currentPrice: price, period: sf.latestPeriod, yoy: sf.latestYoy, sourceId: sf.sourceId, avg12: sf.avg12, rangeLow: lo, rangeHigh: hi,
           low: at(lo), high: at(hi), atProposed: at(p),
-          verdict: p === undefined ? undefined : p > hi ? "above the evidence" : p < lo ? "below the evidence" : "within the evidence",
+          verdict: p === undefined ? undefined : p > hi ? "above the market benchmark" : p < lo ? "below the market benchmark" : "within the market benchmark",
           cite: res.id, rateLabel: sf.label, coarser: /coarser|Food level/i.test(note),
           selectionReason: selectedView?.selectionReason, selectionSource: selectedView?.selectionSource, selectionFit: selectedView?.selectionFit,
         });
@@ -797,21 +792,38 @@ Reply with JSON only.`;
       const s = f.category ?? f.allItems;
       if (!s || !f.suggested) continue;
       const prev = memory.lastOutcome(f.country, s.concept);
+      let retainNewerOutcome = false;
       if (prev) {
         const o = prev.outcome;
         const when = o.at.slice(0, 10);
         const parts: string[] = [];
-        if (o.period !== s.latestPeriod) parts.push(`new official release: ${o.period} ${pct(o.yoy)} -> ${s.latestPeriod} ${pct(s.latestYoy)}; suggested range ${o.low.toFixed(1)}–${o.high.toFixed(1)}% -> ${f.suggested.low.toFixed(1)}–${f.suggested.high.toFixed(1)}%`);
-        else parts.push(`no new official release (still ${s.latestPeriod}, ${pct(s.latestYoy)})`);
-        if (Math.abs(o.policy - policy) > 1e-9) parts.push(`pass-through ${Math.round(o.policy * 100)}% -> ${Math.round(policy * 100)}%`);
-        if (o.proposed !== undefined && req.proposedChangePct !== undefined) {
+        let comparable = o.methodVersion === 2 && !!o.sourceId && o.sourceId === s.sourceId;
+        if (o.methodVersion !== 2) parts.push("methodology changed: the earlier policy-scaled range and current historical market benchmark are not directly comparable");
+        else if (!o.sourceId) parts.push("the earlier source identity was not recorded; the outcomes are not directly comparable");
+        else if (o.sourceId !== s.sourceId) parts.push(`official source changed (${o.sourceId} -> ${s.sourceId}); the outcomes are not directly comparable`);
+        else {
+          const order = comparePeriods(o.period, s.latestPeriod);
+          const ranges = `market benchmark ${o.low.toFixed(1)}–${o.high.toFixed(1)}% -> ${f.suggested.low.toFixed(1)}–${f.suggested.high.toFixed(1)}%`;
+          if (order === undefined) {
+            parts.push("the observation periods cannot be compared; no release progression is inferred");
+            comparable = false;
+          }
+          else if (order < 0) {
+            parts.push(`the returned observation is older (${s.latestPeriod}) than the remembered ${o.period}; the newer comparison baseline is retained`);
+            retainNewerOutcome = true;
+          } else if (order > 0) parts.push(`new official release: ${o.period} ${pct(o.yoy)} -> ${s.latestPeriod} ${pct(s.latestYoy)}; ${ranges}`);
+          else if (o.yoy !== s.latestYoy || o.low !== f.suggested.low || o.high !== f.suggested.high) parts.push(`official data or history revised for ${s.latestPeriod}: ${pct(o.yoy)} -> ${pct(s.latestYoy)}; ${ranges}`);
+          else parts.push(`no new official release (still ${s.latestPeriod}, ${pct(s.latestYoy)}); market benchmark unchanged`);
+        }
+        if (!req.invalidPassThrough && o.policy !== undefined && Math.abs(o.policy - policy) > 1e-9) parts.push(`cost-recovery policy ${Math.round(o.policy * 100)}% -> ${Math.round(policy * 100)}%`);
+        if (comparable && !retainNewerOutcome && o.proposed !== undefined && req.proposedChangePct !== undefined && o.verdict && f.verdict) {
           if (o.proposed !== req.proposedChangePct) parts.push(`last time ${signedPct(o.proposed)} was ${o.verdict}; now ${signedPct(req.proposedChangePct)} is ${f.verdict}`);
           else if (o.verdict !== f.verdict) parts.push(`verdict on ${signedPct(req.proposedChangePct)} changed: ${o.verdict} -> ${f.verdict}`);
           else parts.push(`verdict on ${signedPct(req.proposedChangePct)} unchanged (${f.verdict})`);
         }
         out.push(`${f.country} ${s.label} (last brief ${when}, ${prev.id}): ${parts.join("; ")}.`);
       }
-      memory.rememberOutcome({ country: f.country, concept: s.concept, period: s.latestPeriod, yoy: s.latestYoy, low: f.suggested.low, high: f.suggested.high, policy, proposed: req.proposedChangePct, verdict: f.verdict, at: new Date().toISOString() });
+      if (!retainNewerOutcome) memory.rememberOutcome({ country: f.country, concept: s.concept, period: s.latestPeriod, yoy: s.latestYoy, low: f.suggested.low, high: f.suggested.high, policy: req.invalidPassThrough ? undefined : policy, proposed: req.proposedChangePct, verdict: f.verdict, sourceId: s.sourceId, methodVersion: 2, at: new Date().toISOString() });
     }
     if (out.length) this.log("memory", `compared with ${out.length} remembered brief outcome(s): ${out.map((x) => x.split(" (")[0]).join(", ")}`, out);
     return out;
@@ -821,9 +833,9 @@ Reply with JSON only.`;
     // Caveats are written by code (e.g. "no data after 2025-12 (10 months ago)"), so their numbers may be repeated.
     const noteNumbers = [...new Set(notes)].join(" ").replace(/\b(19|20)\d{2}(-(Q[1-4]|\d{2}))?\b/g, " ").match(/\d+(?:\.\d+)?/g)?.map(Number) ?? [];
     const allowed = [...allowedNumbers(facts, req, policy), ...noteNumbers];
-    const payload = { request: req.raw, proposed_change_pct: req.proposedChangePct ?? null, cost_increase_pct: req.costIncreasePct ?? null, pass_through_pct: Math.round(policy * 100), facts: factsForNarrative(facts), caveats: [...new Set(notes)] };
+    const payload = { request: req.raw, proposed_change_pct: req.proposedChangePct ?? null, cost_increase_pct: req.costIncreasePct ?? null, cost_share_pct: req.costSharePct ?? null, cost_share_basis: "current unit cost / current selling price", cost_pass_through_pct: req.invalidPassThrough ? null : Math.round(policy * 100), facts: factsForNarrative(facts, req, policy), caveats: [...new Set(notes)] };
     const ask: ChatMessage[] = [
-      { role: "system", content: "You write short, plain-English pricing briefs for an exporter's pricing manager. Use ONLY numbers that appear in the facts JSON, written with the same one-decimal rounding. When you state a suggested range, copy suggested_range_pct low and high exactly (for example 1.0% to 4.3%); never compute a range yourself. No new numbers, no forecasts. Each market's verdict field is final: say it as given (above, within or below the evidence) and keep the headline consistent with every market's verdict; never compare the proposal with the range yourself. When a market has cost_need_pct, add one clause on how the exporter's cost-based rise compares with the market, using cost_vs_market as given. Mention only the caveats listed in the facts JSON (for example markets that are not covered); do not add claims about methodology or data sources that are not in it." },
+      { role: "system", content: "You write short, plain-English pricing briefs for an exporter's pricing manager. Use ONLY numbers that appear in the facts JSON, written with the same rounding. Copy benchmark_range_pct low and high exactly; never compute a range yourself. This is a historical year-on-year consumer-price benchmark, not a recommended price, willingness-to-pay estimate, or forecast. Each market's verdict field is final: say it as given (above, within or below the market benchmark), keeping every market and the headline consistent. Average coverage states how many monthly or quarterly observations were available; do not call partial coverage a complete annual average or insufficient history a flat trend. cost_need_pct, when provided, is a conditional cost-recovery scenario computed from current unit cost / current selling price, stated cost change and monetary cost pass-through. It does not assume or preserve a profit margin. If cost share or a valid policy is absent, do not invent a price target from the cost increase. Use cost_vs_market exactly when comparing that scenario with the historical benchmark. No new numbers, no predictions about customers accepting a price. Mention the caveats supplied in the facts JSON and do not invent other source or methodology claims." },
       { role: "user", content: `Facts: ${JSON.stringify(payload)}\nReply with JSON only: {"headline": str (<= 25 words), "markets": {"<country code>": str (2-3 sentences: what the data says and what it means for the proposed change)}, "watch": str (one sentence on what to re-check next month)}` },
     ];
     // One time budget for the prose, retries included: the numbers never wait more than this for the words.
@@ -943,6 +955,69 @@ function numOrUndef(v: unknown): number | undefined {
   if (v === null || v === undefined || v === "") return undefined;
   const n = Number(v);
   return Number.isFinite(n) ? n : undefined;
+}
+
+/** Percentages are grounded in the request, with separate denominators and explicit signs. */
+function requestPercentages(raw: string, model: any): {
+  proposedChangePct?: number; costIncreasePct?: number; costSharePct?: number; passThrough?: number;
+  invalidCostShare: boolean; invalidPassThrough: boolean; issues: string[];
+} {
+  const matches = [...raw.matchAll(/([+＋\-−－]?)\s*(\d+(?:\.\d+)?)\s*(?:%|pct\b|percent\b|퍼센트|프로)/gi)];
+  const clauseBoundary = /[,;!?\n]|\b(?:but|and|while|whereas)\b|하지만|그런데|반면|그리고/i;
+  const found = matches.map((m, i) => {
+    const from = i ? matches[i - 1].index! + matches[i - 1][0].length : 0;
+    const end = m.index! + m[0].length;
+    const before = raw.slice(Math.max(from, m.index! - 80), m.index).split(clauseBoundary).at(-1)!;
+    const after = raw.slice(end, Math.min(matches[i + 1]?.index ?? raw.length, end + 70)).split(clauseBoundary)[0];
+    const costWords = /\bcosts?\b|원가|비용|\binput\b|\bingredient\b|\bmaterial\b|\bfreight\b/i;
+    const share = /cost[ -]*(?:share|ratio)|costs?[ -]*(?:to|\/)[ -]*(?:selling[ -]*)?price|원가\s*비중|비용\s*비중|판매가.*(?:원가|비용)|(?:원가|비용).*판매가/i.test(before)
+      || /^\s*(?:(?:unit|current)\s+)?cost[ -]*(?:share|ratio)\b|^\s*(?:원가|비용)\s*비중/i.test(after)
+      || (costWords.test(before) && /^\s*(?:of\s+)?(?:(?:the|our|current)\s+)*(?:(?:selling|sales|sale|retail)\s+)?price\b/i.test(after));
+    const pass = !share && (/\bpass(?:ed|ing)?\b|\brecover(?:y)?\b|반영|전가|회수/i.test(before)
+      || /^\s*(?:pass[ -]?(?:through|thru)|반영|전가|회수)/i.test(after));
+    const cost = !share && !pass && (costWords.test(before) || /^\s*(?:costs?\s+(?:rise|increase|growth|change)|원가\s*(?:상승|증가))/i.test(after));
+    // A later price clause cannot reverse an earlier cost change, even without punctuation.
+    const directionAfter = cost ? after.split(/\b(?:prices?|selling)\b|가격/i)[0] : after;
+    const direction = /\b(?:fall|fell|decreas\w*|reduc\w*|cut|lower\w*)\b|인하|내리|하락|감소/i.test(`${before} ${directionAfter}`);
+    const x = Number(m[2]) * (/^[\-−－]$/.test(m[1]) || (!m[1] && !share && !pass && direction) ? -1 : 1);
+    return { x, signed: !!m[1], share, pass, cost };
+  });
+  const choose = (kind: "share" | "pass" | "cost", modelValue: unknown, scale = 1) => {
+    const options = found.filter(p => p[kind]);
+    const fromModel = numOrUndef(modelValue);
+    return options.find(p => fromModel !== undefined && Math.abs(p.x - fromModel * scale) < 1e-9)?.x ?? options.at(-1)?.x;
+  };
+  const share = choose("share", model.cost_share_pct);
+  const passPct = choose("pass", model.pass_through, 100);
+  const invalidCostShare = share !== undefined && (share < 0 || share > 100);
+  const invalidPassThrough = passPct !== undefined && (passPct < 0 || passPct > 100);
+  const proposals = found.filter(p => !p.share && !p.pass && !p.cost);
+  const fromModel = numOrUndef(model.proposed_change_pct);
+  const proposal = proposals.find(p => p.signed)
+    ?? proposals.find(p => fromModel !== undefined && Math.abs(p.x - fromModel) < 1e-9)
+    ?? proposals[0];
+  const issues: string[] = [];
+  if (invalidCostShare) issues.push("Cost share must be between 0% and 100% of the current selling price; the invalid value is not reused from memory and the cost-recovery target is omitted.");
+  if (invalidPassThrough) issues.push("Cost pass-through must be between 0% and 100% of the monetary cost increase; the invalid policy is not replaced by a remembered value and the cost-recovery target is omitted.");
+  return {
+    proposedChangePct: proposal?.x,
+    costIncreasePct: choose("cost", model.cost_increase_pct),
+    costSharePct: invalidCostShare ? undefined : share,
+    passThrough: invalidPassThrough || passPct === undefined ? undefined : passPct / 100,
+    invalidCostShare, invalidPassThrough, issues,
+  };
+}
+
+/** Positive means a later observation of the same frequency; malformed/mixed periods are incomparable. */
+function comparePeriods(previous: string, current: string): number | undefined {
+  const index = (p: string) => {
+    const monthly = p.match(/^(\d{4})-(0[1-9]|1[0-2])$/);
+    if (monthly) return { frequency: "M", value: Number(monthly[1]) * 12 + Number(monthly[2]) - 1 };
+    const quarterly = p.match(/^(\d{4})-Q([1-4])$/);
+    return quarterly ? { frequency: "Q", value: Number(quarterly[1]) * 4 + Number(quarterly[2]) - 1 } : undefined;
+  };
+  const a = index(previous), b = index(current);
+  return a && b && a.frequency === b.frequency ? b.value - a.value : undefined;
 }
 
 function latestByKey(rows: Record<string, unknown>[]): Record<string, { period: unknown; yoy_pct: unknown }> {

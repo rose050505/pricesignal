@@ -156,3 +156,43 @@ test('evidence distinguishes the market comparison from the SKU rate query',()=>
   assert.match(output,/Market rates[\s\S]*?<b>Q1<\/b>/);
   assert.match(output,/SKU rates[\s\S]*?<b>Q2<\/b>/);
 });
+
+test('a cost rise without a cost share asks for the missing denominator and supplies no price target',()=>{
+  const b=browser();b.context.sample={...result(),cost:8};
+  b.run('render(sample,"costs rose 8%")');
+  const output=b.node('#out').innerHTML;
+  assert.match(output,/cost share/i);
+  assert.match(output,/needed|provide|add/i);
+  assert.doesNotMatch(output,/5\.6%|of category inflation/);
+});
+
+test('cost recovery uses the stated cost share while the market card is a historical benchmark',()=>{
+  const b=browser();
+  const fact={country:'DE',agency:'Eurostat',category:{label:'Food',latestYoy:2,avg12:2,latestPeriod:'2026-09',trend:'insufficient history',points:[],averageCount:1,averageExpected:12,averageLabel:'1 of 12 monthly observations'},suggested:{low:2,high:2},costNeed:3.4,costVsMarket:'above the market benchmark'};
+  b.context.sample={...result(),cost:8,costShare:60,facts:[fact]};
+  b.run('render(sample,"cost share 60%, costs rose 8%")');
+  const output=b.node('#out').innerHTML;
+  assert.match(output,/cost share.*60%/i);
+  assert.match(output,/cost.recovery target.*3\.4%/i);
+  assert.match(output,/benchmark point.*2\.0%/i);
+  assert.match(output,/1 of 12 monthly observations/);
+  assert.doesNotMatch(output,/12-period avg|suggested range|your costs call for|pass-through of this inflation/i);
+});
+
+test('quarterly coverage is labelled by observed quarters and SKU prices are scenarios',()=>{
+  const b=browser();
+  b.context.sample={...result(),facts:[{country:'AU',agency:'ABS',category:{label:'Food',frequency:'Q',latestYoy:2,avg12:2,latestPeriod:'2026-Q3',trend:'flat',points:[],averageLabel:'4 of 4 quarterly observations'}}],skus:[{sku:'X',product:'Food',country:'AU',currentPrice:1,currency:'AUD',yoy:2,period:'2026-Q3'}]};
+  b.run('render(sample,"AU food")');
+  const output=b.node('#out').innerHTML;
+  assert.match(output,/4 of 4 quarterly observations/);
+  assert.match(output,/Benchmark price scenario/);
+  assert.doesNotMatch(output,/Suggested new price|12-period avg/);
+});
+
+test('an invalid cost pass-through is not displayed as a valid default or remembered policy',()=>{
+  const b=browser();b.context.sample={...result(),cost:8,costShare:60,invalidPassThrough:true,passThrough:1};
+  b.run('render(sample,"pass on 150%")');
+  const output=b.node('#out').innerHTML;
+  assert.match(output,/invalid.*cost target omitted/i);
+  assert.doesNotMatch(output,/pass through 100%/i);
+});

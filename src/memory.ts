@@ -1,6 +1,6 @@
 // Agent memory on Meterless H-MEM. What PriceSignal remembers across sessions:
 //  - series mappings it had to discover ("DE food -> eurostat prc_hicp_minr CP01, view v_de_food_cp01")
-//  - the user's pricing policy ("we pass through 70% of cost inflation")
+//  - the user's pricing policy ("we recover 70% of the monetary cost increase")
 //  - outcomes of past briefs (per market), so the next brief says what changed since
 // Mappings are also kept as structured JSON tags so a recalled memory can be
 // acted on (skip discovery and onboarding) rather than only quoted.
@@ -11,7 +11,7 @@ import type { SelectionDecision } from "./selection.ts";
 
 export interface SeriesMapping { country: string; concept: string; agency: string; dataset: string; code: string; label: string; view: string; frequency: string; note?: string; scope?: string; selectionVersion?: number; selection?: SelectionDecision }
 
-export interface Outcome { country: string; concept: string; period: string; yoy: number; low: number; high: number; policy: number; proposed?: number; verdict?: string; at: string }
+export interface Outcome { country: string; concept: string; period: string; yoy: number; low: number; high: number; policy?: number; proposed?: number; verdict?: string; sourceId?: string; methodVersion?: number; at: string }
 
 export interface Recall { id: string; content: string; relevance: number; mapping?: SeriesMapping; policy?: number }
 
@@ -37,7 +37,7 @@ export class AgentMemory {
 
   rememberPolicy(passThrough: number, statement: string): string {
     const rec = this.hmem.add({
-      content: `Pricing policy: ${statement} (pass-through ${Math.round(passThrough * 100)}% of category inflation)`,
+      content: `Pricing policy: ${statement} (recover ${Math.round(passThrough * 100)}% of the monetary cost increase in the selling price)`,
       type: "preference",
       source: "pricesignal:user",
       confidence: 0.95,
@@ -49,8 +49,8 @@ export class AgentMemory {
   }
 
   /** The last request, so "same as last time" can be resolved next quarter. */
-  rememberRequest(r: { countries: string[]; concept: string; conceptWords: string[]; proposedChangePct?: number; costIncreasePct?: number; raw: string }): string {
-    const slim = { countries: r.countries, concept: r.concept, conceptWords: r.conceptWords, proposedChangePct: r.proposedChangePct, costIncreasePct: r.costIncreasePct };
+  rememberRequest(r: { countries: string[]; concept: string; conceptWords: string[]; proposedChangePct?: number; costIncreasePct?: number; costSharePct?: number; raw: string }): string {
+    const slim = { countries: r.countries, concept: r.concept, conceptWords: r.conceptWords, proposedChangePct: r.proposedChangePct, costIncreasePct: r.costIncreasePct, costSharePct: r.costSharePct };
     return this.hmem.add({
       content: `Last pricing request: markets ${r.countries.join(", ")}, category ${r.concept}${r.proposedChangePct !== undefined ? `, proposed ${r.proposedChangePct > 0 ? "+" : ""}${r.proposedChangePct}%` : ""} ("${r.raw.slice(0, 160)}")`,
       type: "general",
@@ -62,7 +62,7 @@ export class AgentMemory {
     }).id;
   }
 
-  lastRequest(): { id: string; request: { countries: string[]; concept: string; conceptWords: string[]; proposedChangePct?: number; costIncreasePct?: number } } | undefined {
+  lastRequest(): { id: string; request: { countries: string[]; concept: string; conceptWords: string[]; proposedChangePct?: number; costIncreasePct?: number; costSharePct?: number } } | undefined {
     const hit = this.structured("last-request").at(-1);
     if (!hit) return undefined;
     const rec: any = this.hmem.store.all().find((r: any) => r.id === hit.id);
@@ -73,7 +73,7 @@ export class AgentMemory {
   /** What a brief concluded for one market, so the next brief can say what changed since. */
   rememberOutcome(o: Outcome): string {
     return this.hmem.add({
-      content: `Brief outcome: ${o.country} ${o.concept} ${o.period} ${o.yoy}% YoY, suggested ${o.low}-${o.high}% at ${Math.round(o.policy * 100)}% pass-through${o.proposed !== undefined ? `, ${o.proposed > 0 ? "+" : ""}${o.proposed}% was ${o.verdict}` : ""} (${o.at.slice(0, 10)})`,
+      content: `Brief outcome: ${o.country} ${o.concept} ${o.period} ${o.yoy}% YoY, ${o.methodVersion === 2 ? "historical market benchmark" : "legacy suggested range"} ${o.low}-${o.high}%${o.policy !== undefined ? `; cost-recovery policy ${Math.round(o.policy * 100)}%` : ""}${o.sourceId ? `; source ${o.sourceId}` : ""}${o.proposed !== undefined ? `, ${o.proposed > 0 ? "+" : ""}${o.proposed}% was ${o.verdict}` : ""} (${o.at.slice(0, 10)})`,
       type: "general",
       source: "pricesignal:agent",
       confidence: 0.9,

@@ -45,7 +45,7 @@ function scriptedLlm(): any {
     const last = messages.at(-1).content as string;
     if (last.startsWith("Extract the pricing request") && last.includes("same as last time")) return { text: '{"countries":[],"concept":null,"concept_words":[],"proposed_change_pct":3,"pass_through":null}', model: "fake", provider: "fake", ms: 1 };
     if (last.startsWith("Extract the pricing request")) return { text: '{"countries":["deutschland","canada","aus"],"concept":"food","concept_words":["food"],"proposed_change_pct":5,"pass_through":0.7,"policy_statement":"we pass on 70%"}', model: "fake", provider: "fake", ms: 1 };
-    if (messages[0].content.startsWith("You write short")) return { text: '{"headline":"Food inflation is 2.5-3.9%, so +5% is above the evidence everywhere.","markets":{"DE":"Food 2.5%."},"watch":"Re-check next month."}', model: "fake", provider: "fake", ms: 1 };
+    if (messages[0].content.startsWith("You write short")) return { text: '{"headline":"Food inflation is 2.5-3.9%, so +5% is above the market benchmark everywhere.","markets":{"DE":"Food 2.5%."},"watch":"Re-check next month."}', model: "fake", provider: "fake", ms: 1 };
     // planner: let the deterministic order emerge from "Still missing"
     const miss = last.match(/Still missing: (\[.*\])/);
     const missing = miss ? JSON.parse(miss[1]) : JSON.parse(last.replace(/^Task: /, "")).needed;
@@ -67,16 +67,16 @@ test("narrative grounding rejects invented numbers", () => {
 test("narrative grounding is per market and checks the stated range", () => {
   const s = (latestYoy: number, avg12: number) => ({ concept: "snacks", label: "x", frequency: "M", sourceId: "x", latestPeriod: "2026-09", latestYoy, avg12, trend: "easing" as const, points: [{ period: "2026-03", yoy: 0.3 }] });
   const facts: any[] = [
-    { country: "DE", agency: "Eurostat", category: s(1.4, 6.1), suggested: { low: 1.0, high: 4.3, basis: "" }, verdict: "above the evidence", cite: "Q8" },
-    { country: "CA", agency: "StatCan", category: s(2.2, 4.1), suggested: { low: 1.5, high: 2.9, basis: "" }, verdict: "above the evidence", cite: "Q8" },
+    { country: "DE", agency: "Eurostat", category: s(1.4, 6.1), suggested: { low: 1.0, high: 4.3, basis: "" }, verdict: "above the market benchmark", cite: "Q8" },
+    { country: "CA", agency: "StatCan", category: s(2.2, 4.1), suggested: { low: 1.5, high: 2.9, basis: "" }, verdict: "above the market benchmark", cite: "Q8" },
   ];
   const req: any = { raw: "", countries: ["DE", "CA"], concept: "snacks", conceptWords: [], proposedChangePct: 5, unknownCountries: [] };
   // Run 01 on 26 Oct: the DE paragraph claimed "0.3% to 1%" while the computed range was 1.0-4.3%.
-  const wrong = checkNarrative({ headline: "+5% is above the evidence", markets: { DE: "Snacks 1.4% YoY; a 70% pass-through supports roughly 0.3% to 1%, so +5% is above.", CA: "Food 2.2% YoY, down from 4.1%." } }, [], facts, req, 0.7);
+  const wrong = checkNarrative({ headline: "+5% is above the market benchmark", markets: { DE: "Snacks 1.4% YoY; a 70% pass-through supports roughly 0.3% to 1%, so +5% is above.", CA: "Food 2.2% YoY, down from 4.1%." } }, [], facts, req, 0.7);
   assert.ok(wrong.includes("0.3") || wrong.includes("0.3–1%"), JSON.stringify(wrong));
   // A number from another market is not allowed in this market's paragraph.
   assert.ok(checkNarrative({ headline: "ok", markets: { DE: "DE is at 2.2%." } }, [], facts, req, 0.7).includes("2.2"));
-  const right = checkNarrative({ headline: "+5% is above the evidence in DE and CA", markets: { DE: "Snacks 1.4% YoY (12-month average 6.1%); 70% pass-through supports 1.0% to 4.3%.", CA: "Food eased from 4.1% to 2.2%; the range is 1.5–2.9%." } }, allowedNumbers(facts, req, 0.7), facts, req, 0.7);
+  const right = checkNarrative({ headline: "+5% is above the market benchmark in DE and CA", markets: { DE: "Snacks 1.4% YoY (12-month average 6.1%); The historical benchmark is 1.0% to 4.3%.", CA: "Food eased from 4.1% to 2.2%; the range is 1.5–2.9%." } }, allowedNumbers(facts, req, 0.7), facts, req, 0.7);
   assert.deepEqual(right, []);
 });
 
@@ -98,7 +98,7 @@ test("end-to-end offline, then memory reuse", async () => {
   const b1 = await a1.run("our gochujang & snacks: is food inflation in deutschland, canada & aus still hot? thinking +5% for Q1, we pass on 70%");
   assert.equal(b1.facts.length, 3);
   assert.ok(b1.facts.every((f) => f.category && f.suggested), "every market has computed facts");
-  assert.equal(b1.facts[0].verdict, "above the evidence");
+  assert.equal(b1.facts[0].verdict, "above the market benchmark");
   assert.match(b1.markdown!, /discontinued/);
   assert.equal(discovers, 8, "6 market series + condiments for the 2 markets that sell gochujang");
 
@@ -163,7 +163,7 @@ test("internal price list is joined, and 'same as last time' recalls the last re
   assert.equal(de.rateLabel, "Salt, condiments and sauces");
   assert.equal(de.yoy, 1.9);
   assert.notEqual(de.yoy, f.category!.latestYoy);
-  assert.equal(de.rangeLow, Math.round(0.7 * Math.min(de.yoy, de.avg12!) * 10 + 1e-9) / 10);
+  assert.equal(de.rangeLow, Math.round(Math.min(de.yoy, de.avg12!) * 10 + 1e-9) / 10);
   assert.equal(de.low, Math.round(4.99 * (1 + de.rangeLow! / 100) * 100) / 100);
   assert.ok(b1.views.some((v) => v.key === "DE:condiments"), "the condiments series was onboarded for pricing");
   assert.equal(de.atProposed, Math.round(4.99 * 1.05 * 100) / 100);
@@ -176,7 +176,7 @@ test("internal price list is joined, and 'same as last time' recalls the last re
   // H-MEM remembered the first brief's outcome per market, so the second brief says what changed.
   assert.ok(b2.sinceLast?.length, "since-last-brief section present");
   assert.match(b2.sinceLast![0], /no new official release/);
-  assert.match(b2.sinceLast![0], /last time \+5% was above the evidence; now \+3% is/);
+  assert.match(b2.sinceLast![0], /last time \+5% was above the market benchmark; now \+3% is/);
   assert.match(b2.markdown!, /Since your last brief/);
   assert.match(b2.policySource!, /remembered/);
 });
@@ -275,7 +275,7 @@ test("a slow model call is hedged: a second identical request is sent and the fi
           await new Promise((r) => setTimeout(r, 300));
           throw new Error("AbortError: This operation was aborted"); // the time budget ran out waiting for this one reply
         }
-        return { text: '{"headline":"+5% is above the evidence in DE.","markets":{"DE":"Food is easing."},"watch":"Re-check next month."}', model: "f", provider: "f", ms: 1 };
+        return { text: '{"headline":"+5% is above the market benchmark in DE.","markets":{"DE":"Food is easing."},"watch":"Re-check next month."}', model: "f", provider: "f", ms: 1 };
       }
       return { text: '{"actions":[{"action":"discover_and_onboard","args":{"country":"DE","concept":"food"}},{"action":"discover_and_onboard","args":{"country":"DE","concept":"all_items"}}]}', model: "f", provider: "f", ms: 1 };
     },
@@ -285,7 +285,7 @@ test("a slow model call is hedged: a second identical request is sent and the fi
     onboardFn: async (_z: any, c: Candidate, concept: string) => ({ view: `v_${c.country.toLowerCase()}_${concept}`, table: "t", ok: true, existed: false, rows: 9, latest: "2026-09", sql: [] }),
   });
   const b = await agent.run("DE food +5%");
-  assert.equal(b.narrative?.headline, "+5% is above the evidence in DE.");
+  assert.equal(b.narrative?.headline, "+5% is above the market benchmark in DE.");
   assert.equal(narrativeCalls, 2);
   assert.ok(b.trace.some((e) => /^narrative: no reply after .* - sent the same request again/.test(e.title)), b.trace.map((e) => e.title).join("\n"));
 });
@@ -437,26 +437,26 @@ test("each agent numbers its own Zetaris statements, does not rewire a shared ru
 test("grounding also checks verdict words, stray 6/12, 'supports X to Y' ranges, non-text prose and market names", () => {
   const s = (latestYoy: number, avg12: number) => ({ concept: "snacks", label: "x", frequency: "M", sourceId: "x", latestPeriod: "2026-09", latestYoy, avg12, yoy6Back: undefined, trend: "easing" as const, points: [] });
   const facts: any[] = [
-    { country: "DE", agency: "Eurostat", category: s(1.4, 6.1), suggested: { low: 1.0, high: 4.3, basis: "" }, verdict: "above the evidence", cite: "Q8", monthsStale: 1 },
-    { country: "CA", agency: "StatCan", category: s(2.2, 4.1), suggested: { low: 1.5, high: 2.9, basis: "" }, verdict: "above the evidence", cite: "Q8", monthsStale: 1 },
+    { country: "DE", agency: "Eurostat", category: s(1.4, 6.1), suggested: { low: 1.0, high: 4.3, basis: "" }, verdict: "above the market benchmark", cite: "Q8", monthsStale: 1 },
+    { country: "CA", agency: "StatCan", category: s(2.2, 4.1), suggested: { low: 1.5, high: 2.9, basis: "" }, verdict: "above the market benchmark", cite: "Q8", monthsStale: 1 },
   ];
   const req: any = { raw: "", countries: ["DE", "CA"], concept: "snacks", conceptWords: [], proposedChangePct: 5, unknownCountries: [] };
   const allowed = allowedNumbers(facts, req, 0.7);
   const chk = (n: any) => checkNarrative(n, allowed, facts, req, 0.7);
   // found by the 26 Oct review (all passed before)
-  assert.ok(chk({ headline: "+5% is within the evidence in DE and CA - go ahead.", markets: { DE: "+5% is within the evidence." } }).length, "verdict flipped");
+  assert.ok(chk({ headline: "+5% is within the market benchmark in DE and CA - go ahead.", markets: { DE: "+5% is within the market benchmark." } }).length, "verdict flipped");
   assert.ok(chk({ headline: "ok", markets: { DE: "German snack prices are up 12% and climbing 6% a quarter." } }).length, "invented 12% / 6%");
-  assert.ok(chk({ headline: "ok", markets: { DE: "A 70% pass-through supports 1.4% to 6.1%, so +5% is above the evidence." } }).length, "latest/average pair called the supported range");
+  assert.ok(chk({ headline: "ok", markets: { DE: "A 70% pass-through supports 1.4% to 6.1%, so +5% is above the market benchmark." } }).length, "latest/average pair called the supported range");
   assert.ok(chk({ headline: "ok", markets: { DE: { text: "Snacks up 99.9%" } } }).length, "prose that is not text");
   assert.ok(chk({ headline: "ok", markets: { Germany: "Range is 2.2% to 4.1%." } }).length, "market keyed by name is checked as that market");
   // what real briefs say keeps passing
   assert.deepEqual(chk({ headline: "+5% Q1 increase exceeds food inflation evidence across DE and CA.", markets: {
-    DE: "German food inflation for Sugar, confectionery and desserts was 1.4% YoY in September 2026, with a 12-month average of 6.1%. The proposed +5% increase falls above the evidence range of 1.0% to 4.3%, placing it above the evidence.",
-    CA: "Canadian food inflation was 2.2% YoY, down from a 12-month average of 4.1%; it eased from 4.1% to 2.2% over 6 months. The proposed +5% exceeds the evidence range of 1.5% to 2.9%, so it is above the evidence.",
+    DE: "German food inflation for Sugar, confectionery and desserts was 1.4% YoY in September 2026, with a 12-month average of 6.1%. The proposed +5% increase falls above the market benchmark range of 1.0% to 4.3%, placing it above the market benchmark.",
+    CA: "Canadian food inflation was 2.2% YoY, down from a 12-month average of 4.1%; it eased from 4.1% to 2.2% over 6 months. The proposed +5% exceeds the evidence range of 1.5% to 2.9%, so it is above the market benchmark.",
   }, watch: "Re-check the 12-period averages next month." }), []);
 });
 
-test("cost side: a stated cost increase becomes a cost-based need, compared with each market's range", async () => {
+test("cost side: unit-cost share makes a cost recovery scenario comparable with market rates", async () => {
   const parseWith = (j: string | Error, q: string, memory = new AgentMemory(fs.mkdtempSync(path.join(os.tmpdir(), "psig-")))) =>
     new PriceSignalAgent({ llm: async () => { if (j instanceof Error) throw j; return { text: j, model: "f", provider: "f", ms: 1 }; }, sql: new FakeZ(), memory }).parse(q);
   const q = "DE and CA food: our costs rose 8% - is +4% ok? we pass on 70%";
@@ -471,33 +471,34 @@ test("cost side: a stated cost increase becomes a cost-based need, compared with
   assert.equal(k.costIncreasePct, 8);
   assert.equal(k.proposedChangePct, 4);
 
-  // computed in code: 70% of +8% = +5.6%, then compared with each market's range
+  // 60% cost share × 8% cost rise × 70% recovery = 3.4% of the current selling price
+  a.costSharePct = 60;
   const rows: Record<string, unknown>[] = [];
   for (const [c, base] of [["DE", 1.0], ["CA", 6.0]] as const) for (let m = 1; m <= 9; m++) rows.push({ country: c, concept: "food", category_label: "Food", frequency: "M", period: `2026-0${m}`, yoy_pct: base, source_id: "x" });
   const facts = buildFacts(rows, { ...a, countries: ["DE", "CA"] }, "Q1", 0.7, new Date("2026-10-15"));
   const de = facts.find((f) => f.country === "DE")!;
   const ca = facts.find((f) => f.country === "CA")!;
-  assert.equal(de.costNeed, 5.6);
-  assert.equal(de.costVsMarket, "ahead of the market");
-  assert.equal(ca.suggested!.high, 4.2);
-  assert.equal(ca.costVsMarket, "ahead of the market");
+  assert.equal(de.costNeed, 3.4);
+  assert.equal(de.costVsMarket, "above the market benchmark");
+  assert.equal(ca.suggested!.high, 6);
+  assert.equal(ca.costVsMarket, "below the market benchmark");
   const md = renderBrief({ request: a, facts, notes: [], passThrough: 0.7, compared: { id: "Q1", sql: "", columns: [], rows: [], ms: 0 }, sqlLog: [], views: [], ms: 1, trace: [] } as any);
-  assert.match(md, /Your costs: \+8% .* at 70% pass-through that is a \+5\.6% price rise/);
+  assert.match(md, /Current unit cost is 60% of current selling price; recovering 70% of the incremental cost gives a \+3\.4% selling-price scenario/);
   assert.match(md, /## Costs vs\. the market/);
   // the prose may talk about the cost need without tripping the proposal-verdict check
   const allowed = allowedNumbers(facts, a, 0.7);
-  assert.deepEqual(checkNarrative({ headline: "+4% is above the evidence in DE and below it in CA.", markets: { DE: "Food is 1.0% YoY; the range is 0.7% to 0.7%, so +4% is above the evidence. Your cost need of 5.6% is above the range too." } }, allowed, facts, a, 0.7), []);
+  assert.deepEqual(checkNarrative({ headline: "+4% is above the market benchmark in DE and below it in CA.", markets: { DE: "Food is 1.0% YoY; the benchmark is 1.0% to 1.0%, so +4% is above the market benchmark. Your cost-recovery scenario of 3.4% is above the benchmark too." } }, allowed, facts, a, 0.7), []);
 });
 
-test("an 'above' verdict says what pass-through the proposal would need", () => {
+test("a market comparison does not infer a cost pass-through from consumer inflation", () => {
   const rows: Record<string, unknown>[] = [];
   for (let m = 1; m <= 12; m++) rows.push({ country: "CA", concept: "food", category_label: "Food", frequency: "M", period: `2025-${String(m).padStart(2, "0")}`, yoy_pct: m === 12 ? 2.2 : 4.27, source_id: "x" });
   const req: any = { raw: "", countries: ["CA"], concept: "food", conceptWords: [], proposedChangePct: 5, unknownCountries: [] };
   const [ca] = buildFacts(rows, req, "Q1", 0.7, new Date("2026-01-15"));
   assert.equal(ca.category!.avg12, 4.1);
-  assert.equal(ca.verdict, "above the evidence");
-  assert.equal(ca.passThroughNeeded, 122, "5 / max(2.2, 4.1) = 122%");
-  assert.match(renderBrief({ request: req, facts: [ca], notes: [], passThrough: 0.7, compared: { id: "Q1", sql: "", columns: [], rows: [], ms: 0 }, sqlLog: [], views: [], ms: 1, trace: [] } as any), /above the evidence \(needs 122% pass-through\)/);
+  assert.equal(ca.verdict, "above the market benchmark");
+  assert.equal(ca.passThroughNeeded, undefined, "consumer inflation does not identify the exporter's cost denominator");
+  assert.doesNotMatch(renderBrief({ request: req, facts: [ca], notes: [], passThrough: 0.7, compared: { id: "Q1", sql: "", columns: [], rows: [], ms: 0 }, sqlLog: [], views: [], ms: 1, trace: [] } as any), /needs .*pass-through/);
   const [within] = buildFacts(rows, { ...req, proposedChangePct: 2 }, "Q1", 0.7, new Date("2026-01-15"));
   assert.equal(within.passThroughNeeded, undefined);
 });
@@ -505,17 +506,17 @@ test("an 'above' verdict says what pass-through the proposal would need", () => 
 test("headline verdicts are checked market by market, also when the markets differ", () => {
   const s = (latestYoy: number, avg12: number) => ({ concept: "food", label: "Food", frequency: "M", sourceId: "x", latestPeriod: "2026-09", latestYoy, avg12, yoy6Back: undefined, trend: "easing" as const, points: [] });
   const f = (country: string, lo: number, hi: number, verdict: string, yoy: number, avg: number): any => ({ country, agency: "a", category: s(yoy, avg), suggested: { low: lo, high: hi, basis: "" }, verdict, cite: "Q1" });
-  const facts = [f("DE", 1.0, 4.3, "within the evidence", 1.4, 6.1), f("CA", 1.5, 2.9, "above the evidence", 2.2, 4.1), f("AU", 0.4, 3.4, "within the evidence", 0.6, 4.9)];
+  const facts = [f("DE", 1.0, 4.3, "within the market benchmark", 1.4, 6.1), f("CA", 1.5, 2.9, "above the market benchmark", 2.2, 4.1), f("AU", 0.4, 3.4, "within the market benchmark", 0.6, 4.9)];
   const req: any = { raw: "", countries: ["DE", "CA", "AU"], concept: "food", conceptWords: [], proposedChangePct: 3, unknownCountries: [] };
   const chk = (headline: string, fs = facts) => checkNarrative({ headline, markets: {} }, allowedNumbers(fs, req, 0.7), fs, req, 0.7);
   // headlines Nemotron (or the code) actually wrote on 26 Oct
-  assert.deepEqual(chk("+3% is within the evidence in DE and AU; above the evidence in CA."), []);
+  assert.deepEqual(chk("+3% is within the market benchmark in DE and AU; above the market benchmark in CA."), []);
   assert.deepEqual(chk("+3% increase: within or above evidence across DE, CA, and AU"), []);
-  const two = [f("CA", 1.5, 2.9, "within the evidence", 2.2, 4.1), f("AU", 2.1, 2.2, "below the evidence", 3.0, 3.2)];
+  const two = [f("CA", 1.5, 2.9, "within the market benchmark", 2.2, 4.1), f("AU", 2.1, 2.2, "below the market benchmark", 3.0, 3.2)];
   assert.deepEqual(chk("Proposed 2% increase: within evidence in CA, below in AU", two), []);
   // wrong attributions are caught
-  assert.ok(chk("+3% is above the evidence in DE, CA and AU.").length);
-  assert.ok(chk("+3% is within the evidence in CA; above in DE and AU").length);
+  assert.ok(chk("+3% is above the market benchmark in DE, CA and AU.").length);
+  assert.ok(chk("+3% is within the market benchmark in CA; above in DE and AU").length);
 });
 
 test("remembered mappings skip the planner but still validate live views and recover stale ones", async () => {
