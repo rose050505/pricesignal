@@ -4,8 +4,10 @@ import * as abs from "./abs.ts";
 import * as statcan from "./statcan.ts";
 import { Candidate, Concept, Country, DiscoverResult, EU_CODES, OnboardPlan } from "./types.ts";
 import { SqlRunner, runDdl } from "../zetaris.ts";
+import { hasFreshPeriod, isUsableObservationCount } from "./validation.ts";
 
 export * from "./types.ts";
+export * from "./validation.ts";
 
 export const AGENCY_FOR: Record<Country, { agency: Candidate["agency"]; name: string; measure: string }> = {
   ...(Object.fromEntries(EU_CODES.map((c) => [c, { agency: "eurostat", name: "Eurostat (HICP)", measure: "HICP annual rate of change" }])) as Record<(typeof EU_CODES)[number], { agency: Candidate["agency"]; name: string; measure: string }>),
@@ -49,25 +51,36 @@ export async function bootstrap(z: SqlRunner): Promise<string[]> {
   return log;
 }
 
-export interface OnboardResult { view: string; table: string; ok: boolean; existed: boolean; rows: number; latest?: string; error?: string; sql: string[] }
+export interface OnboardResult {
+  view: string; table: string; ok: boolean; existed: boolean; rows: number; latest?: string; error?: string; sql: string[];
+  /** Series REST table/view counts, excluding shared database/schema bootstrap objects. */
+  createdObjects?: number; existingObjects?: number;
+}
 
-/** Register the series as a Zetaris REST table + decoding view, then prove it returns rows. */
-export async function onboard(z: SqlRunner, c: Candidate, concept: Concept): Promise<OnboardResult> {
+/** Register the series, then verify actual decoded observations and their release period. */
+export async function onboard(z: SqlRunner, c: Candidate, concept: Concept, now = new Date()): Promise<OnboardResult> {
   await bootstrap(z);
   const plan = onboardPlan(c, concept);
   let existed = false;
+  let createdObjects = 0, existingObjects = 0;
   for (const s of plan.statements) {
     const r = await runDdl(z, s);
-    if (!r.ok) return { view: plan.view, table: plan.table, ok: false, existed, rows: 0, error: r.error, sql: plan.statements };
+    if (!r.ok) return { view: plan.view, table: plan.table, ok: false, existed, createdObjects, existingObjects, rows: 0, error: r.error, sql: plan.statements };
     existed = existed || r.existed;
+    if (r.existed) existingObjects++;
+    else createdObjects++;
   }
   try {
     const check = await z.run(`SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.${plan.view} WHERE yoy_pct IS NOT NULL`);
-    const n = Number(check.rows[0]?.[0] ?? 0);
-    const latest = check.rows[0]?.[1] as string | undefined;
-    return { view: plan.view, table: plan.table, ok: n > 0, existed, rows: n, latest, error: n > 0 ? undefined : "view returned no rows", sql: plan.statements };
+    const count = check.rows[0]?.[0];
+    const observedPeriod = check.rows[0]?.[1];
+    const hasRows = isUsableObservationCount(count);
+    const fresh = hasFreshPeriod(observedPeriod, c.frequency, now);
+    const latest = typeof observedPeriod === "string" ? observedPeriod : undefined;
+    const error = !hasRows ? "view returned no rows or an invalid observation count" : !fresh ? `view has no fresh ${c.frequency} observation period (latest ${String(observedPeriod ?? "missing")})` : undefined;
+    return { view: plan.view, table: plan.table, ok: hasRows && fresh, existed, createdObjects, existingObjects, rows: hasRows ? Number(count) : 0, latest, error, sql: plan.statements };
   } catch (e) {
-    return { view: plan.view, table: plan.table, ok: false, existed, rows: 0, error: String(e).slice(0, 300), sql: plan.statements };
+    return { view: plan.view, table: plan.table, ok: false, existed, createdObjects, existingObjects, rows: 0, error: String(e).slice(0, 300), sql: plan.statements };
   }
 }
 

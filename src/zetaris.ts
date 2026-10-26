@@ -8,6 +8,20 @@ export interface SqlResult { id: string; sql: string; columns: string[]; rows: u
 
 export interface SqlRunner { run(sql: string, opts?: { limit?: number }): Promise<SqlResult> }
 
+/** Hitting the requested cap does not prove that the response contains every row. */
+export class IncompleteResultError extends Error {
+  constructor(readonly rowCount: number, readonly limit: number) {
+    super(`Zetaris returned ${rowCount} rows at or above the requested limit of ${limit}. The result may be incomplete and is not used for calculations.`);
+    this.name = "IncompleteResultError";
+  }
+}
+
+/** The name check also recognizes this error across class or serialization boundaries. */
+export function isIncompleteResultError(error: unknown): error is IncompleteResultError {
+  return error instanceof IncompleteResultError ||
+    (typeof error === "object" && error !== null && "name" in error && error.name === "IncompleteResultError");
+}
+
 let counter = 0;
 export function resetCiteIds(): void {
   counter = 0;
@@ -17,12 +31,17 @@ export function nextCiteId(): string {
   return `Q${counter}`;
 }
 
-function extractColumns(j: any, width: number): string[] {
+function metadataColumns(j: any): string[] | undefined {
   const cand = j.columns ?? j.header ?? j.headers ?? j.schema ?? j.metadata?.columns ?? j.columnNames;
   if (Array.isArray(cand)) {
-    const names = cand.map((c: any) => (typeof c === "string" ? c : c?.name ?? c?.columnName ?? c?.label ?? String(c)));
-    if (names.length === width) return names;
+    return cand.map((c: any) => (typeof c === "string" ? c : c?.name ?? c?.columnName ?? c?.label ?? String(c)));
   }
+  return undefined;
+}
+
+function extractColumns(j: any, width: number): string[] {
+  const names = metadataColumns(j);
+  if (names?.length === width) return names;
   return Array.from({ length: width }, (_, i) => `c${i}`);
 }
 
@@ -35,6 +54,7 @@ export class ZetarisClient implements SqlRunner {
 
   async run(sql: string, opts: { limit?: number } = {}): Promise<SqlResult> {
     const statement = sql.trim().replace(/;\s*$/, "");
+    const limit = opts.limit ?? 1000;
     const t0 = Date.now();
     const r = await fetch(`${this.baseUrl}/sql-editor/sqls/run`, {
       method: "POST",
@@ -44,7 +64,7 @@ export class ZetarisClient implements SqlRunner {
         "X-Request-ID": randomUUID(),
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ queryId: randomUUID(), sql: statement, source: "SqlEditor", limit: opts.limit ?? 1000 }),
+      body: JSON.stringify({ queryId: randomUUID(), sql: statement, source: "SqlEditor", limit }),
       signal: AbortSignal.timeout(180_000),
     });
     const text = await r.text();
@@ -57,9 +77,19 @@ export class ZetarisClient implements SqlRunner {
     }
     if (j.error || j.status === "FAILED" || j.success === false) throw new Error(`Zetaris error: ${JSON.stringify(j.error ?? j.message ?? j).slice(0, 400)}`);
     const data: unknown[] = Array.isArray(j.data) ? j.data : Array.isArray(j.rows) ? j.rows : [];
+    // No verified pagination or truncation marker is available. Even an exactly-full
+    // result is rejected conservatively rather than presenting a partial history as complete.
+    if (data.length >= limit) throw new IncompleteResultError(data.length, limit);
+    if (data[0] && typeof data[0] === "object" && !Array.isArray(data[0])) {
+      const declared = metadataColumns(j);
+      const columns = declared?.length ? declared : Object.keys(data[0]);
+      const rows = data.map((row) => columns.map((column) =>
+        row && typeof row === "object" ? (row as Record<string, unknown>)[column] : undefined));
+      return { id: nextCiteId(), sql: statement, columns, rows, ms: Date.now() - t0 };
+    }
     const rows = data.map((row) => (Array.isArray(row) ? row : row && typeof row === "object" ? Object.values(row as object) : [row]));
     const width = rows[0]?.length ?? 0;
-    const columns = data[0] && !Array.isArray(data[0]) && typeof data[0] === "object" ? Object.keys(data[0] as object) : extractColumns(j, width);
+    const columns = extractColumns(j, width);
     return { id: nextCiteId(), sql: statement, columns, rows, ms: Date.now() - t0 };
   }
 }

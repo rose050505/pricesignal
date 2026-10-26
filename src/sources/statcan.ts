@@ -54,7 +54,7 @@ export async function discover(country: Country, concept: Concept): Promise<Disc
 
 export function onboardSql(c: Candidate, concept: Concept): OnboardPlan {
   const table = zetarisName("statcan", c.country, c.code, "live");
-  const view = zetarisName("v", c.country, concept, c.code, "live");
+  const view = zetarisName("v", c.country, concept, c.code, "live", "yoyv2");
   const label = c.label.replace(/'/g, "''");
   return {
     table,
@@ -70,12 +70,19 @@ export function onboardSql(c: Candidate, concept: Concept): OnboardPlan {
       `CREATE SCHEMASTORE VIEW ${view} WITH CONTAINER psig AS
 SELECT '${c.country}' AS country, '${concept}' AS concept, '${c.code}' AS category_code, '${label}' AS category_label,
        'M' AS frequency, period,
-       ROUND(100.0 * (idx / LAG(idx, 12) OVER (ORDER BY period) - 1), 2) AS yoy_pct,
+       CASE WHEN CAST(SUBSTR(period, 1, 4) AS INT) - CAST(SUBSTR(previous_period, 1, 4) AS INT) = 1
+                  AND previous_idx > 0
+            THEN ROUND(100.0 * (idx / previous_idx - 1), 2) END AS yoy_pct,
        'statcan:18100004:${c.code}' AS source_id
 FROM (
+  SELECT period, idx,
+         LAG(idx, 1) OVER (PARTITION BY SUBSTR(period, 6) ORDER BY period) AS previous_idx,
+         LAG(period, 1) OVER (PARTITION BY SUBSTR(period, 6) ORDER BY period) AS previous_period
+  FROM (
   SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx
   FROM ${STATCAN_DB.toLowerCase()}.${table}
   LATERAL VIEW explode(object.vectorDataPoint) AS dp
+  ) decoded
 ) s`,
     ],
   };

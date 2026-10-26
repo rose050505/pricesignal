@@ -6,11 +6,12 @@
 import { EventEmitter } from "node:events";
 import { chat, ChatMessage, ChatResult } from "./llm.ts";
 import { AgentMemory } from "./memory.ts";
-import { SqlResult, SqlRunner, rowsAsObjects } from "./zetaris.ts";
+import { SqlResult, SqlRunner, rowsAsObjects, isIncompleteResultError } from "./zetaris.ts";
 import { AGENCY_FOR, COMPARE_COLUMNS, Candidate, Concept, Country, CONCEPT_WORDS, compareSql, discover, monthsBack, normalizeCountry, onboard, skuSearchWords, isBroadFoodLabel } from "./sources/index.ts";
 import { MarketFacts, Brief, RunMetrics, SkuLine, buildFacts, renderBrief, signedPct, marketKey, allowedNumbers, checkNarrative, factsForNarrative, seriesFacts, marketBenchmark, Narrative, NarrativeIssue } from "./brief.ts";
 import { PRICE_DB, PRICING_COLUMNS, SKU_RATE_COLUMNS, ensurePriceList, priceTable, priceView, pricingSql, skuCategoriesSql, skuRatesSql } from "./sources/pricelist.ts";
 import { BROADER_COVERAGE_REASON, SELECTION_VERSION, skuScope, selectionMessages, validateSelections, fallbackSelection, type SelectionGroup, type SelectionDecision } from "./selection.ts";
+import { sourceDecoderVersion, hasFreshPeriod, isUsableObservationCount } from "./sources/validation.ts";
 
 export interface Request {
   raw: string;
@@ -412,6 +413,13 @@ Reply with JSON only.`;
             this.log("memory", `nothing remembered for ${country} ${concept} - discovering it`);
             return { not_in_memory: true, discovered: await this.execute({ action: "discover_and_onboard", args: { country, concept } }, req, s) };
           }
+          const decoderVersion = sourceDecoderVersion(AGENCY_FOR[country].agency);
+          if ((hit.mapping.decoderVersion ?? 1) !== decoderVersion) {
+            const note = `${country} ${concept}: the series decoder changed; the old mapping must be rediscovered and verified before reuse.`;
+            if (!s.notes.includes(note)) s.notes.push(note);
+            this.log("memory", `mapping ${hit.id} uses decoder ${hit.mapping.decoderVersion ?? 1}; decoder ${decoderVersion} requires fresh onboarding`);
+            return { error: "remembered decoder version is obsolete; discover and verify the current decoder" };
+          }
           if (!marketCategoryUsable(concept, hit.mapping)) {
             const note = `${country}: remembered ${hit.mapping.label} is not usable for the requested ${concept} comparison; checking official alternatives.`;
             if (!s.notes.includes(note)) s.notes.push(note);
@@ -420,14 +428,13 @@ Reply with JSON only.`;
             return { error: "remembered category failed the market coverage guard; discover again" };
           }
           const probe = await this.sql.run(`SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.${hit.mapping.view} WHERE yoy_pct IS NOT NULL`);
-          const n = Number(probe.rows[0]?.[0] ?? 0);
-          if (!n) return { error: `remembered view psig.${hit.mapping.view} returned no rows; onboard again` };
-          const latest = String(probe.rows[0]?.[1] ?? "");
-          const age = monthsBetween(latest, monthsBack(0));
-          if (age > (hit.mapping.frequency === "Q" ? 6 : 3)) {
-            this.log("memory", `remembered view psig.${hit.mapping.view} stops at ${latest} (${age} months old) - not reusing it`);
-            return { error: `remembered view psig.${hit.mapping.view} is stale (latest ${latest}); discover_and_onboard again` };
+          const count = probe.rows[0]?.[0];
+          const latest = probe.rows[0]?.[1];
+          if (!isUsableObservationCount(count) || !hasFreshPeriod(latest, hit.mapping.frequency)) {
+            this.log("memory", `remembered view psig.${hit.mapping.view} has invalid, empty, future or stale observations (latest ${String(latest ?? "unknown")}) - not reusing it`);
+            return { error: `remembered view psig.${hit.mapping.view} has no usable fresh dated rows; discover_and_onboard again` };
           }
+          const n = Number(count);
           s.views.set(s.key(country, concept), { view: hit.mapping.view, label: hit.mapping.label, via: "memory", note: hit.mapping.note, memoryId: hit.id });
           const remembered = `${country}: ${hit.mapping.note} (remembered from an earlier run)`;
           if (hit.mapping.note && !s.notes.includes(remembered)) s.notes.push(remembered);
@@ -508,8 +515,11 @@ Reply with JSON only.`;
             this.log("warn", `refused ${c?.label ?? "invalid candidate"} for ${country} ${concept}: market coverage guard failed`);
             return { error: "candidate failed the market coverage guard; use a suitable category or verified Food alternative" };
           }
-          const r = await this.onboardFn(this.sql, c, concept);
-          const how = r.existed ? "Zetaris already had it - reused and verified" : "created REST table + view";
+          let r = await this.onboardFn(this.sql, c, concept);
+          if (r.ok && (!isUsableObservationCount(r.rows) || !hasFreshPeriod(r.latest, c.frequency))) {
+            r = { ...r, ok: false, error: `view has no usable fresh dated rows (latest ${String(r.latest ?? "unknown")})` };
+          }
+          const how = onboardingSummary(r);
           this.log("onboard", `${r.ok ? "onboarded" : "FAILED"} ${c.agency} ${c.code} -> psig.${r.view}${r.ok ? ` (${how}: ${r.rows} rows, latest ${r.latest})` : `: ${r.error}`}`, { candidate: c, result: { ...r, sql: r.sql } });
           if (r.ok) {
             const own: string[] = [...((s.candidates as any).get(s.key(country, concept) + ":notes") ?? [])];
@@ -520,7 +530,7 @@ Reply with JSON only.`;
             }
             const note = own.join(" ") || undefined;
             s.views.set(s.key(country, concept), { view: r.view, label: c.label, via: "onboarded", note });
-            const id = memory.rememberMapping({ country, concept, agency: c.agency, dataset: c.dataset, code: c.code, label: c.label, view: r.view, frequency: c.frequency, note });
+            const id = memory.rememberMapping({ country, concept, agency: c.agency, dataset: c.dataset, code: c.code, label: c.label, view: r.view, frequency: c.frequency, decoderVersion: sourceDecoderVersion(c.agency), note });
             this.log("memory", `stored mapping ${id}`);
           }
           return { ok: r.ok, view: r.view, rows: r.rows, latest: r.latest, error: r.error };
@@ -639,6 +649,11 @@ Reply with JSON only.`;
       this.log("pricing", `federated query ${res.id} joined ${skus.length} SKUs with official category series (${skus.filter(s => s.coarser).length} broader proxies) -> ${skus.length} SKUs priced`);
       return { skus, query: res };
     } catch (e) {
+      if (isIncompleteResultError(e)) {
+        this.log("warn", `SKU pricing omitted because the query result is incomplete: ${String(e).slice(0, 140)}`);
+        notes.push("SKU prices are omitted because the query result was incomplete or reached its row limit; market figures are still shown.");
+        return undefined;
+      }
       if (!allowLegacyFallback) {
         this.log("warn", `SKU category lookup or pricing unavailable (${String(e).slice(0, 140)}); keeping the market brief without substituting an unverified category`);
         notes.push("SKU pricing is unavailable because category lookup or pricing failed; market figures are still shown, but SKU prices are omitted.");
@@ -666,11 +681,13 @@ Reply with JSON only.`;
       const scope = skuScope(products);
       const hit = memory.findMapping(country, concept, scope);
       const mapping = hit?.mapping;
-      if (hit && mapping?.selectionVersion === SELECTION_VERSION && mapping.selection?.by === "model" && !memory.hmem.store.get(hit.id)?.tags.includes("review")) {
+      const decoderCurrent = mapping && (mapping.decoderVersion ?? 1) === sourceDecoderVersion(AGENCY_FOR[country].agency);
+      if (hit && mapping && !decoderCurrent) this.log("memory", `product-checked SKU mapping ${hit.id} uses an obsolete decoder - selecting and verifying again`);
+      if (hit && decoderCurrent && mapping?.selectionVersion === SELECTION_VERSION && mapping.selection?.by === "model" && !memory.hmem.store.get(hit.id)?.tags.includes("review")) {
         try {
           const probe = await this.sql.run(`SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.${mapping.view} WHERE yoy_pct IS NOT NULL`);
-          const latest = String(probe.rows[0]?.[1] ?? "");
-          if (Number(probe.rows[0]?.[0] ?? 0) > 0 && hasFreshSkuPeriod(latest, mapping.frequency)) {
+          const latest = probe.rows[0]?.[1];
+          if (isUsableObservationCount(probe.rows[0]?.[0]) && hasFreshPeriod(latest, mapping.frequency)) {
             const selected: SkuView = { view: mapping.view, note: mapping.note, selectionReason: mapping.selection.fit === "broader" ? BROADER_COVERAGE_REASON : mapping.selection.reason, selectionSource: "memory", selectionFit: mapping.selection.fit };
             skuViews.set(id, selected);
             views.set(`${id}:${scope}`, { view: mapping.view, label: mapping.label, via: "memory", note: mapping.note, memoryId: hit.id });
@@ -742,9 +759,9 @@ Reply with JSON only.`;
         const candidate = group.candidates[choice.candidate];
         try {
           const result = await this.onboardFn(this.sql, candidate, group.concept);
-          this.log("onboard", `${result.ok ? "onboarded" : "FAILED"} SKU ${candidate.agency} ${candidate.code} -> psig.${result.view}${result.ok ? ` (${result.existed ? "Zetaris already had it - reused and verified" : "created REST table + view"}: ${result.rows} rows, latest ${result.latest})` : `: ${result.error}`}`, { candidate, selection: choice, result });
+          this.log("onboard", `${result.ok ? "onboarded" : "FAILED"} SKU ${candidate.agency} ${candidate.code} -> psig.${result.view}${result.ok ? ` (${onboardingSummary(result)}: ${result.rows} rows, latest ${result.latest})` : `: ${result.error}`}`, { candidate, selection: choice, result });
           if (!result.ok) return undefined;
-          if (result.rows <= 0 || !hasFreshSkuPeriod(result.latest, candidate.frequency)) {
+          if (!isUsableObservationCount(result.rows) || !hasFreshPeriod(result.latest, candidate.frequency)) {
             this.log("warn", `selected SKU view psig.${result.view} has no fresh dated rows (latest ${result.latest ?? "unknown"}); it cannot be used for pricing`);
             return undefined;
           }
@@ -775,7 +792,7 @@ Reply with JSON only.`;
       skuViews.set(group.id, { view: result.view, note, selectionReason: decision.reason, selectionSource: decision.by, selectionFit: decision.fit });
       let memoryId: string | undefined;
       if (decision.by === "model") {
-        memoryId = memory.rememberMapping({ country: group.country, concept: group.concept, agency: candidate.agency, dataset: candidate.dataset, code: candidate.code, label: candidate.label, view: result.view, frequency: candidate.frequency, note, scope, selectionVersion: SELECTION_VERSION, selection: decision });
+        memoryId = memory.rememberMapping({ country: group.country, concept: group.concept, agency: candidate.agency, dataset: candidate.dataset, code: candidate.code, label: candidate.label, view: result.view, frequency: candidate.frequency, decoderVersion: sourceDecoderVersion(candidate.agency), note, scope, selectionVersion: SELECTION_VERSION, selection: decision });
         this.log("memory", `stored product-checked SKU mapping ${memoryId}`, { scope, products: group.products, selection: decision });
       }
       views.set(`${group.id}:${scope}`, { view: result.view, label: candidate.label, via: "onboarded", note, memoryId });
@@ -820,15 +837,17 @@ Reply with JSON only.`;
       const s = f.category ?? f.allItems;
       if (!s || !f.suggested) continue;
       const prev = memory.lastOutcome(f.country, s.concept);
+      const decoderVersion = sourceDecoderVersion(AGENCY_FOR[f.country].agency);
       let retainNewerOutcome = false;
       if (prev) {
         const o = prev.outcome;
         const when = o.at.slice(0, 10);
         const parts: string[] = [];
-        let comparable = o.methodVersion === 2 && !!o.sourceId && o.sourceId === s.sourceId;
+        let comparable = o.methodVersion === 2 && !!o.sourceId && o.sourceId === s.sourceId && (o.decoderVersion ?? 1) === decoderVersion;
         if (o.methodVersion !== 2) parts.push("methodology changed: the earlier policy-scaled range and current historical market benchmark are not directly comparable");
         else if (!o.sourceId) parts.push("the earlier source identity was not recorded; the outcomes are not directly comparable");
         else if (o.sourceId !== s.sourceId) parts.push(`official source changed (${o.sourceId} -> ${s.sourceId}); the outcomes are not directly comparable`);
+        else if ((o.decoderVersion ?? 1) !== decoderVersion) parts.push(`series decoder calculation changed (version ${o.decoderVersion ?? 1} -> ${decoderVersion}); the outcomes are not directly comparable, and this change is not evidence of an official data revision`);
         else {
           const order = comparePeriods(o.period, s.latestPeriod);
           const ranges = `market benchmark ${o.low.toFixed(1)}–${o.high.toFixed(1)}% -> ${f.suggested.low.toFixed(1)}–${f.suggested.high.toFixed(1)}%`;
@@ -851,7 +870,7 @@ Reply with JSON only.`;
         }
         out.push(`${f.country} ${s.label} (last brief ${when}, ${prev.id}): ${parts.join("; ")}.`);
       }
-      if (!retainNewerOutcome) memory.rememberOutcome({ country: f.country, concept: s.concept, period: s.latestPeriod, yoy: s.latestYoy, low: f.suggested.low, high: f.suggested.high, policy: req.invalidPassThrough ? undefined : policy, proposed: req.proposedChangePct, verdict: f.verdict, sourceId: s.sourceId, methodVersion: 2, at: new Date().toISOString() });
+      if (!retainNewerOutcome) memory.rememberOutcome({ country: f.country, concept: s.concept, period: s.latestPeriod, yoy: s.latestYoy, low: f.suggested.low, high: f.suggested.high, policy: req.invalidPassThrough ? undefined : policy, proposed: req.proposedChangePct, verdict: f.verdict, sourceId: s.sourceId, methodVersion: 2, decoderVersion, at: new Date().toISOString() });
     }
     if (out.length) this.log("memory", `compared with ${out.length} remembered brief outcome(s): ${out.map((x) => x.split(" (")[0]).join(", ")}`, out);
     return out;
@@ -899,6 +918,11 @@ Reply with JSON only.`;
 type ExecCtx = { views: Map<string, any>; candidates: Map<string, Candidate[]>; notes: string[]; key: (a: string, b: string) => string; pairs: { country: Country; concept: Concept }[]; getCompared: () => SqlResult | undefined; setCompared: (c: SqlResult) => void };
 type SkuView = { view: string; note?: string; selectionReason?: string; selectionSource?: "model" | "memory" | "fallback"; selectionFit?: "specific" | "broader" };
 
+function onboardingSummary(result: { existed: boolean; createdObjects?: number; existingObjects?: number }): string {
+  if (result.createdObjects !== undefined && result.existingObjects !== undefined) return `created ${result.createdObjects} SQL object${result.createdObjects === 1 ? "" : "s"}; ${result.existingObjects} already existed; verified`;
+  return result.existed ? "Zetaris already had it - reused and verified" : "created REST table + view";
+}
+
 /** A label match alone must not turn a narrow catalog hit into an official Food proxy. */
 function isOfficialBroadFood(candidate: { agency: string; code: string; label: string }): boolean {
   const code = new Map([["eurostat", "CP01"], ["abs", "20001"], ["statcan", "v41690974"]]).get(candidate.agency);
@@ -914,16 +938,6 @@ function marketCategoryUsable(concept: Concept, candidate: { agency: string; cod
     || /\b(?:snacks?|chips?|crisps?|savoury|savory|potato)\b/i.test(candidate.label);
 }
 
-/** Both reused and newly onboarded SKU views need a valid, non-future release within the freshness window. */
-function hasFreshSkuPeriod(period: unknown, frequency: string, now = new Date()): boolean {
-  if (typeof period !== "string") return false;
-  const match = frequency === "M" ? period.match(/^(\d{4})-(0[1-9]|1[0-2])$/) : frequency === "Q" ? period.match(/^(\d{4})-Q([1-4])$/) : null;
-  if (!match) return false;
-  const month = Number(match[1]) * 12 + Number(match[2]) * (frequency === "Q" ? 3 : 1) - 1;
-  const age = now.getUTCFullYear() * 12 + now.getUTCMonth() - month;
-  return age >= 0 && age <= (frequency === "Q" ? 6 : 3);
-}
-
 /** Run fn for every item: items of different agencies in parallel, items of the same agency one after another. */
 async function byAgency<T extends { country: Country }>(items: T[], fn: (item: T) => Promise<void>): Promise<void> {
   const groups = new Map<string, T[]>();
@@ -936,17 +950,6 @@ async function byAgency<T extends { country: Country }>(items: T[], fn: (item: T
     for (const it of list) await fn(it);
   }));
 }
-function monthsBetween(from: string, to: string): number {
-  const idx = (p: string) => {
-    const m = p.match(/^(\d{4})-(\d{2})$/);
-    if (m) return Number(m[1]) * 12 + Number(m[2]) - 1;
-    const q = p.match(/^(\d{4})-Q(\d)$/);
-    return q ? Number(q[1]) * 12 + Number(q[2]) * 3 - 1 : NaN;
-  };
-  const d = idx(to) - idx(from);
-  return Number.isFinite(d) ? d : 0;
-}
-
 export function extractJson(text: string): any | null {
   const t = text.replace(/```(?:json)?/g, "").trim();
   const start = t.indexOf("{");

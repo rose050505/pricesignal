@@ -17,7 +17,7 @@ const candidate = (country: Country, code: string, label: string, broad = false)
 function fixture() {
   const memory = new AgentMemory(fs.mkdtempSync(path.join(os.tmpdir(), "psig-sku-selection-")));
   const legacy = memory.rememberMapping({ country: "DE", concept: "snacks", agency: "eurostat", dataset: "fixture", code: "sugar", label: "Sugar, confectionery and desserts", view: "legacy_de_snacks", frequency: "M" });
-  for (const country of ["DE", "AU"] as const) for (const concept of ["food", "all_items"]) memory.rememberMapping({ country, concept, agency: country === "DE" ? "eurostat" : "abs", dataset: "fixture", code: concept, label: concept === "food" ? "Food" : "All items", view: `market_${country}_${concept}`, frequency: "M" });
+  for (const country of ["DE", "AU"] as const) for (const concept of ["food", "all_items"]) memory.rememberMapping({ country, concept, agency: country === "DE" ? "eurostat" : "abs", decoderVersion: country === "DE" ? 1 : 2, dataset: "fixture", code: concept, label: concept === "food" ? "Food" : "All items", view: `market_${country}_${concept}`, frequency: "M" });
   const registered = new Map<string, { country: Country; concept: string; candidate: Candidate }>([
     ["legacy_de_snacks", { country: "DE", concept: "snacks", candidate: candidate("DE", "sugar", "Sugar, confectionery and desserts") }],
   ]);

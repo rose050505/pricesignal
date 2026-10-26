@@ -214,7 +214,7 @@ test("onboarding says whether Zetaris objects were created or already there, and
   const b = await agent.run("DE food +5%");
   const titles = b.trace.map((e) => e.title);
   assert.ok(titles.some((t) => /^already in Zetaris \(not created again\): CREATE LIGHTNING REST TABLE/.test(t)), titles.join("\n"));
-  assert.ok(titles.some((t) => /onboarded eurostat CP01 .*Zetaris already had it - reused and verified/.test(t)), titles.join("\n"));
+  assert.ok(titles.some((t) => /onboarded eurostat CP01 .*created 0 SQL objects; 2 already existed; verified/.test(t)), titles.join("\n"));
   assert.ok(!titles.some((t) => /created REST table/.test(t)));
 });
 

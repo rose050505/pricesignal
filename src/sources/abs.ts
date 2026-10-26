@@ -73,9 +73,8 @@ export async function discover(country: Country, concept: Concept, words = CONCE
 
 export function onboardSql(c: Candidate, concept: Concept): OnboardPlan {
   const table = zetarisName("abs", c.country, "cpi", c.code, c.frequency);
-  const view = zetarisName("v", c.country, concept, c.code);
+  const view = zetarisName("v", c.country, concept, c.code, c.frequency, "yoyv2");
   const label = c.label.replace(/'/g, "''");
-  const lag = c.frequency === "M" ? 12 : 4;
   return {
     table,
     view,
@@ -91,14 +90,21 @@ export function onboardSql(c: Candidate, concept: Concept): OnboardPlan {
       `CREATE SCHEMASTORE VIEW ${view} WITH CONTAINER psig AS
 SELECT '${c.country}' AS country, '${concept}' AS concept, '${c.code}' AS category_code, '${label}' AS category_label,
        '${c.frequency}' AS frequency, period,
-       ROUND(100.0 * (idx / LAG(idx, ${lag}) OVER (ORDER BY period) - 1), 2) AS yoy_pct,
+       CASE WHEN CAST(SUBSTR(period, 1, 4) AS INT) - CAST(SUBSTR(previous_period, 1, 4) AS INT) = 1
+                  AND previous_idx > 0
+            THEN ROUND(100.0 * (idx / previous_idx - 1), 2) END AS yoy_pct,
        'abs:CPI:1.${c.code}.10.50.${c.frequency}' AS source_id
 FROM (
+  SELECT period, idx,
+         LAG(idx, 1) OVER (PARTITION BY SUBSTR(period, 6) ORDER BY period) AS previous_idx,
+         LAG(period, 1) OVER (PARTITION BY SUBSTR(period, 6) ORDER BY period) AS previous_period
+  FROM (
   SELECT period_label.id AS period, CAST(obs_value[0] AS DOUBLE) AS idx
   FROM ${ABS_DB.toLowerCase()}.${table}
   LATERAL VIEW posexplode(data.structures[0].dimensions.observation[0].values) AS obs_position, period_label
   LATERAL VIEW explode(from_json(to_json(data.dataSets[0].series.\`0:0:0:0:0\`.observations), 'map<string,array<double>>')) AS obs_key, obs_value
   WHERE CAST(obs_key AS INT) = obs_position
+  ) decoded
 ) s`,
     ],
   };
