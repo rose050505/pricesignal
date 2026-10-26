@@ -6,7 +6,7 @@ Open Agent Hackathon 2026 · Track 01 — Solving Fragmented Intelligence · bui
 
 ![PriceSignal: agent trace on the left, a verdict per market and new prices per SKU on the right](docs/img/ui.png)
 
-*A live run on 26 Oct 2026 with an empty memory: every model call in the trace was answered by NVIDIA Nemotron 3.5 Lightning through Meterless Nightshift. The numbers were on screen at 37 s and the brief, with Nemotron's paragraph per market, at 67 s. Real outputs with full traces are in [`examples/`](examples/).*
+*A live UI run on 27 Oct 2026 with empty memory and existing Zetaris registrations: NVIDIA Nemotron 3.5 Lightning through Meterless Nightshift parsed the question, planned discovery and wrote the checked market paragraphs. Market numbers appeared at 29.7 s; the full brief finished at 69.2 s. The cost line is computed from the stated +8% cost rise and 70% pass-through. Earlier recorded outputs and full traces are in [`examples/`](examples/).*
 
 ---
 
@@ -22,7 +22,7 @@ A small food exporter selling into Germany, Canada and Australia wants to know w
 | Category scheme | ECOICOP v2 (`coicop18`) | product/vector ids | ABS index codes |
 | Gotcha we hit | the dataset everyone links to (`prc_hicp_manr`) stopped at 2025-12 and was replaced by `prc_hicp_minr` | the data methods used in public recipes are POST-only; the GET method returns a top-level array | a broad query is too large for one fetch; series must be scoped to one key |
 
-Assembling a comparable answer by hand means three APIs, three formats and three category schemes every pricing round, so small exporters often just pick a round number. PriceSignal answered a cold start (nothing in memory, nothing registered in Zetaris) in 48 s in our recorded run, and keeps the receipts; a repeat question skips discovery and onboarding entirely.
+Assembling a comparable answer by hand means three APIs, three formats and three category schemes every pricing round, so small exporters often just pick a round number. PriceSignal answered a cold start (nothing in memory, nothing registered in Zetaris) in 48 s in our recorded run, and keeps the receipts; a repeat question reuses remembered mappings after checking their live rows and freshness. When every requested mapping is remembered, it also skips the planning model call; stale or unavailable views go back through discovery.
 
 ## What it does
 
@@ -33,7 +33,7 @@ Assembling a comparable answer by hand means three APIs, three formats and three
 5. **Joins the company's own price list.** The exporter's internal price list (SKU, market, product category, current shelf price) is a Zetaris REST table too. A second federated query joins each SKU with the official series of its own category in its market (gochujang → condiments, chips → snacks, ramen → food; missing category series are onboarded first), so the brief ends with a suggested new price per SKU.
 6. **Computes the facts in code** (latest year-on-year rate, 12-period average, trend, staleness, suggested range, verdict, new SKU prices) and lets the model write only the prose. Numbers in the prose must match a computed fact, the request or the policy, a stated range must be the computed range, and "within / above / below the evidence" must be the computed verdict (re-checking replies recorded on 26 Oct found Nemotron calling a +3% proposal "above" a 0.4–3.4% range, which the earlier number-only check let through); otherwise the model rewrites once and then a deterministic summary is used.
 7. **Weighs your costs against the market.** If the question says how much your costs rose ("our costs rose 8%", "원가가 8% 올랐는데"), code computes the cost-based rise (pass-through × cost increase) and says for each market whether it runs ahead of, within or behind what consumer prices there support. For an "above" verdict the brief also gives the pass-through the proposal would need ("+5% would need 122% pass-through of Canadian food inflation").
-8. **Remembers** (Meterless H-MEM): series mappings, the user's pricing policy and the last request persist across sessions. "Same as last time, but +3%?" is resolved from memory, and remembered mappings skip discovery and onboarding.
+8. **Remembers** (Meterless H-MEM): series mappings, the user's pricing policy and the last request persist across sessions. "Same as last time, but +3%?" is resolved from memory, and remembered mappings skip discovery and onboarding while they still pass live freshness checks. If all requested mappings are remembered, no planning model turn is needed. The UI reports actual model requests (including hedges and retries), planning requests, discovery calls and reused views.
 
 **What the suggested range means.** Range = your pass-through share × how much consumer prices for that category have moved in that market over the latest month and the 12-month average. It is a market-side check ("how much room do shelf prices in this category give us?"), not a measure of your own costs.
 
@@ -86,7 +86,7 @@ Germany, Canada and Australia are the demo markets. Because Eurostat publishes H
 - **SKU categories** are matched to the nearest published series by label, so honey butter chips in Germany are priced on Eurostat's "Sugar, confectionery and desserts" and in Canada on Food; the SKU table names the series used for each product.
 - **The range is a market-side check** on consumer prices, not a cost model; it is often narrow, so most proposals land above or below it. The cost lens uses the cost increase you state, not your cost records.
 - **The price list is sample data** for a fictional exporter.
-- **Speed** depends on the model's response time, which varied from 1 s to 43 s per call in our runs: 36–113 s per question in `examples/`. The numbers are shown as soon as they are computed; the prose follows.
+- **Speed** depends on the model's response time, which varied from 1 s to 43 s per call in our runs: 36–113 s per question in `examples/`. Market numbers are shown immediately after the federated comparison, before SKU discovery and pricing finish; SKU prices and the checked prose follow. A disconnected UI retries the event stream for up to 10 s, preserving available numbers and replaying the latest snapshot on reconnection.
 
 ## Robustness: live runs in `examples/` (26 Oct 2026, Nemotron via Nightshift)
 

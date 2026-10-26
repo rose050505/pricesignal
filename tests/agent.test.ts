@@ -517,3 +517,87 @@ test("headline verdicts are checked market by market, also when the markets diff
   assert.ok(chk("+3% is above the evidence in DE, CA and AU.").length);
   assert.ok(chk("+3% is within the evidence in CA; above in DE and AU").length);
 });
+
+test("remembered mappings skip the planner but still validate live views and recover stale ones", async () => {
+  const memory = new AgentMemory(fs.mkdtempSync(path.join(os.tmpdir(), "psig-warm-")));
+  let plannerCalls = 0;
+  let discoveries = 0;
+  let stale = false;
+  class WarmZ extends FakeZ {
+    async run(sql: string): Promise<SqlResult> {
+      const r = await super.run(sql);
+      if (stale && /^SELECT COUNT/.test(sql) && /v_de_food/.test(sql)) r.rows = [[9, "2000-01"]];
+      return r;
+    }
+  }
+  const deps = () => ({
+    memory, sql: new WarmZ(),
+    llm: async (m: any[]) => {
+      if (m[0].content.startsWith("You are PriceSignal")) plannerCalls++;
+      return scriptedLlm()(m);
+    },
+    discoverFn: async (country: any, concept: string) => {
+      discoveries++;
+      return { country, concept, candidates: [cand(country, concept)], notes: [] };
+    },
+    onboardFn: async (_z: any, c: Candidate, concept: string) => ({ view: `v_${c.country.toLowerCase()}_${concept}`, table: "t", ok: true, existed: false, rows: 9, latest: "2026-09", sql: [] }),
+  });
+  await new PriceSignalAgent(deps()).run("DE CA AU food +5%, pass on 70%");
+  plannerCalls = 0;
+  discoveries = 0;
+  const z = new WarmZ();
+  const warm = await new PriceSignalAgent({ ...deps(), sql: z }).run("same as last time, +3%");
+  assert.equal(plannerCalls, 0, "remembered mappings should need no planning model turn");
+  assert.equal(discoveries, 0, "all known categories are reused");
+  assert.equal(warm.metrics?.plannerCalls, 0);
+  assert.equal(warm.metrics?.discoveries, 0);
+  assert.equal(warm.metrics?.reusedViews, warm.views.length);
+  assert.ok(warm.metrics!.modelCalls >= 2, "parsing and narrative still use the model");
+  assert.ok(warm.metrics!.numbersMs! <= warm.ms);
+  assert.ok(z.sqls.filter(q => /^SELECT COUNT/.test(q)).length >= 6, "freshness is still checked against Zetaris");
+  assert.ok(warm.views.every(v => v.via === "memory"));
+  assert.equal(warm.request.proposedChangePct, 3);
+  stale = true;
+  discoveries = 0;
+  const recovered = await new PriceSignalAgent(deps()).run("same as last time, +3%");
+  assert.equal(plannerCalls, 0, "stale known mappings recover through discovery without a planner");
+  assert.equal(discoveries, 1, "only the stale market/category is rediscovered");
+  assert.ok(recovered.views.some(v => v.key === "DE:food" && v.via === "onboarded"));
+  assert.equal(recovered.facts.length, 3);
+});
+
+test("market facts reach the UI before a blocked SKU query, then pricing is added without changing the market facts", async () => {
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let reached!: () => void;
+  const skuStarted = new Promise<void>(resolve => { reached = resolve; });
+  class SlowSkuZ extends FakeZ {
+    async run(sql: string): Promise<SqlResult> {
+      if (/SELECT DISTINCT country, sku_category/.test(sql)) { reached(); await gate; }
+      return super.run(sql);
+    }
+  }
+  const agent = new PriceSignalAgent({
+    memory: new AgentMemory(fs.mkdtempSync(path.join(os.tmpdir(), "psig-partial-"))),
+    sql: new SlowSkuZ(), llm: scriptedLlm(),
+    discoverFn: async (country: any, concept: string) => ({ country, concept, candidates: [cand(country, concept)], notes: [] }),
+    onboardFn: async (_z: any, c: Candidate, concept: string) => ({ view: `v_${c.country.toLowerCase()}_${concept}`, table: "t", ok: true, existed: false, rows: 9, latest: "2026-09", sql: [] }),
+  });
+  const partials: any[] = [];
+  agent.on("partial", b => partials.push(b));
+  const running = agent.run("DE CA AU food +5%, pass on 70%");
+  try {
+    await skuStarted;
+    assert.equal(partials.length, 1, "the market numbers must be visible even while SKU loading is blocked");
+    assert.equal(partials[0].facts.length, 3);
+    assert.equal(partials[0].skus, undefined);
+    assert.equal(partials[0].partialStage, "markets");
+  } finally { release(); }
+  const final = await running;
+  assert.equal(partials.length, 2);
+  assert.equal(partials[1].partialStage, "pricing");
+  assert.ok(partials[1].skus.length);
+  assert.deepEqual(partials[0].facts, final.facts);
+  assert.ok(partials[0].ms <= partials[1].ms);
+  assert.ok(partials[0].sqlLog.length < final.sqlLog.length, "the first partial is a snapshot, not a mutable SQL log");
+});

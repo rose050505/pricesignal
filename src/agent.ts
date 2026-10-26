@@ -8,7 +8,7 @@ import { chat, ChatMessage, ChatResult } from "./llm.ts";
 import { AgentMemory } from "./memory.ts";
 import { SqlResult, SqlRunner, rowsAsObjects } from "./zetaris.ts";
 import { AGENCY_FOR, COMPARE_COLUMNS, Candidate, Concept, Country, CONCEPT_WORDS, compareSql, discover, monthsBack, normalizeCountry, onboard } from "./sources/index.ts";
-import { MarketFacts, Brief, SkuLine, buildFacts, renderBrief, signedPct, marketKey, allowedNumbers, checkNarrative, factsForNarrative, seriesFacts, Narrative, NarrativeIssue } from "./brief.ts";
+import { MarketFacts, Brief, RunMetrics, SkuLine, buildFacts, renderBrief, signedPct, marketKey, allowedNumbers, checkNarrative, factsForNarrative, seriesFacts, Narrative, NarrativeIssue } from "./brief.ts";
 import { PRICE_DB, PRICING_COLUMNS, SKU_RATE_COLUMNS, ensurePriceList, priceTable, priceView, pricingSql, skuCategoriesSql, skuRatesSql } from "./sources/pricelist.ts";
 
 export interface Request {
@@ -58,6 +58,7 @@ export class PriceSignalAgent extends EventEmitter {
   /** the Zetaris runner as this agent uses it: allowlist, trace, and this run's own statement numbers (Q1, Q2, ...) */
   private sql: SqlRunner;
   private cite = 0;
+  private metrics: RunMetrics = { modelCalls: 0, plannerCalls: 0, discoveries: 0, reusedViews: 0 };
   readonly trace: TraceEvent[] = [];
   readonly sqlLog: SqlResult[] = [];
 
@@ -65,6 +66,8 @@ export class PriceSignalAgent extends EventEmitter {
     super();
     const base = deps.llm ?? chat;
     this.llm = (async (messages: any, opts: any = {}) => {
+      this.metrics.modelCalls++;
+      if (messages[0]?.content === SYSTEM_PLANNER) this.metrics.plannerCalls++;
       const o = this.providerSlow ? { ...opts, attempts: 1, timeoutMs: Math.min(opts.timeoutMs ?? 45_000, 45_000) } : opts;
       try {
         return await base(messages, o);
@@ -259,20 +262,23 @@ Reply with JSON only.`;
     }
     const key = (c: string, k: string) => `${c}:${k}`;
 
+    const rememberedPairs = pairs.filter((p) => memory.findMapping(p.country, p.concept)?.mapping);
     const messages: ChatMessage[] = [
       { role: "system", content: SYSTEM_PLANNER },
-      { role: "user", content: `Task: ${JSON.stringify({ request: raw, needed: pairs, concept_words: req.conceptWords, in_memory: pairs.filter((p) => memory.findMapping(p.country, p.concept)?.mapping) })}` },
+      { role: "user", content: `Task: ${JSON.stringify({ request: raw, needed: pairs, concept_words: req.conceptWords, in_memory: rememberedPairs })}` },
     ];
     let compared: SqlResult | undefined;
     let comparedViews = -1; // views.size when the last federated query ran
     let badReplies = 0;
-    let autopilot = false;
+    let autopilot = rememberedPairs.length === pairs.length;
+    if (autopilot) this.log("plan", "all needed series have remembered mappings - skipping the planner; verifying the live Zetaris views");
 
     // A pair is settled when it has a view, or when its agency was asked and has no usable series (":gaveup").
     const unsettled = () => pairs.filter((p) => !views.has(key(p.country, p.concept)) && !candidates.has(key(p.country, p.concept) + ":gaveup"));
     for (let step = 0; step < this.maxSteps; step++) {
       const missing = unsettled();
       let batch: { action: string; args: any }[] = [];
+      if (step === 0 && autopilot) batch = pairs.map((p) => ({ action: "use_memory_mapping", args: p }));
       if (!missing.length && !views.size) break;
       if (!missing.length && (!compared || comparedViews !== views.size)) {
         // Every needed series is ready: the federated comparison is the only sensible next step, no model turn needed.
@@ -347,18 +353,24 @@ Reply with JSON only.`;
       if (!views.has(key(country, concept))) await this.execute({ action: "discover_and_onboard", args: { country, concept } }, req, ctx);
       return views.get(key(country, concept));
     };
+    const snapshotMetrics = (): RunMetrics => ({ ...this.metrics, reusedViews: [...views.values()].filter((v) => v.via === "memory").length });
+    // Market facts are useful immediately; do not hide them behind slower SKU discovery and pricing.
+    this.metrics.numbersMs = Date.now() - t0;
+    const marketPartial: Brief = { request: req, facts, notes: [...notes], passThrough: policy, policySource, compared, sqlLog: [...this.sqlLog], views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: this.metrics.numbersMs, trace: [...this.trace], metrics: snapshotMetrics(), partialStage: "markets" };
+    this.log("progress", `market numbers ready in ${(this.metrics.numbersMs / 1000).toFixed(1)} s - pricing SKUs and writing the summary`);
+    this.emit("partial", marketPartial);
     // The narrative only needs the market facts, so the model writes it while Zetaris prices the SKUs.
     const narrativeP = this.narrate(req, facts, [...notes], policy);
     const pricing = await this.priceList(req, views, facts, policy, ensureView);
     const sinceLast = this.compareWithLastBrief(facts, req, policy);
     // Everything in the brief except the prose is ready: let the UI show it while the model finishes writing.
-    const partial: Brief = { request: req, facts, notes, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, sinceLast, compared, sqlLog: [...this.sqlLog], views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: this.trace };
+    const partial: Brief = { request: req, facts, notes, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, sinceLast, compared, sqlLog: [...this.sqlLog], views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: [...this.trace], metrics: snapshotMetrics(), partialStage: "pricing" };
     this.emit("partial", partial);
     const { narrative, issue: narrativeIssue } = await narrativeP;
     memory.rememberRequest(req);
-    const brief: Brief = { request: req, facts, notes, narrative, narrativeIssue, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, sinceLast, compared, sqlLog: this.sqlLog, views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: this.trace };
+    const brief: Brief = { request: req, facts, notes, narrative, narrativeIssue, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, sinceLast, compared, sqlLog: this.sqlLog, views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: this.trace, metrics: snapshotMetrics() };
     brief.markdown = renderBrief(brief);
-    this.log("done", `brief ready in ${Math.round(brief.ms / 1000)} s (${this.sqlLog.length} SQL statements, ${[...views.values()].filter((v) => v.via === "memory").length} views reused from memory)`);
+    this.log("done", `brief ready in ${Math.round(brief.ms / 1000)} s (${this.sqlLog.length} SQL statements, ${[...views.values()].filter((v) => v.via === "memory").length} views reused from memory; ${this.metrics.modelCalls} model calls, ${this.metrics.plannerCalls} planner calls, ${this.metrics.discoveries} discoveries)`);
     return brief;
   }
 
@@ -393,6 +405,7 @@ Reply with JSON only.`;
         }
         case "use_memory_mapping": {
           if (!country) return { error: "country must be one of the supported market codes" };
+          s.candidates.set(s.key(country, concept) + ":memtried", []);
           const hit = memory.findMapping(country, concept);
           if (!hit?.mapping) {
             // Nothing in H-MEM for this pair: discover it now instead of spending another planner turn on the error.
@@ -420,6 +433,7 @@ Reply with JSON only.`;
           const words = concept === req.concept ? req.conceptWords : undefined;
           let d: Awaited<ReturnType<typeof discover>>;
           try {
+            this.metrics.discoveries++;
             d = await this.discoverFn(country, concept, words);
           } catch (e) {
             // An agency that does not answer counts as tried: report it once instead of asking it again every step.

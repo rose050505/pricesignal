@@ -12,21 +12,16 @@ import { AgentMemory } from "./memory.ts";
 import { ZetarisClient } from "./zetaris.ts";
 import { providerConfig, providerStatus } from "./llm.ts";
 import { COMPARE_COLUMNS } from "./sources/index.ts";
+import { publishRun, subscribeRun, type Run } from "./run-stream.ts";
 
 loadEnv();
 const PORT = Number(env("PSIG_PORT", "5177"));
 const memory = new AgentMemory();
-interface Run { events: TraceEvent[]; listeners: Set<http.ServerResponse>; done: boolean; result?: unknown; error?: string }
 const runs = new Map<string, Run>();
 
 function send(res: http.ServerResponse, code: number, body: unknown, type = "application/json"): void {
   res.writeHead(code, { "Content-Type": type, "Cache-Control": "no-store" });
   res.end(typeof body === "string" ? body : JSON.stringify(body));
-}
-
-function push(run: Run, data: unknown, event = "message"): void {
-  const line = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
-  for (const l of run.listeners) l.write(line);
 }
 
 const server = http.createServer(async (req, res) => {
@@ -59,20 +54,20 @@ const server = http.createServer(async (req, res) => {
       const agent = new PriceSignalAgent({ sql: new ZetarisClient(), memory });
       agent.on("event", (e: TraceEvent) => {
         run.events.push(e);
-        push(run, e);
+        publishRun(run, e);
       });
-      agent.on("partial", (b: Brief) => push(run, { ...toResult(b), partial: true }, "partial"));
+      agent.on("partial", (b: Brief) => publishRun(run, { ...toResult(b), partial: true }, "partial"));
       agent
         .run(question)
         .then((b) => {
           run.result = toResult(b);
           run.done = true;
-          push(run, run.result, "result");
+          publishRun(run, run.result, "result");
         })
         .catch((e) => {
           run.error = String(e);
           run.done = true;
-          push(run, { error: run.error }, "failure");
+          publishRun(run, { error: run.error }, "failure");
         });
       return send(res, 200, { id });
     }
@@ -81,10 +76,8 @@ const server = http.createServer(async (req, res) => {
       const run = runs.get(m[1]);
       if (!run) return send(res, 404, { error: "unknown run" });
       res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-store", Connection: "keep-alive" });
-      for (const e of run.events) res.write(`event: message\ndata: ${JSON.stringify(e)}\n\n`);
-      if (run.done) res.write(run.error ? `event: failure\ndata: ${JSON.stringify({ error: run.error })}\n\n` : `event: result\ndata: ${JSON.stringify(run.result)}\n\n`);
-      run.listeners.add(res);
-      req.on("close", () => run.listeners.delete(res));
+      const unsubscribe = subscribeRun(run, res);
+      req.on("close", unsubscribe);
       return;
     }
     send(res, 404, { error: "not found" });
@@ -95,7 +88,7 @@ const server = http.createServer(async (req, res) => {
 
 /** What the browser gets for a brief (also sent early, without the prose, as a "partial" event). */
 function toResult(b: Brief) {
-  return { markdown: b.markdown ?? "", narrative: b.narrative ?? null, narrativeIssue: b.narrativeIssue ?? null, facts: b.facts, notes: [...new Set(b.notes)], views: b.views, ms: b.ms, passThrough: b.passThrough, policySource: b.policySource, skus: b.skus ?? [], sinceLast: b.sinceLast ?? [], proposed: b.request.proposedChangePct ?? null, cost: b.request.costIncreasePct ?? null, costRemembered: !!b.request.costRemembered, pricing: b.pricingQuery ? { id: b.pricingQuery.id, sql: b.pricingQuery.sql } : null, compared: { id: b.compared.id, sql: b.compared.sql, columns: COMPARE_COLUMNS, rows: b.compared.rows }, sql: b.sqlLog.map((q) => ({ id: q.id, sql: q.sql, rows: q.rows.length, ms: q.ms })) };
+  return { markdown: b.markdown ?? "", narrative: b.narrative ?? null, narrativeIssue: b.narrativeIssue ?? null, facts: b.facts, notes: [...new Set(b.notes)], views: b.views, ms: b.ms, metrics: b.metrics, partialStage: b.partialStage, passThrough: b.passThrough, policySource: b.policySource, skus: b.skus ?? [], sinceLast: b.sinceLast ?? [], proposed: b.request.proposedChangePct ?? null, cost: b.request.costIncreasePct ?? null, costRemembered: !!b.request.costRemembered, pricing: b.pricingQuery ? { id: b.pricingQuery.id, sql: b.pricingQuery.sql } : null, compared: { id: b.compared.id, sql: b.compared.sql, columns: COMPARE_COLUMNS, rows: b.compared.rows }, sql: b.sqlLog.map((q) => ({ id: q.id, sql: q.sql, rows: q.rows.length, ms: q.ms })) };
 }
 
 server.listen(PORT, () => console.log(`[pricesignal] UI on http://localhost:${PORT}`));

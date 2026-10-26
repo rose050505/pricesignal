@@ -53,8 +53,19 @@ const NARRATIVE_ISSUE: Record<NarrativeIssue, string> = {
   budget: "the narrative time budget ran out",
 };
 
+export interface RunMetrics {
+  /** Actual model requests, including hedges and retries. */
+  modelCalls: number;
+  plannerCalls: number;
+  discoveries: number;
+  reusedViews: number;
+  numbersMs?: number;
+}
+
 export interface Brief {
   request: Request;
+  metrics?: RunMetrics;
+  partialStage?: "markets" | "pricing";
   facts: MarketFacts[];
   notes: string[];
   narrative?: Narrative;
