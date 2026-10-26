@@ -5,6 +5,7 @@ import type { Request, TraceEvent } from "./agent.ts";
 import type { SqlResult } from "./zetaris.ts";
 import { AGENCY_FOR, Country, normalizeCountry } from "./sources/index.ts";
 import { priceView } from "./sources/pricelist.ts";
+import type { PeriodAlignment } from "./alignment.ts";
 
 export interface SeriesFacts {
   concept: string;
@@ -74,6 +75,8 @@ export interface Brief {
   metrics?: RunMetrics;
   partialStage?: "markets" | "pricing";
   facts: MarketFacts[];
+  /** Same-date context, separate from each market's latest benchmark. */
+  alignment?: PeriodAlignment;
   notes: string[];
   narrative?: Narrative;
   narrativeIssue?: NarrativeIssue;
@@ -556,6 +559,18 @@ export function renderBrief(b: Brief): string {
     );
   }
   L.push("", `Every rate above comes from Zetaris query **${b.compared.id}** (one federated SQL over the onboarded sources); market benchmarks and comparisons are computed in code from those rates.`, "");
+  if (b.alignment && b.alignment.requestedCountries.length >= 2) {
+    const a = b.alignment;
+    L.push("## Same-period comparison", "");
+    if (a.status === "unavailable") L.push(a.reason, "");
+    else {
+      const cell = (s: string) => s.replace(/[\r\n]+/g, " ").replace(/\|/g, "\\|").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/`/g, "\\`");
+      L.push(`Latest common observation: **${a.period}** (${a.frequency === "Q" ? "quarterly" : "monthly"}; ${a.monthsOld} months before this brief). ${a.note}`, "");
+      L.push("| Market | Selected official category | Common-period YoY | Latest observation | Source |", "|---|---|---|---|---|");
+      for (const row of a.rows) L.push(`| ${row.country} | ${cell(row.label)} | ${fmt(r1(row.yoy))} | ${row.latestPeriod}: ${fmt(row.latestYoy)} | ${cell(row.sourceId)} · ${a.cite} |`);
+      L.push("", "The latest-period market benchmarks and SKU price scenarios remain unchanged. This table aligns observation dates only.", "");
+    }
+  }
   if (b.skus?.length) {
     const money = (x: number | undefined, c: string) => (x === undefined ? "-" : `${x.toFixed(2)} ${c}`);
     L.push(`## Your price list`);

@@ -9,6 +9,7 @@ import { AgentMemory } from "./memory.ts";
 import { SqlResult, SqlRunner, rowsAsObjects, isIncompleteResultError } from "./zetaris.ts";
 import { AGENCY_FOR, COMPARE_COLUMNS, Candidate, Concept, Country, CONCEPT_WORDS, compareSql, discover, monthsBack, normalizeCountry, onboard, skuSearchWords, isBroadFoodLabel } from "./sources/index.ts";
 import { MarketFacts, Brief, RunMetrics, SkuLine, buildFacts, renderBrief, signedPct, marketKey, allowedNumbers, checkNarrative, factsForNarrative, seriesFacts, marketBenchmark, Narrative, NarrativeIssue } from "./brief.ts";
+import { buildAlignment } from "./alignment.ts";
 import { PRICE_DB, PRICING_COLUMNS, SKU_RATE_COLUMNS, ensurePriceList, priceTable, priceView, pricingSql, skuCategoriesSql, skuRatesSql } from "./sources/pricelist.ts";
 import { BROADER_COVERAGE_REASON, SELECTION_VERSION, skuScope, selectionMessages, validateSelections, fallbackSelection, type SelectionGroup, type SelectionDecision } from "./selection.ts";
 import { sourceDecoderVersion, hasFreshPeriod, isUsableObservationCount } from "./sources/validation.ts";
@@ -347,6 +348,7 @@ Reply with JSON only.`;
     const policySource = req.invalidPassThrough ? "invalid input; cost-recovery target omitted" : req.passThrough !== undefined ? "stated in this request" : remembered ? `remembered from an earlier request (${remembered.id})` : "default: recover the full monetary cost increase (no policy given)";
     if (remembered) this.log("memory", `using remembered pricing policy ${remembered.id}: ${Math.round(policy * 100)}%`);
     const facts: MarketFacts[] = buildFacts(rowsAsObjects(compared, COMPARE_COLUMNS), req, compared.id, policy);
+    const alignment = buildAlignment(rowsAsObjects(compared, COMPARE_COLUMNS), req, facts, compared.id);
     for (const p of pairs) if (!views.has(key(p.country, p.concept))) notes.push(`${p.country} ${p.concept}: no usable official series was found.`);
     const ctx = { views, candidates, notes, key, pairs, getCompared: () => compared, setCompared: (c: SqlResult) => (compared = c) };
     const ensureView = async (country: Country, concept: Concept) => {
@@ -357,7 +359,7 @@ Reply with JSON only.`;
     const snapshotMetrics = (): RunMetrics => ({ ...this.metrics, reusedViews: [...views.values()].filter((v) => v.via === "memory").length });
     // Market facts are useful immediately; do not hide them behind slower SKU discovery and pricing.
     this.metrics.numbersMs = Date.now() - t0;
-    const marketPartial: Brief = { request: req, facts, notes: [...notes], passThrough: policy, policySource, compared, sqlLog: [...this.sqlLog], views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: this.metrics.numbersMs, trace: [...this.trace], metrics: snapshotMetrics(), partialStage: "markets" };
+    const marketPartial: Brief = { request: req, facts, alignment, notes: [...notes], passThrough: policy, policySource, compared, sqlLog: [...this.sqlLog], views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: this.metrics.numbersMs, trace: [...this.trace], metrics: snapshotMetrics(), partialStage: "markets" };
     this.log("progress", `market numbers ready in ${(this.metrics.numbersMs / 1000).toFixed(1)} s - pricing SKUs and writing the summary`);
     this.emit("partial", marketPartial);
     // The narrative only needs the market facts, so the model writes it while Zetaris prices the SKUs.
@@ -365,11 +367,11 @@ Reply with JSON only.`;
     const pricing = await this.priceList(req, views, facts, policy, ensureView, notes);
     const sinceLast = this.compareWithLastBrief(facts, req, policy);
     // Everything in the brief except the prose is ready: let the UI show it while the model finishes writing.
-    const partial: Brief = { request: req, facts, notes, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, sinceLast, compared, sqlLog: [...this.sqlLog], views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: [...this.trace], metrics: snapshotMetrics(), partialStage: "pricing" };
+    const partial: Brief = { request: req, facts, alignment, notes, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, sinceLast, compared, sqlLog: [...this.sqlLog], views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: [...this.trace], metrics: snapshotMetrics(), partialStage: "pricing" };
     this.emit("partial", partial);
     const { narrative, issue: narrativeIssue } = await narrativeP;
     memory.rememberRequest(req);
-    const brief: Brief = { request: req, facts, notes, narrative, narrativeIssue, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, sinceLast, compared, sqlLog: this.sqlLog, views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: this.trace, metrics: snapshotMetrics() };
+    const brief: Brief = { request: req, facts, alignment, notes, narrative, narrativeIssue, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, sinceLast, compared, sqlLog: this.sqlLog, views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: this.trace, metrics: snapshotMetrics() };
     brief.markdown = renderBrief(brief);
     this.log("done", `brief ready in ${Math.round(brief.ms / 1000)} s (${this.sqlLog.length} SQL statements, ${[...views.values()].filter((v) => v.via === "memory").length} views reused from memory; ${this.metrics.modelCalls} model calls, ${this.metrics.plannerCalls} planner calls, ${this.metrics.discoveries} discoveries)`);
     return brief;

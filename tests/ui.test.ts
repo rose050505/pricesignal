@@ -206,3 +206,109 @@ test('the interpreted category is visible separately from the official series la
   b.run('render(sample,"category")');
   assert.doesNotMatch(b.node('#out').innerHTML, /<script>fake<\/script>/);
 });
+
+const alignment = () => ({
+  status: 'aligned', concept: 'food', requestedCountries: ['DE', 'CA', 'AU'],
+  period: '2026-08', frequency: 'M', monthsOld: 2, cite: 'Q7',
+  note: 'Observation dates align; country baskets and category coverage can differ.',
+  rows: [
+    { country: 'DE', label: 'Food', sourceId: 'eurostat:food', yoy: 0.2, latestPeriod: '2026-09', latestYoy: 0.4 },
+    { country: 'CA', label: 'Food', sourceId: 'statcan:food', yoy: 2.85, latestPeriod: '2026-09', latestYoy: 2.2 },
+    { country: 'AU', label: 'Food and non-alcoholic beverages', sourceId: 'abs:food', yoy: 2.98, latestPeriod: '2026-08', latestYoy: 2.98 },
+  ],
+});
+
+test('same-period comparison appears below market cards in partial and final results without replacing the latest figures', () => {
+  for (const partial of [true, false]) {
+    const b = browser();
+    const fact = { country: 'CA', agency: 'StatCan', category: { label: 'Food', latestYoy: 2.2, avg12: 2.4, latestPeriod: '2026-09', trend: 'easing', points: [] } };
+    b.context.sample = { ...result(partial), facts: [fact], alignment: alignment() };
+    b.run('render(sample,"DE CA AU food")');
+    const output = b.node('#out').innerHTML;
+    assert.match(output, /Same-period market comparison/);
+    assert.ok(output.indexOf('class="markets"') < output.indexOf('Same-period market comparison'));
+    assert.match(output, /Common month[\s\S]*2026-08/);
+    assert.match(output, /2 months old/);
+    assert.match(output, /Food and non-alcoholic beverages/);
+    assert.match(output, /2\.9%/);
+    assert.match(output, /3\.0%/);
+    assert.match(output, /2026-09/);
+    assert.match(output, /2\.2%/);
+    assert.match(output, /statcan:food/);
+    assert.match(output, /Q7/);
+    assert.match(output, /baskets.*category coverage/i);
+    assert.match(output, /latest evidence/i);
+    assert.equal(fact.category.latestYoy, 2.2);
+    assert.equal(fact.category.latestPeriod, '2026-09');
+  }
+});
+
+test('same-period comparison renders quarterly periods and escapes every server-supplied label and citation', () => {
+  const b = browser();
+  b.context.sample = { ...result(), alignment: { ...alignment(),
+    concept: '<concept>', period: '2026-Q2', frequency: 'Q', monthsOld: 4, cite: '<Q7>', note: '<note>',
+    requestedCountries: ['<DE>', 'CA'],
+    rows: [{ country: '<DE>', label: '<official>', sourceId: '<source>', yoy: -0.25, latestPeriod: '<latest>', latestYoy: -0.1 }],
+  } };
+  b.run('render(sample,"quarterly food")');
+  const output = b.node('#out').innerHTML;
+  assert.match(output, /Common quarter[\s\S]*2026-Q2/);
+  assert.match(output, /4 months old/);
+  for (const text of ['concept', 'DE', 'official', 'source', 'latest', 'Q7', 'note']) {
+    assert.ok(output.includes(`&lt;${text}&gt;`), text);
+    assert.ok(!output.includes(`<${text}>`), text);
+  }
+  assert.match(output, /-0\.3%/);
+  assert.doesNotMatch(output, /\+-0\.3/);
+});
+
+test('common-period raw rates use the same positive and negative tie rounding as latest cards and Markdown', () => {
+  for (const [raw, rounded, text] of [[2.55, 2.6, '+2.6%'], [-2.25, -2.3, '-2.3%'], [0.04, 0, '0.0%'], [-0.04, 0, '0.0%']] as const) {
+    const b = browser();
+    const row = { country: 'CA', label: 'Food', sourceId: 'statcan:food', yoy: raw, latestPeriod: '2026-08', latestYoy: rounded };
+    b.context.sample = { ...result(), alignment: { ...alignment(), rows: [row] } };
+    b.run('render(sample,"food")');
+    const output = b.node('#out').innerHTML;
+    assert.ok(output.includes(`<td class="num">${text}</td>`), `common rate ${raw} must display ${text}`);
+    assert.ok(output.includes(`<div class="sub">${text} YoY</div>`), 'latest and common displays must agree for the same observation');
+  }
+});
+
+test('unavailable common periods show the supplied reason and never invent a table or infer one from market facts', () => {
+  const b = browser();
+  b.context.sample = { ...result(true), alignment: { status: 'unavailable', concept: 'food', requestedCountries: ['DE', 'AU'], reason: 'Monthly and quarterly observations cannot be aligned <reason>.', cite: 'Q8' } };
+  b.run('render(sample,"DE AU food")');
+  const output = b.node('#out').innerHTML;
+  assert.match(output, /Same-period market comparison/);
+  assert.match(output, /unavailable/i);
+  assert.match(output, /Monthly and quarterly observations cannot be aligned &lt;reason&gt;/);
+  assert.match(output, /Q8/);
+  assert.doesNotMatch(output, /class="alignment-table"|<reason>/);
+  for (const value of [undefined, null, { ...alignment(), requestedCountries: ['CA'] }]) {
+    b.context.sample = { ...result(), alignment: value };
+    b.run('render(sample,"CA food")');
+    assert.doesNotMatch(b.node('#out').innerHTML, /Same-period market comparison/);
+  }
+});
+
+test('the comparison table has its own horizontal scroll region for narrow screens', () => {
+  assert.match(html, /\.alignment-scroll\s*\{[^}]*overflow-x\s*:\s*auto/);
+  const b = browser(); b.context.sample = { ...result(), alignment: alignment() };
+  b.run('render(sample,"food")');
+  assert.match(b.node('#out').innerHTML, /class="alignment-scroll"[^>]*tabindex="0"[^>]*>[\s\S]*class="alignment-table"/);
+});
+
+test('the shared server serializer preserves alignment in partial and final payloads and uses null when absent', () => {
+  // Execute the actual serializer body without starting the server, loading env,
+  // opening memory, or contacting any service.
+  const server = fs.readFileSync(new URL('../src/server.ts', import.meta.url), 'utf8');
+  const body = server.match(/function toResult\(b: Brief\) \{([\s\S]*?)\n\}/)?.[1];
+  assert.ok(body);
+  const serialize = vm.runInNewContext(`(function(b) { ${body} })`, { COMPARE_COLUMNS: [] });
+  const base = { ...result(), request: {}, sqlLog: [] };
+  const expected = alignment();
+  for (const partialStage of ['markets', 'pricing', undefined]) {
+    assert.equal(serialize({ ...base, partialStage, alignment: expected }).alignment, expected);
+  }
+  assert.equal(serialize(base).alignment, null);
+});
