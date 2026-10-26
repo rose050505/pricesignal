@@ -8,7 +8,8 @@ import { chat, ChatMessage } from "./llm.ts";
 import { AgentMemory } from "./memory.ts";
 import { SqlResult, SqlRunner, rowsAsObjects, resetCiteIds } from "./zetaris.ts";
 import { AGENCY_FOR, COMPARE_COLUMNS, Candidate, Concept, Country, CONCEPT_WORDS, compareSql, discover, monthsBack, normalizeCountry, onboard } from "./sources/index.ts";
-import { MarketFacts, Brief, buildFacts, renderBrief, allowedNumbers, checkNarrative, Narrative } from "./brief.ts";
+import { MarketFacts, Brief, SkuLine, buildFacts, renderBrief, allowedNumbers, checkNarrative, Narrative } from "./brief.ts";
+import { PRICING_COLUMNS, ensurePriceList, pricingSql } from "./sources/pricelist.ts";
 
 export interface Request {
   raw: string;
@@ -39,6 +40,7 @@ Actions:
 - use_memory_mapping {"country": "DE|CA|AU", "concept": str} : reuse a remembered, already-onboarded Zetaris view instead of discovering again.
 - compare {} : run ONE federated SQL across all onboarded views in Zetaris (needed before finish).
 - finish {} : write the brief. Only valid after compare succeeded.
+Only DE, CA and AU exist; never plan actions for other markets (they are reported to the user as not covered).
 Rules: every (country, concept) pair in the task needs a view (from memory or onboarding) before compare. If onboarding fails, try the next candidate or another frequency. Never invent numbers.`;
 
 export class PriceSignalAgent extends EventEmitter {
@@ -97,17 +99,26 @@ Reply with JSON only.`;
     if (!countries.length) countries.push("DE", "CA", "AU");
     const concept = String(j.concept ?? "food").toLowerCase().trim() || "food";
     const words = Array.isArray(j.concept_words) && j.concept_words.length ? j.concept_words.map((w: unknown) => String(w).toLowerCase()) : CONCEPT_WORDS[concept] ?? [concept];
+    // "same as last time": start from the request H-MEM remembered, keep only what the user changed.
+    const sameAsLast = /\b(same as (last|before|previous)|like last time|as last time|as usual|same again)\b|지난번|저번|지난 분기|같은 조건/i.test(raw);
+    const last = sameAsLast ? this.deps.memory.lastRequest() : undefined;
+    const explicitCountries = raw.split(/[^\p{L}]+/u).map((w) => normalizeCountry(w)).filter((c): c is Country => !!c);
+    if (last) {
+      if (!explicitCountries.length) countries.splice(0, countries.length, ...(last.request.countries as Country[]));
+      this.log("memory", `recalled last request ${last.id}: markets ${last.request.countries.join(", ")}, category "${last.request.concept}"${last.request.proposedChangePct !== undefined ? `, +${last.request.proposedChangePct}%` : ""}`);
+    }
+    const explicitPct = numOrUndef(raw.match(/[+＋]?\s?(\d+(?:\.\d+)?)\s?%/)?.[1]);
     const req: Request = {
       raw,
       countries,
-      concept,
-      conceptWords: words,
-      proposedChangePct: numOrUndef(j.proposed_change_pct) ?? numOrUndef(raw.match(/[+＋]?\s?(\d+(?:\.\d+)?)\s?%/)?.[1]),
+      concept: last ? last.request.concept : concept,
+      conceptWords: last ? last.request.conceptWords : words,
+      proposedChangePct: last ? (explicitPct ?? last.request.proposedChangePct) : numOrUndef(j.proposed_change_pct) ?? explicitPct,
       passThrough: numOrUndef(j.pass_through),
       policyStatement: j.policy_statement ? String(j.policy_statement) : undefined,
       unknownCountries: unknown,
     };
-    this.log("request", `markets ${countries.join(", ")} | category "${concept}"${req.proposedChangePct !== undefined ? ` | proposed +${req.proposedChangePct}%` : ""}`, req);
+    this.log("request", `markets ${countries.join(", ")} | category "${concept}"${req.proposedChangePct !== undefined ? ` | proposed +${req.proposedChangePct}%` : ""}${unknown.length ? ` | not covered: ${unknown.join(", ")}` : ""}`, req);
     return req;
   }
 
@@ -125,6 +136,7 @@ Reply with JSON only.`;
     const views = new Map<string, { view: string; label: string; via: "memory" | "onboarded"; note?: string; memoryId?: string }>();
     const candidates = new Map<string, Candidate[]>();
     const notes: string[] = [];
+    for (const u of req.unknownCountries) notes.push(`${u}: not covered yet - PriceSignal currently reads Eurostat (DE), Statistics Canada (CA) and ABS (AU).`);
     const key = (c: string, k: string) => `${c}:${k}`;
 
     const messages: ChatMessage[] = [
@@ -132,6 +144,7 @@ Reply with JSON only.`;
       { role: "user", content: `Task: ${JSON.stringify({ request: raw, needed: pairs, concept_words: req.conceptWords })}` },
     ];
     let compared: SqlResult | undefined;
+    let comparedViews = -1; // views.size when the last federated query ran
     let badReplies = 0;
     let autopilot = false;
 
@@ -149,6 +162,7 @@ Reply with JSON only.`;
         } catch (e) {
           badReplies++;
           this.log("warn", `planner reply unusable (${badReplies}): ${String(e).slice(0, 120)}`);
+          messages.push({ role: "user", content: 'That was not the action JSON. Do not answer the pricing question yourself. Reply with ONLY {"thought": "...", "actions": [{"action": "...", "args": {...}}]}.' });
           if (badReplies >= 2) {
             autopilot = true;
             this.log("warn", "switching to deterministic autopilot for the remaining steps");
@@ -165,11 +179,16 @@ Reply with JSON only.`;
       const observations: unknown[] = [];
       let finished = false;
       for (const action of batch) {
-        const obs = await this.execute(action, req, { views, candidates, notes, key, pairs, getCompared: () => compared, setCompared: (c) => (compared = c) });
+        const obs = await this.execute(action, req, { views, candidates, notes, key, pairs, getCompared: () => compared, setCompared: (c) => { compared = c; comparedViews = views.size; } });
         observations.push({ action: action.action, args: action.args, result: obs });
         if (action.action === "finish" && compared) finished = true;
       }
-      if (!autopilot) messages.push({ role: "user", content: `Observations: ${JSON.stringify(observations).slice(0, 3500)}\nStill missing: ${JSON.stringify(pairs.filter((p) => !views.has(key(p.country, p.concept))))}` });
+      if (!autopilot) messages.push({ role: "user", content: `Observations: ${JSON.stringify(observations).slice(0, 3500)}\nStill missing: ${JSON.stringify(pairs.filter((p) => !views.has(key(p.country, p.concept))))}\nNext: reply with the action JSON only.` });
+      if (!finished && compared && comparedViews === views.size && pairs.every((p) => views.has(key(p.country, p.concept)))) {
+        // Everything needed is onboarded and compared: finishing needs no extra model call.
+        this.log("plan", "all markets compared - finishing without another planner turn");
+        finished = true;
+      }
       if (finished) break;
     }
 
@@ -180,11 +199,16 @@ Reply with JSON only.`;
     if (!compared) throw new Error("No market could be onboarded; see trace.");
 
     // ---------- 3. facts are computed by code, narrative by the model ----------
-    const policy = req.passThrough ?? memory.latestPolicy()?.policy ?? 1.0;
+    const remembered = req.passThrough === undefined ? memory.latestPolicy() : undefined;
+    const policy = req.passThrough ?? remembered?.policy ?? 1.0;
+    const policySource = req.passThrough !== undefined ? "stated in this request" : remembered ? `remembered from an earlier request (${remembered.id})` : "default: full pass-through (no policy given)";
+    if (remembered) this.log("memory", `using remembered pricing policy ${remembered.id}: ${Math.round(policy * 100)}%`);
     const facts: MarketFacts[] = buildFacts(rowsAsObjects(compared, COMPARE_COLUMNS), req, compared.id, policy);
     for (const p of pairs) if (!views.has(key(p.country, p.concept))) notes.push(`${p.country} ${p.concept}: no usable official series was found.`);
+    const pricing = await this.priceList(req, views, facts);
     const narrative = await this.narrate(req, facts, notes, policy);
-    const brief: Brief = { request: req, facts, notes, narrative, passThrough: policy, compared, sqlLog: this.sqlLog, views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: this.trace };
+    memory.rememberRequest(req);
+    const brief: Brief = { request: req, facts, notes, narrative, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, compared, sqlLog: this.sqlLog, views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: this.trace };
     brief.markdown = renderBrief(brief);
     this.log("done", `brief ready in ${Math.round(brief.ms / 1000)} s (${this.sqlLog.length} SQL statements, ${[...views.values()].filter((v) => v.via === "memory").length} views reused from memory)`);
     return brief;
@@ -209,8 +233,15 @@ Reply with JSON only.`;
           const probe = await this.deps.sql.run(`SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.${hit.mapping.view} WHERE yoy_pct IS NOT NULL`);
           const n = Number(probe.rows[0]?.[0] ?? 0);
           if (!n) return { error: `remembered view psig.${hit.mapping.view} returned no rows; onboard again` };
+          const latest = String(probe.rows[0]?.[1] ?? "");
+          const age = monthsBetween(latest, monthsBack(0));
+          if (age > (hit.mapping.frequency === "Q" ? 6 : 3)) {
+            this.log("memory", `remembered view psig.${hit.mapping.view} stops at ${latest} (${age} months old) - not reusing it`);
+            return { error: `remembered view psig.${hit.mapping.view} is stale (latest ${latest}); discover_and_onboard again` };
+          }
           s.views.set(s.key(country, concept), { view: hit.mapping.view, label: hit.mapping.label, via: "memory", note: hit.mapping.note, memoryId: hit.id });
-          if (hit.mapping.note && !s.notes.includes(`${country}: ${hit.mapping.note}`)) s.notes.push(`${country}: ${hit.mapping.note}`);
+          const remembered = `${country}: ${hit.mapping.note} (remembered from an earlier run)`;
+          if (hit.mapping.note && !s.notes.includes(remembered)) s.notes.push(remembered);
           memory.feedback(hit.id, "helpful");
           this.log("memory", `reused ${hit.id}: ${country} ${concept} -> psig.${hit.mapping.view} (${n} rows, latest ${probe.rows[0]?.[1]})`);
           return { ok: true, view: hit.mapping.view, rows: n, latest: probe.rows[0]?.[1] };
@@ -254,6 +285,11 @@ Reply with JSON only.`;
           return { ok: r.ok, view: r.view, rows: r.rows, latest: r.latest, error: r.error };
         }
         case "compare": {
+          for (const p of s.pairs) {
+            if (s.views.has(s.key(p.country, p.concept)) || !memory.findMapping(p.country, p.concept)?.mapping) continue;
+            this.log("plan", `guardrail: ${p.country} ${p.concept} is in memory but was not requested - reusing it before compare`);
+            await this.execute({ action: "use_memory_mapping", args: { country: p.country, concept: p.concept } }, req, s);
+          }
           const vs = [...s.views.values()].map((v) => v.view);
           if (!vs.length) return { error: "no views yet" };
           const res = await this.deps.sql.run(compareSql(vs, monthsBack(15)));
@@ -273,11 +309,43 @@ Reply with JSON only.`;
     }
   }
 
+  /** Join the company's internal price list (a Zetaris REST table) with the compared category series. */
+  private async priceList(req: Request, views: Map<string, { view: string }>, facts: MarketFacts[]): Promise<{ skus: SkuLine[]; query: SqlResult } | undefined> {
+    const cat = req.concept === "all_items" ? "all_items" : req.concept;
+    const catViews = req.countries.map((c) => views.get(`${c}:${cat}`)?.view ?? views.get(`${c}:all_items`)?.view).filter((v): v is string => !!v);
+    if (!catViews.length) return undefined;
+    try {
+      const ready = await ensurePriceList(this.deps.sql);
+      if (!ready.ok) {
+        this.log("warn", `internal price list not available in Zetaris: ${String(ready.error).slice(0, 140)}`);
+        return undefined;
+      }
+      if (ready.created) this.log("onboard", "registered the internal price list as Zetaris REST table psig_internal.internal_price_list + view psig.v_price_list");
+      const res = await this.deps.sql.run(pricingSql([...new Set(catViews)], req.countries));
+      const rows = rowsAsObjects(res, PRICING_COLUMNS);
+      const skus: SkuLine[] = rows.map((r) => {
+        const f = facts.find((x) => x.country === r.country);
+        const price = Number(r.current_price);
+        const at = (pct?: number) => (pct === undefined ? undefined : Math.round(price * (1 + pct / 100) * 100) / 100);
+        return {
+          sku: String(r.sku), product: String(r.product), country: String(r.country), skuCategory: String(r.sku_category), currency: String(r.currency),
+          currentPrice: price, period: String(r.period), yoy: Number(r.yoy_pct), sourceId: String(r.source_id),
+          low: at(f?.suggested?.low), high: at(f?.suggested?.high), atProposed: at(req.proposedChangePct), verdict: f?.verdict, cite: res.id,
+        };
+      });
+      this.log("pricing", `federated query ${res.id} joined the internal price list with official ${cat} inflation -> ${skus.length} SKUs priced`);
+      return { skus, query: res };
+    } catch (e) {
+      this.log("warn", `price list join failed: ${String(e).slice(0, 160)}`);
+      return undefined;
+    }
+  }
+
   private async narrate(req: Request, facts: MarketFacts[], notes: string[], policy: number): Promise<Narrative | undefined> {
     const allowed = allowedNumbers(facts, req, policy);
     const payload = { request: req.raw, proposed_change_pct: req.proposedChangePct ?? null, pass_through_pct: Math.round(policy * 100), facts, caveats: [...new Set(notes)] };
     const ask: ChatMessage[] = [
-      { role: "system", content: "You write short, plain-English pricing briefs for an exporter's pricing manager. Use ONLY numbers that appear in the facts JSON (same rounding). No new numbers, no forecasts." },
+      { role: "system", content: "You write short, plain-English pricing briefs for an exporter's pricing manager. Use ONLY numbers that appear in the facts JSON (same rounding). No new numbers, no forecasts. Each market's verdict field is final: say it as given (above, within or below the evidence) and keep the headline consistent with every market's verdict. Mention caveats such as markets that are not covered." },
       { role: "user", content: `Facts: ${JSON.stringify(payload)}\nReply with JSON only: {"headline": str (<= 25 words), "markets": {"<country code>": str (2-3 sentences: what the data says and what it means for the proposed change)}, "watch": str (one sentence on what to re-check next month)}` },
     ];
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -298,6 +366,17 @@ Reply with JSON only.`;
 }
 
 // ---------- helpers ----------
+function monthsBetween(from: string, to: string): number {
+  const idx = (p: string) => {
+    const m = p.match(/^(\d{4})-(\d{2})$/);
+    if (m) return Number(m[1]) * 12 + Number(m[2]) - 1;
+    const q = p.match(/^(\d{4})-Q(\d)$/);
+    return q ? Number(q[1]) * 12 + Number(q[2]) * 3 - 1 : NaN;
+  };
+  const d = idx(to) - idx(from);
+  return Number.isFinite(d) ? d : 0;
+}
+
 export function extractJson(text: string): any | null {
   const t = text.replace(/```(?:json)?/g, "").trim();
   const start = t.indexOf("{");

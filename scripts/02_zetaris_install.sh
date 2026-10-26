@@ -25,7 +25,7 @@ say "registry login ok"
 ADMIN_FILE="$APP/.zetaris_admin"
 if [ ! -f "$ADMIN_FILE" ]; then
   PW="Ps$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 14)9!"
-  printf 'ZETARIS_ADMIN_EMAIL=bmy31513151@gmail.com\nZETARIS_ADMIN_PASSWORD=%s\n' "$PW" > "$ADMIN_FILE"; chmod 600 "$ADMIN_FILE"
+  printf 'ZETARIS_ADMIN_EMAIL=%s\nZETARIS_ADMIN_PASSWORD=%s\n' "${ZETARIS_ADMIN_EMAIL:-$(git config user.email || echo admin@pricesignal.local)}" "$PW" > "$ADMIN_FILE"; chmod 600 "$ADMIN_FILE"
 fi
 . "$ADMIN_FILE"
 setkv(){ if grep -q "^$1=" .env; then sed -i "s|^$1=.*|$1=$2|" .env; else echo "$1=$2" >> .env; fi; }

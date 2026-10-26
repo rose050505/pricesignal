@@ -1,7 +1,7 @@
 // Statistics Canada CPI (WDS). Fragmentation handled here: the data methods
 // Zetaris's recipes tried are POST-only, so we use the GET method
 // getDataFromVectorByReferencePeriodRange; vectors are index numbers (2002=100)
-// and public monthly vectors stop at broad categories (no "snacks").
+// and this adapter maps Canada to the Food and All-items vectors only.
 import { Candidate, Concept, Country, DiscoverResult, OnboardPlan, getJson, monthsBack, safeIdent } from "./types.ts";
 
 const BASE = "https://www150.statcan.gc.ca/t1/wds/rest";
@@ -23,7 +23,7 @@ export async function discover(country: Country, concept: Concept): Promise<Disc
   let key = concept in CATALOG ? concept : undefined;
   if (!key && /snack|confection|condiment|sauce|grocer|food|gochujang|noodle|ramen|kimchi/i.test(concept)) {
     key = "food";
-    notes.push(`StatCan's public monthly CPI vectors stop at "Food"; "${concept}" is mapped to Food for Canada (coarser than the other markets).`);
+    notes.push(`For Canada this agent maps only StatCan's "Food" and "All-items" CPI vectors, so "${concept}" is compared at the Food level (coarser than the other markets).`);
   }
   if (!key) return { country, concept, candidates: [], notes: [`No StatCan CPI vector mapped for "${concept}".`] };
   const entry = CATALOG[key];
@@ -44,15 +44,16 @@ export async function discover(country: Country, concept: Concept): Promise<Disc
       measure: "index",
       lastPeriod: last,
       status: last ? "active" : "unknown",
-      sourceUrl: rangeUrl(entry.vector, monthsBack(26), now),
+      // Open-ended range: a view onboarded today keeps picking up new releases next quarter.
+      sourceUrl: rangeUrl(entry.vector, monthsBack(26), "2035-12"),
     },
   ];
   return { country, concept, candidates, notes };
 }
 
 export function onboardSql(c: Candidate, concept: Concept): OnboardPlan {
-  const table = safeIdent("statcan", c.country, c.code);
-  const view = safeIdent("v", c.country, concept, c.code);
+  const table = safeIdent("statcan", c.country, c.code, "live");
+  const view = safeIdent("v", c.country, concept, c.code, "live");
   const label = c.label.replace(/'/g, "''");
   return {
     table,

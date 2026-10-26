@@ -29,6 +29,11 @@ export interface MarketFacts {
   cite: string;
 }
 
+export interface SkuLine {
+  sku: string; product: string; country: string; skuCategory: string; currency: string; currentPrice: number;
+  period: string; yoy: number; sourceId: string; low?: number; high?: number; atProposed?: number; verdict?: string; cite: string;
+}
+
 export interface Narrative { headline: string; markets: Record<string, string>; watch?: string }
 
 export interface Brief {
@@ -37,6 +42,9 @@ export interface Brief {
   notes: string[];
   narrative?: Narrative;
   passThrough: number;
+  policySource?: string;
+  skus?: SkuLine[];
+  pricingQuery?: SqlResult;
   compared: SqlResult;
   sqlLog: SqlResult[];
   views: { key: string; view: string; label: string; via: string; note?: string }[];
@@ -97,7 +105,7 @@ export function buildFacts(rows: Record<string, unknown>[], req: Request, cite: 
       f.suggested = { low: lo, high: hi, basis: `${Math.round(passThrough * 100)}% pass-through of ${main.label} inflation (latest ${main.latestYoy}%, 12-period average ${main.avg12}%)` };
       if (req.proposedChangePct !== undefined) {
         const p = req.proposedChangePct;
-        f.verdict = p > hi + 0.5 ? "above the evidence" : p < lo - 0.5 ? "below the evidence" : "within the evidence";
+        f.verdict = p > hi ? "above the evidence" : p < lo ? "below the evidence" : "within the evidence";
       }
     }
     return f;
@@ -105,11 +113,10 @@ export function buildFacts(rows: Record<string, unknown>[], req: Request, cite: 
 }
 
 export function allowedNumbers(facts: MarketFacts[], req: Request, policy?: number): number[] {
-  const out = new Set<number>([3, 6, 12, 100]);
+  const out = new Set<number>([6, 12, facts.length]);
   const add = (x?: number) => {
     if (x === undefined || !Number.isFinite(x)) return;
     out.add(r1(x));
-    out.add(Math.round(x));
     out.add(r1(Math.abs(x)));
   };
   for (const f of facts) {
@@ -155,7 +162,7 @@ export function renderBrief(b: Brief): string {
   L.push(`> ${req.raw.replace(/\n/g, " ")}`);
   L.push("");
   if (b.narrative?.headline) L.push(`**${b.narrative.headline}**`, "");
-  L.push(`Policy used: pass through ${Math.round(b.passThrough * 100)}% of category inflation${req.proposedChangePct !== undefined ? ` · proposed change: +${req.proposedChangePct}%` : ""}.`, "");
+  L.push(`Policy used: pass through ${Math.round(b.passThrough * 100)}% of category inflation${b.policySource ? ` (${b.policySource})` : ""}${req.proposedChangePct !== undefined ? ` · proposed change: +${req.proposedChangePct}%` : ""}.`, "");
   L.push(`| Market | Official category | Latest period | YoY | 12-period avg | Trend | All-items YoY | Suggested range | Proposed change |`);
   L.push(`|---|---|---|---|---|---|---|---|---|`);
   for (const f of b.facts) {
@@ -164,7 +171,16 @@ export function renderBrief(b: Brief): string {
       `| ${f.country} (${f.agency}) | ${s?.label ?? "not found"} | ${s?.latestPeriod ?? "-"}${f.monthsStale !== undefined && f.monthsStale > 2 ? ` ⚠ ${f.monthsStale} mo old` : ""} | ${fmt(s?.latestYoy)} | ${fmt(s?.avg12)} | ${s?.trend ?? "-"} | ${fmt(f.allItems?.latestYoy)} | ${f.suggested ? `${f.suggested.low.toFixed(1)}–${f.suggested.high.toFixed(1)}%` : "-"} | ${f.verdict ?? "-"} |`,
     );
   }
-  L.push("", `Every number above comes from Zetaris query **${b.compared.id}** (one federated SQL over the onboarded sources).`, "");
+  L.push("", `Every rate above comes from Zetaris query **${b.compared.id}** (one federated SQL over the onboarded sources); suggested ranges and verdicts are computed in code from those rates and the pass-through policy.`, "");
+  if (b.skus?.length) {
+    const money = (x: number | undefined, c: string) => (x === undefined ? "-" : `${x.toFixed(2)} ${c}`);
+    L.push(`## Your price list`);
+    L.push(`Internal SKUs (Zetaris view \`psig.v_price_list\`) joined with the latest official category rate in query **${b.pricingQuery?.id}**.`, "");
+    L.push(`| SKU | Product | Market | Current price | Suggested new price | At +${req.proposedChangePct ?? "-"}% | Rate used |`);
+    L.push(`|---|---|---|---|---|---|---|`);
+    for (const s of b.skus) L.push(`| ${s.sku} | ${s.product} | ${s.country} | ${money(s.currentPrice, s.currency)} | ${s.low !== undefined ? `${s.low.toFixed(2)}–${money(s.high, s.currency)}` : "-"} | ${money(s.atProposed, s.currency)}${s.verdict ? ` (${s.verdict})` : ""} | ${fmt(s.yoy)} ${s.period} |`);
+    L.push("");
+  }
   L.push(`## By market`);
   for (const f of b.facts) {
     const s = f.category ?? f.allItems;
@@ -182,7 +198,7 @@ export function renderBrief(b: Brief): string {
   if (b.narrative?.watch) L.push(`**Watch:** ${b.narrative.watch}`, "");
   L.push(`## Evidence`);
   L.push(`Views: ${b.views.map((v) => `\`psig.${v.view}\` (${v.via})`).join(", ")}`, "");
-  for (const q of b.sqlLog.filter((q) => q.id === b.compared.id || /^SELECT COUNT/.test(q.sql))) {
+  for (const q of b.sqlLog.filter((q) => q.id === b.compared.id || q.id === b.pricingQuery?.id || /^SELECT COUNT/.test(q.sql))) {
     L.push(`<details><summary>${q.id} · ${q.rows.length} rows · ${q.ms} ms</summary>\n\n\`\`\`sql\n${q.sql}\n\`\`\`\n</details>`);
   }
   if (!b.narrative) L.push("", `_Narrative omitted: the model's text did not pass the number-grounding check, so only computed facts are shown._`);

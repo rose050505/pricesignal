@@ -6,3 +6,11 @@ out/
 logs/
 zetaris-platform/
 .zetaris_admin
+.venv-voice/
+__pycache__/
+# personal working files (not part of the product)
+docs/DESIGN.md
+docs/narration.txt
+scripts/voice.py
+scripts/11_voice_setup.sh
+scripts/12_practice.sh

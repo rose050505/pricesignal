@@ -5,6 +5,8 @@ cd "$(dirname "$0")/.." || exit 1; mkdir -p logs
 NAME="${1:-pricesignal}"
 {
   [ -d .git ] || git init -q -b main
+  # personal / Korean working files stay local
+  git rm -r -q --cached --ignore-unmatch docs/DESIGN.md docs/narration.txt scripts/voice.py scripts/11_voice_setup.sh scripts/12_practice.sh scripts/__pycache__ >/dev/null 2>&1
   git add -A
   echo "== files to be committed"; git diff --cached --name-only | head -60
   if git diff --cached --name-only | grep -E '(^|/)\.env$|\.zetaris_admin|^logs/|^out/|^vendor/|node_modules' ; then echo "STOP: ignored file staged"; exit 1; fi

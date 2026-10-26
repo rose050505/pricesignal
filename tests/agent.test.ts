@@ -25,6 +25,7 @@ class FakeZ implements SqlRunner {
   async run(sql: string): Promise<SqlResult> {
     this.sqls.push(sql);
     const id = `Q${++this.n}`;
+    if (/FROM psig\.v_price_list/.test(sql)) return { id, sql, columns: [], rows: [["GCJ-500", "Gochujang 500 g", "DE", "condiments", "EUR", 4.99, "2026-09", 2.45, "DE:food"], ["GCJ-500", "Gochujang 500 g", "CA", "condiments", "CAD", 7.49, "2026-09", 3.85, "CA:food"]], ms: 2 };
     if (/^SELECT COUNT/.test(sql)) return { id, sql, columns: ["n", "latest"], rows: [[9, "2026-09"]], ms: 1 };
     if (/UNION ALL|FROM psig\.v_/.test(sql) && /^SELECT country/.test(sql)) return { id, sql, columns: ["country", "concept", "category_label", "frequency", "period", "yoy_pct", "source_id"], rows: fakeRows(), ms: 2 };
     return { id, sql, columns: [], rows: [], ms: 1 };
@@ -36,6 +37,7 @@ const cand = (country: any, concept: string): Candidate => ({ agency: country ==
 function scriptedLlm(): any {
   return async (messages: any[]) => {
     const last = messages.at(-1).content as string;
+    if (last.startsWith("Extract the pricing request") && last.includes("same as last time")) return { text: '{"countries":[],"concept":null,"concept_words":[],"proposed_change_pct":3,"pass_through":null}', model: "fake", provider: "fake", ms: 1 };
     if (last.startsWith("Extract the pricing request")) return { text: '{"countries":["deutschland","canada","aus"],"concept":"food","concept_words":["food"],"proposed_change_pct":5,"pass_through":0.7,"policy_statement":"we pass on 70%"}', model: "fake", provider: "fake", ms: 1 };
     if (messages[0].content.startsWith("You write short")) return { text: '{"headline":"Food inflation is 2.5-3.9%, so +5% is above the evidence everywhere.","markets":{"DE":"Food 2.5%."},"watch":"Re-check next month."}', model: "fake", provider: "fake", ms: 1 };
     // planner: let the deterministic order emerge from "Still missing"
@@ -92,4 +94,29 @@ test("end-to-end offline, then memory reuse", async () => {
   assert.ok(b2.views.every((v) => v.via === "memory"));
   assert.equal(b2.passThrough, 0.7, "policy recalled from H-MEM");
   assert.match(b2.markdown!, /Narrative omitted/);
+});
+
+test("internal price list is joined, and 'same as last time' recalls the last request", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "psig-"));
+  const memory = new AgentMemory(dir);
+  const deps = () => ({
+    llm: scriptedLlm(),
+    sql: new FakeZ(),
+    memory,
+    discoverFn: async (country: any, concept: string) => ({ country, concept, candidates: [cand(country, concept)], notes: [] }),
+    onboardFn: async (_z: any, c: Candidate, concept: string) => ({ view: `v_${c.country.toLowerCase()}_${concept}`, table: "t", ok: true, existed: false, rows: 9, latest: "2026-09", sql: [] }),
+  });
+  const b1 = await new PriceSignalAgent(deps()).run("is food inflation in deutschland, canada & aus still hot? thinking +5%, we pass on 70%");
+  assert.equal(b1.skus?.length, 2, "SKUs come back from the price-list join");
+  const de = b1.skus!.find((s) => s.country === "DE")!;
+  const f = b1.facts.find((x) => x.country === "DE")!;
+  assert.equal(de.low, Math.round(4.99 * (1 + f.suggested!.low / 100) * 100) / 100);
+  assert.equal(de.atProposed, Math.round(4.99 * 1.05 * 100) / 100);
+  assert.match(b1.markdown!, /Your price list/);
+  assert.match(b1.policySource!, /stated/);
+  const b2 = await new PriceSignalAgent(deps()).run("same as last time, but what if we only go +3%?");
+  assert.deepEqual(b2.request.countries, ["DE", "CA", "AU"]);
+  assert.equal(b2.request.concept, "food");
+  assert.equal(b2.request.proposedChangePct, 3);
+  assert.match(b2.policySource!, /remembered/);
 });

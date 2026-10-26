@@ -18,7 +18,7 @@ A small food exporter selling into Germany, Canada and Australia wants to know w
 | Category scheme | ECOICOP v2 (`coicop18`) | product/vector ids | ABS index codes |
 | Gotcha we hit | the dataset everyone links to (`prc_hicp_manr`) stopped at 2025-12 and was replaced by `prc_hicp_minr` | the data methods used in public recipes are POST-only; the GET method returns a top-level array | a broad query is too large for one fetch; series must be scoped to one key |
 
-Doing this by hand takes half a day per pricing round. PriceSignal does it in about a minute and keeps the receipts.
+Assembling a comparable answer by hand means three APIs, three formats and three category schemes every pricing round, so small exporters often just pick a round number. PriceSignal answers in under a minute (well under 30 seconds once it remembers the sources) and keeps the receipts.
 
 ## What it does
 
@@ -26,8 +26,13 @@ Doing this by hand takes half a day per pricing round. PriceSignal does it in ab
 2. **Discovers the matching official series** at each agency, and reports what it had to work around (a discontinued dataset, a coarser category, a different frequency).
 3. **Onboards each series into Zetaris** as a Lightning REST table plus a decoding view with a common schema — the agency APIs become governed SQL tables.
 4. **Answers with one federated SQL query** across all three agencies in Zetaris.
-5. **Computes the facts in code** (latest year-on-year rate, 12-period average, trend, staleness, suggested price range = pass-through × inflation) and lets the model write only the prose. Any number in the prose that does not appear in the facts is rejected.
-6. **Remembers** (Meterless H-MEM): series mappings, the user's pricing policy and past onboarding notes persist across sessions. The second time you ask, it skips discovery and onboarding entirely.
+5. **Joins the company's own price list.** The exporter's internal price list (SKU, market, current shelf price) is a Zetaris REST table too, and a second federated query joins it with the latest official rate per market, so the brief ends with a suggested new price per SKU.
+6. **Computes the facts in code** (latest year-on-year rate, 12-period average, trend, staleness, suggested range, verdict, new SKU prices) and lets the model write only the prose. Numbers in the prose must match a computed fact, the request or the policy; otherwise the model rewrites once and then a deterministic summary is used.
+7. **Remembers** (Meterless H-MEM): series mappings, the user's pricing policy and the last request persist across sessions. "Same as last time, but +3%?" is resolved from memory, and remembered mappings skip discovery and onboarding.
+
+**What the suggested range means.** Range = your pass-through share × how much consumer prices for that category have moved in that market over the latest month and the 12-month average. It is a market-side check ("how much room do shelf prices in this category give us?"), not a measure of your own costs.
+
+The sample price list in `data/price_list.json` is illustrative data for a fictional K-food exporter; point `PSIG_PRICE_LIST_URL` at your own endpoint to use real prices.
 
 ## Architecture
 
@@ -38,15 +43,16 @@ messy question
 ┌──────────────── PriceSignal agent (TypeScript) ─────────────────┐
 │ planner loop: JSON action protocol, batched actions              │
 │   recall_memory · use_memory_mapping · discover_and_onboard      │
-│   compare · finish                                               │
+│   compare · finish   (code guardrails + deterministic fallback)  │
 │                                                                  │
 │  LLM ──► Meterless Nightshift runtime (OpenAI-compatible /v1)    │
-│          routing lanes → NVIDIA Nemotron and other models        │
+│          meterless/fast → pinned lane: NVIDIA Nemotron 3.5        │
 │  Memory ► Meterless H-MEM engine (reference impl, conformance ✔) │
 │  Data ──► Zetaris REST API  /sql-editor/sqls/run                 │
 │            ├─ PSIG_EUROSTAT  (REST table → psig view)            │
 │            ├─ PSIG_STATCAN   (REST table → psig view)            │
-│            └─ PSIG_ABS       (REST table → psig view)            │
+│            ├─ PSIG_ABS       (REST table → psig view)            │
+│            └─ PSIG_INTERNAL  (company price list → psig view)    │
 │  Guardrails: SELECT-only federated query, number-grounding check │
 └──────────────────────────────────────────────────────────────────┘
      │
@@ -57,13 +63,26 @@ verdict on the proposed change, source series id, SQL behind it)
 
 ## Sponsor technology
 
-**Zetaris** is where the fragmented sources become one dataset. The agent registers each agency endpoint with `CREATE LIGHTNING REST TABLE` and a decoding `CREATE SCHEMASTORE VIEW` (JSON-stat, WDS and SDMX are flattened in Lightning SQL), all in a common schema `(country, concept, category_label, frequency, period, yoy_pct, source_id)`. Every number the user sees comes from one federated `UNION ALL` query over those views, and its query id is cited in the brief.
+**Zetaris** is where the fragmented sources become one dataset. The agent registers each agency endpoint with `CREATE LIGHTNING REST TABLE` and a decoding `CREATE SCHEMASTORE VIEW` (JSON-stat, WDS and SDMX are flattened in Lightning SQL), all in a common schema `(country, concept, category_label, frequency, period, yoy_pct, source_id)`. Every official rate the user sees comes from one federated `UNION ALL` query over those views, and its query id is cited in the brief. The company's internal price list is registered the same way (`PSIG_INTERNAL`), and a second federated query joins internal SKUs with the external rates (window function picks the latest period per market). Remembered views are checked before reuse: a view whose data stops more than three months ago is re-onboarded instead.
 
-**Meterless Nightshift** is the application's primary AI provider. The app implements the Meterless Runtime provider contract: OpenAI-compatible `/v1/chat/completions`, Bearer runtime token, `meterless-app` on every request, `meterless-scope: user` on chat, `GET /v1/models` to decide online / unauthorized / offline, routing modes `meterless/fast` and `meterless/deep`. The model that served each step is shown in the agent trace.
+**Meterless Nightshift** is the application's primary AI provider. The app implements the Meterless Runtime provider contract: OpenAI-compatible `/v1/chat/completions`, Bearer runtime token, `meterless-app` on every request, `meterless-scope: user` on chat, `GET /v1/models` to decide online / unauthorized / offline, and the `meterless/fast` routing mode (`meterless/deep` is configurable but not used by default). The model that served each step is shown in the agent trace.
 
-**Meterless H-MEM** gives the agent memory across sessions. `src/hmem_impl.ts` re-exports the Meterless reference engine unchanged, and the H-MEM conformance suite is run against that exact file (`npm run conformance` → 13/13 checks pass). Series mappings are stored as long-term factual memories with structured tags (so a recalled memory can be acted on, not just quoted), superseded when re-onboarded, and given `helpful` feedback when reused.
+**Meterless H-MEM** gives the agent memory across sessions. We run the Meterless reference engine unchanged (`src/hmem_impl.ts` re-exports it, and `npm run conformance` runs the official suite against that file: 13/13). Our work is in how the agent uses it: series mappings are long-term factual memories with structured tags, so a recalled memory changes what the agent does next (skip discovery and onboarding); a re-onboarded series supersedes the old mapping; reused mappings get `helpful` feedback; the pricing policy is a preference memory and the brief says when it was remembered rather than stated; and the last request is stored so "same as last time" works.
 
-**NVIDIA Nemotron** runs inside the product through Nightshift lanes (for example `nvidia/nemotron-3.5-lightning` wrote the narrative in our test runs).
+**NVIDIA Nemotron** powers the agent. Nightshift has a pinned lane ("Use tools & agents") serving NVIDIA Nemotron 3.5 Lightning, so every `meterless/fast` call (request parsing, planning, narrative) is answered by Nemotron. In our robustness run on 26 Oct 2026, every model call in all six questions was served by `nvidia/nemotron-3.5-lightning`, as shown in the trace logs.
+
+## Robustness: six messy questions (26 Oct 2026, live, Nemotron via Nightshift)
+
+| Question | Result |
+|---|---|
+| Korean: "우리 고추장이랑 과자, 독일·캐나다·호주에서 내년 1분기에 5% 올려도 될까? …70% 정도만 반영해" | DE, CA, AU food; +5% above the evidence in all three (19 s) |
+| "canda snacks price hike 4%?? … we pass thru like 60pct" | typo resolved to Canada only; snacks compared at Food level and said so (37 s) |
+| "how hot is overall inflation in oz and germany rn" | all-items for AU and DE (65 s) |
+| "sauces & condiments in DE and AUS - planning +3%, we pass on about 80%" | Salt, condiments and sauces (DE) and Food additives and condiments (AU); +3% above the evidence (31 s) |
+| "japan + canada food prices, ok to raise 5%?" | Canada answered; "japan: not covered yet" stated in the brief (73 s) |
+| "FOOD PRICES CANADA AUSTRALIA UP 6 PERCENT???" | CA and AU food; +6% above the evidence (14 s) |
+
+An earlier run of the same six questions surfaced four bugs (typo dropped a market, an unsupported market silently ignored, a remembered series not reused before comparison, a verdict with a hidden tolerance contradicting the prose); all four are fixed and covered by the run above.
 
 ## Run it
 
@@ -92,7 +111,9 @@ Helper scripts used on our machine (Ubuntu laptop + Windows desktop running Nigh
 ```
 src/agent.ts          planner loop, actions, guardrails
 src/brief.ts          facts computed from Zetaris rows, number-grounding check, rendering
-src/sources/          one adapter per agency: discover() + Lightning SQL onboarding templates
+src/sources/          one adapter per agency: discover() + Lightning SQL onboarding templates;
+                      pricelist.ts registers the internal price list and joins it with the rates
+data/price_list.json  sample internal price list (fictional exporter)
 src/zetaris.ts        Zetaris REST client
 src/llm.ts            Meterless Runtime provider (plus dev fallbacks)
 src/memory.ts         agent memory on H-MEM

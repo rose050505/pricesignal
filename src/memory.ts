@@ -44,6 +44,28 @@ export class AgentMemory {
     return rec.id;
   }
 
+  /** The last request, so "same as last time" can be resolved next quarter. */
+  rememberRequest(r: { countries: string[]; concept: string; conceptWords: string[]; proposedChangePct?: number; raw: string }): string {
+    const slim = { countries: r.countries, concept: r.concept, conceptWords: r.conceptWords, proposedChangePct: r.proposedChangePct };
+    return this.hmem.add({
+      content: `Last pricing request: markets ${r.countries.join(", ")}, category ${r.concept}${r.proposedChangePct !== undefined ? `, proposed +${r.proposedChangePct}%` : ""} ("${r.raw.slice(0, 160)}")`,
+      type: "general",
+      source: "pricesignal:user",
+      confidence: 0.9,
+      tags: ["last-request", `json:${JSON.stringify(slim)}`],
+      layer: "long_term",
+      supersedes: this.lastRequest()?.id,
+    }).id;
+  }
+
+  lastRequest(): { id: string; request: { countries: string[]; concept: string; conceptWords: string[]; proposedChangePct?: number } } | undefined {
+    const hit = this.structured("last-request").at(-1);
+    if (!hit) return undefined;
+    const rec: any = this.hmem.store.all().find((r: any) => r.id === hit.id);
+    const json = (rec?.tags ?? []).find((t: string) => t.startsWith("json:"));
+    return json ? { id: hit.id, request: JSON.parse(json.slice(5)) } : undefined;
+  }
+
   rememberNote(text: string): string {
     return this.hmem.add({ content: text, type: "general", source: "pricesignal:agent", confidence: 0.7 }).id;
   }
@@ -84,7 +106,7 @@ export class AgentMemory {
       id: memory.id,
       content: memory.content,
       relevance,
-      mapping: json ? (JSON.parse(json.slice(5)) as SeriesMapping) : undefined,
+      mapping: json && tags.includes("series-mapping") ? (JSON.parse(json.slice(5)) as SeriesMapping) : undefined,
       policy: pt ? Number(pt.slice(12)) : undefined,
     };
   }

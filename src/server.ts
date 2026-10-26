@@ -56,7 +56,7 @@ const server = http.createServer(async (req, res) => {
       agent
         .run(question)
         .then((b) => {
-          run.result = { markdown: b.markdown, facts: b.facts, notes: [...new Set(b.notes)], views: b.views, ms: b.ms, passThrough: b.passThrough, compared: { id: b.compared.id, sql: b.compared.sql, columns: COMPARE_COLUMNS, rows: b.compared.rows }, sql: b.sqlLog.map((q) => ({ id: q.id, sql: q.sql, rows: q.rows.length, ms: q.ms })) };
+          run.result = { markdown: b.markdown, facts: b.facts, notes: [...new Set(b.notes)], views: b.views, ms: b.ms, passThrough: b.passThrough, policySource: b.policySource, skus: b.skus ?? [], pricing: b.pricingQuery ? { id: b.pricingQuery.id, sql: b.pricingQuery.sql } : null, compared: { id: b.compared.id, sql: b.compared.sql, columns: COMPARE_COLUMNS, rows: b.compared.rows }, sql: b.sqlLog.map((q) => ({ id: q.id, sql: q.sql, rows: q.rows.length, ms: q.ms })) };
           run.done = true;
           push(run, run.result, "result");
         })

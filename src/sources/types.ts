@@ -35,13 +35,27 @@ export interface OnboardPlan {
 
 export const COUNTRY_ALIASES: Record<string, Country> = {
   de: "DE", ger: "DE", germany: "DE", deutschland: "DE", "독일": "DE",
-  ca: "CA", can: "CA", canada: "CA", "캐나다": "CA",
+  ca: "CA", canada: "CA", canadian: "CA", "캐나다": "CA",
   au: "AU", aus: "AU", australia: "AU", oz: "AU", "호주": "AU",
 };
 
 export function normalizeCountry(raw: string): Country | null {
   const k = raw.trim().toLowerCase();
-  return COUNTRY_ALIASES[k] ?? null;
+  if (COUNTRY_ALIASES[k]) return COUNTRY_ALIASES[k];
+  // Tolerate one typo in names of 5+ letters ("canda", "austrlia", "germny").
+  if (k.length >= 4) {
+    for (const [alias, c] of Object.entries(COUNTRY_ALIASES)) if (alias.length >= 5 && editDistance(k, alias) <= 1) return c;
+  }
+  return null;
+}
+
+function editDistance(a: string, b: string): number {
+  if (Math.abs(a.length - b.length) > 1) return 2;
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++)
+    for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
 }
 
 export function safeIdent(...parts: string[]): string {
