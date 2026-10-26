@@ -7,8 +7,8 @@ import { EventEmitter } from "node:events";
 import { chat, ChatMessage, ChatResult } from "./llm.ts";
 import { AgentMemory } from "./memory.ts";
 import { SqlResult, SqlRunner, rowsAsObjects, isIncompleteResultError } from "./zetaris.ts";
-import { AGENCY_FOR, COMPARE_COLUMNS, Candidate, Concept, Country, CONCEPT_WORDS, compareSql, discover, monthsBack, normalizeCountry, onboard, skuSearchWords, isBroadFoodLabel } from "./sources/index.ts";
-import { MarketFacts, Brief, RunMetrics, SkuLine, buildFacts, renderBrief, signedPct, marketKey, allowedNumbers, checkNarrative, factsForNarrative, seriesFacts, marketBenchmark, Narrative, NarrativeIssue } from "./brief.ts";
+import { AGENCY_FOR, COMPARE_COLUMNS, Candidate, Concept, Country, COUNTRY_ALIASES, CONCEPT_WORDS, compareSql, discover, monthsBack, normalizeCountry, onboard, skuSearchWords, isBroadFoodLabel } from "./sources/index.ts";
+import { MarketFacts, Brief, RunMetrics, SkuLine, buildFacts, renderBrief, signedPct, marketKey, allowedNumbers, checkNarrative, factsForNarrative, costShareBasisDescription, seriesFacts, marketBenchmark, Narrative, NarrativeIssue } from "./brief.ts";
 import { buildAlignment } from "./alignment.ts";
 import { PRICE_DB, PRICING_COLUMNS, SKU_RATE_COLUMNS, ensurePriceList, priceTable, priceView, pricingSql, skuCategoriesSql, skuRatesSql } from "./sources/pricelist.ts";
 import { BROADER_COVERAGE_REASON, SELECTION_VERSION, skuScope, selectionMessages, validateSelections, fallbackSelection, type SelectionGroup, type SelectionDecision } from "./selection.ts";
@@ -23,8 +23,10 @@ export interface Request {
   /** how much the exporter's own costs rose, if the user said so ("our costs rose 8%") */
   costIncreasePct?: number;
   costRemembered?: boolean;
-  /** Current unit cost divided by the current selling price, expressed as 0..100%. */
+  /** Stated unit cost / unchanged selling price, 0..100%; costShareBasis identifies its timing. */
   costSharePct?: number;
+  /** Whether the stated unit cost is measured before or after the stated cost change. */
+  costShareBasis?: "before_change" | "after_change";
   costShareRemembered?: boolean;
   passThrough?: number; // share of the monetary cost increase to recover, from the request, memory, or 1.0
   invalidPassThrough?: boolean;
@@ -171,8 +173,8 @@ export class PriceSignalAgent extends EventEmitter {
   async parse(raw: string): Promise<Request> {
     const prompt = `Extract the pricing request as JSON with keys:
 countries (array of strings as the user wrote them), concept (one of: food, all_items, snacks, condiments, or a short noun), concept_words (2-4 lowercase words an official statistics label might use),
-proposed_change_pct (signed number or null, preserve price reductions), cost_increase_pct (signed number or null, only if the user states how much their own costs changed), cost_share_pct (0..100 or null, only if the user states current unit cost / current selling price as a percentage), pass_through (0..1 or null, the share of the monetary cost increase to recover in selling prices), policy_statement (string or null).
-These percentages have different denominators: never infer cost_share_pct from a cost increase, pass-through policy, or proposed change. For "same as last time", return null for values the user did not change. Do not invent a cost share. The concept is the category whose inflation or prices the user asks to compare; product names introducing their business do not override an explicit comparison category.
+proposed_change_pct (signed number or null, preserve price reductions), cost_increase_pct (signed number or null, only if the user states how much their own costs changed), cost_share_pct (0..100 or null, only if the user states unit cost / selling price as a percentage; the cost can be before or after the stated change and the selling-price denominator must stay unchanged), pass_through (0..1 or null, the share of the monetary cost increase to recover in selling prices), policy_statement (string or null).
+These percentages have different denominators: never infer cost_share_pct from a cost increase, pass-through policy, or proposed change. Tax, VAT, margin, observed inflation and past price changes are not a new proposed price change. Preserve decimal fractions and explicit signs. Countries must be named in the request; never replace a named market with another. For "same as last time", return null for values the user did not change. Do not invent a cost share or its before/after timing. The concept is the category whose inflation or prices the user asks to compare; product names introducing their business do not override an explicit comparison category.
 Request: """${raw}"""
 Reply with JSON only.`;
     let j: any = {};
@@ -183,41 +185,21 @@ Reply with JSON only.`;
     } catch (e) {
       this.log("warn", `LLM parse failed, using rules: ${String(e).slice(0, 120)}`);
     }
-    // Only the model's list can name a market we do not cover; scanning the words of the question
-    // (when the model gave no list) must not turn "same", "as", "last" into markets.
     const named: string[] = Array.isArray(j.countries) ? j.countries.map(String) : [];
-    const countries: Country[] = [];
-    const unknown: string[] = [];
-    for (const c of named.length ? named : raw.split(/[\s,&/]+/)) {
-      const n = normalizeCountry(c.replace(/[^\p{L}]/gu, ""), named.length > 0);
-      if (n && !countries.includes(n)) countries.push(n);
-      else if (!n && named.length) unknown.push(c);
-    }
+    const explicitMarkets = requestMarkets(raw, named);
+    const countries = explicitMarkets.countries;
+    const unknown = explicitMarkets.unknown;
     const intent = explicitMarketConcept(raw);
     const concept = intent.concept ?? (cleanConcept(j.concept) || "food");
     const words = intent.concept ? CONCEPT_WORDS[concept] : Array.isArray(j.concept_words) && j.concept_words.length ? j.concept_words.map((w: unknown) => String(w).toLowerCase()) : CONCEPT_WORDS[concept] ?? [concept];
     // "same as last time": start from the request H-MEM remembered, keep only what the user changed.
     const sameAsLast = sameAsLastRequest(raw);
     const last = sameAsLast ? this.deps.memory.lastRequest() : undefined;
-    const explicitCountries = raw.split(/[^\p{L}]+/u).map((w) => normalizeCountry(w, false)).filter((c): c is Country => !!c);
     if (last) {
-      const words = raw.split(/[^\p{L}]+/u);
-      const phrase = (text: string) => text.toLowerCase().split(/[^\p{L}]+/u).filter(Boolean).join(" ");
-      const rawPhrase = ` ${phrase(raw)} `;
-      const explicitNames = new Map<string, string>();
-      // A model guess cannot replace remembered markets unless the user actually named it.
-      // Keep multiword unsupported names intact, and preserve upper-case-only ISO codes.
-      for (const name of [...named, ...(last.request.unknownCountries ?? [])]) {
-        const p = phrase(name);
-        if (!p || !rawPhrase.includes(` ${p} `)) continue;
-        if (/^[A-Z]{2}$/.test(name) && !normalizeCountry(name.toLowerCase(), false) && !words.includes(name)) continue;
-        if (!explicitNames.has(p)) explicitNames.set(p, name);
-      }
-      const changedCountries = [...new Set([...explicitCountries, ...[...explicitNames.values()].map(name => normalizeCountry(name)).filter((c): c is Country => !!c)])];
-      const changedUnknown = [...explicitNames.values()].filter(name => !normalizeCountry(name));
-      const changedMarkets = changedCountries.length || changedUnknown.length;
-      countries.splice(0, countries.length, ...(changedMarkets ? changedCountries : last.request.countries as Country[]));
-      unknown.splice(0, unknown.length, ...(changedMarkets ? changedUnknown : last.request.unknownCountries ?? []));
+      const changed = requestMarkets(raw, [...named, ...(last.request.unknownCountries ?? [])]);
+      const changedMarkets = changed.countries.length || changed.unknown.length;
+      countries.splice(0, countries.length, ...(changedMarkets ? changed.countries : last.request.countries as Country[]));
+      unknown.splice(0, unknown.length, ...(changedMarkets ? changed.unknown : last.request.unknownCountries ?? []));
       this.log("memory", `recalled last request ${last.id}: markets ${last.request.countries.join(", ")}${last.request.unknownCountries?.length ? `; not covered: ${last.request.unknownCountries.join(", ")}` : ""}, category "${last.request.concept}"${last.request.proposedChangePct !== undefined ? `, ${signedPct(last.request.proposedChangePct)}` : ""}`);
     }
     // Nothing named and nothing remembered: the demo markets, said in the brief. Only unsupported markets named: none.
@@ -225,19 +207,22 @@ Reply with JSON only.`;
     if (defaultMarkets) countries.push("DE", "CA", "AU");
     const percentages = requestPercentages(raw, j);
     const { passThrough, costIncreasePct: costPct, costSharePct, proposedChangePct: explicitPct } = percentages;
+    const share = percentages.invalidCostShare ? undefined : costSharePct ?? last?.request.costSharePct;
+    const basis = requestCostShareBasis(raw, share, costSharePct !== undefined, percentages.costContext, last?.request.costShareBasis);
     const req: Request = {
       raw,
       countries,
       concept: intent.concept ?? last?.request.concept ?? concept,
       conceptWords: intent.concept ? words : last?.request.conceptWords ?? words,
-      proposedChangePct: explicitPct ?? last?.request.proposedChangePct,
+      proposedChangePct: percentages.invalidProposal ? undefined : explicitPct ?? last?.request.proposedChangePct,
       passThrough,
-      costIncreasePct: costPct ?? (last ? last.request.costIncreasePct : undefined),
-      costRemembered: costPct === undefined && last?.request.costIncreasePct !== undefined ? true : undefined,
-      costSharePct: percentages.invalidCostShare ? undefined : costSharePct ?? last?.request.costSharePct,
+      costIncreasePct: percentages.invalidCostChange ? undefined : costPct ?? last?.request.costIncreasePct,
+      costRemembered: !percentages.invalidCostChange && costPct === undefined && last?.request.costIncreasePct !== undefined ? true : undefined,
+      costSharePct: share,
+      costShareBasis: basis.value,
       costShareRemembered: !percentages.invalidCostShare && costSharePct === undefined && last?.request.costSharePct !== undefined ? true : undefined,
       invalidPassThrough: percentages.invalidPassThrough || undefined,
-      inputIssues: [...percentages.issues, ...intent.issues].length ? [...percentages.issues, ...intent.issues] : undefined,
+      inputIssues: [...percentages.issues, ...intent.issues, ...basis.issues].length ? [...percentages.issues, ...intent.issues, ...basis.issues] : undefined,
       policyStatement: j.policy_statement ? String(j.policy_statement) : undefined,
       unknownCountries: unknown,
       defaultMarkets: defaultMarkets || undefined,
@@ -907,9 +892,9 @@ Reply with JSON only.`;
     // Caveats are written by code (e.g. "no data after 2025-12 (10 months ago)"), so their numbers may be repeated.
     const noteNumbers = [...new Set(notes)].join(" ").replace(/\b(19|20)\d{2}(-(Q[1-4]|\d{2}))?\b/g, " ").match(/\d+(?:\.\d+)?/g)?.map(Number) ?? [];
     const allowed = [...allowedNumbers(facts, req, policy), ...noteNumbers];
-    const payload = { request: req.raw, proposed_change_pct: req.proposedChangePct ?? null, cost_increase_pct: req.costIncreasePct ?? null, cost_share_pct: req.costSharePct ?? null, cost_share_basis: "current unit cost / current selling price", cost_pass_through_pct: req.invalidPassThrough ? null : Math.round(policy * 100), facts: factsForNarrative(facts, req, policy), caveats: [...new Set(notes)] };
+    const payload = { request: req.raw, proposed_change_pct: req.proposedChangePct ?? null, cost_increase_pct: req.costIncreasePct ?? null, cost_share_pct: req.costSharePct ?? null, cost_share_basis: costShareBasisDescription(req), cost_pass_through_pct: req.invalidPassThrough ? null : Math.round(policy * 100), facts: factsForNarrative(facts, req, policy), caveats: [...new Set(notes)] };
     const ask: ChatMessage[] = [
-      { role: "system", content: "You write short, plain-English pricing briefs for an exporter's pricing manager. Use ONLY numbers that appear in the facts JSON, written with the same rounding. Copy benchmark_range_pct low and high exactly; never compute a range yourself. This is a historical year-on-year consumer-price benchmark, not a recommended price, willingness-to-pay estimate, or forecast. Each market's verdict field is final: say it as given (above, within or below the market benchmark), keeping every market and the headline consistent. Average coverage states how many monthly or quarterly observations were available; do not call partial coverage a complete annual average or insufficient history a flat trend. cost_need_pct, when provided, is a conditional cost-recovery scenario computed from current unit cost / current selling price, stated cost change and monetary cost pass-through. It does not assume or preserve a profit margin. If cost share or a valid policy is absent, do not invent a price target from the cost increase. Use cost_vs_market exactly when comparing that scenario with the historical benchmark. Never write internal JSON keys in the prose; name the cost recovery target and its explicit percentage as the subject of a cost comparison, separately from the proposed price change. No new numbers, no predictions about customers accepting a price. Mention the caveats supplied in the facts JSON and do not invent other source or methodology claims." },
+      { role: "system", content: "You write short, plain-English pricing briefs for an exporter's pricing manager. Use ONLY numbers that appear in the facts JSON, written with the same rounding. Copy benchmark_range_pct low and high exactly; never compute a range yourself. This is a historical year-on-year consumer-price benchmark, not a recommended price, willingness-to-pay estimate, or forecast. Each market's verdict field is final: say it as given (above, within or below the market benchmark), keeping every market and the headline consistent. Average coverage states how many monthly or quarterly observations were available; do not call partial coverage a complete annual average or insufficient history a flat trend. cost_need_pct, when provided, is a conditional cost-recovery scenario computed from the stated before/after-change cost basis, unchanged selling price, cost change and monetary cost pass-through. State the cost basis exactly as supplied and preserve any timing assumption. The cost policy does not scale the market benchmark; it applies only to the separate cost-recovery scenario. If no cost scenario was computed, do not say the policy was applied to the proposed change or the market benchmark. It does not assume or preserve a profit margin. If the cost scenario is unavailable, use the supplied missing-input reason and do not invent a price target from the cost change. Use cost_vs_market exactly when comparing that scenario with the historical benchmark. Never write internal JSON keys in the prose; name the cost recovery target and its explicit percentage as the subject of a cost comparison, separately from the proposed price change. No new numbers, no predictions about customers accepting a price. Mention the caveats supplied in the facts JSON and do not invent other source or methodology claims." },
       { role: "user", content: `Facts: ${JSON.stringify(payload)}\nReply with JSON only: {"headline": str (<= 25 words), "markets": {"<country code>": str (2-3 sentences: what the data says and what it means for the proposed change)}, "watch": str (one sentence on what to re-check next month)}` },
     ];
     // One time budget for the prose, retries included: the numbers never wait more than this for the words.
@@ -1022,6 +1007,76 @@ function sameAsLastRequest(raw: string): boolean {
   return /\b(same as (last|before|previous)|like last time|as last time|as usual|same again)\b|지난번|저번|지난 분기|같은 조건/i.test(raw);
 }
 
+/** Literal aliases outrank model country guesses. Models may resolve a named typo, not invent a market. */
+function requestMarkets(raw: string, modelNames: string[]): { countries: Country[]; unknown: string[] } {
+  const hits: { country: Country; at: number }[] = [];
+  const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  for (const [alias, country] of Object.entries(COUNTRY_ALIASES)) {
+    const suffix = /[가-힣]/.test(alias) ? "(?=$|[^\\p{L}]|(?:에서|에서는|에는|으로|와|과|은|는|을|를|에|의|만)(?=$|[^\\p{L}]))" : "(?![\\p{L}])";
+    for (const match of raw.matchAll(new RegExp(`(?<![\\p{L}])${escape(alias)}${suffix}`, "giu"))) hits.push({ country, at: match.index! });
+  }
+  for (const match of raw.matchAll(/\b[A-Z]{2}\b/g)) {
+    const country = normalizeCountry(match[0], false);
+    if (country) hits.push({ country, at: match.index! });
+  }
+  const countries = [...new Set(hits.sort((a, b) => a.at - b.at).map(h => h.country))];
+  const unknown: string[] = [];
+  const phrase = (value: string) => value.toLowerCase().split(/[^\p{L}]+/u).filter(Boolean).join(" ");
+  const rawPhrase = ` ${phrase(raw)} `;
+  // Ground a canonical model name in a nearby one-edit spelling only in a market position.
+  // Ordinary freight prose ("inland", "pain") must not become Finland or Spain.
+  for (const name of modelNames) {
+    const country = normalizeCountry(name);
+    if (!country || countries.includes(country)) continue;
+    for (const match of raw.matchAll(/[\p{L}]{4,}/gu)) {
+      if (/^(?:inland|pain)$/i.test(match[0]) || normalizeCountry(match[0], true) !== country) continue;
+      const before = raw.slice(Math.max(0, match.index! - 24), match.index!);
+      const after = raw.slice(match.index! + match[0].length);
+      if (/^\s*(?:food|snacks?|condiments?|prices?|inflation|CPI|HICP|markets?)\b|^\s*(?:식품|간식|물가|가격)/i.test(after)
+        || /\b(?:in|for|and|market)\s*$/i.test(before) || /[,&/]\s*$/.test(before)) { countries.push(country); break; }
+    }
+  }
+  for (const name of modelNames) {
+    if (!phrase(name) || !rawPhrase.includes(` ${phrase(name)} `)) continue;
+    if (/^[A-Z]{2}$/.test(name) && !normalizeCountry(name.toLowerCase(), false) && !raw.split(/[^\p{L}]+/u).includes(name)) continue;
+    const country = normalizeCountry(name);
+    if (country) { if (!countries.includes(country)) countries.push(country); }
+    else if (!unknown.some(value => phrase(value) === phrase(name))) unknown.push(name);
+  }
+  // These names only preserve explicit unsupported requests; they add no data-source coverage.
+  const unsupported = [
+    ["Japan", "japan", "일본"], ["United States", "united states", "USA", "US", "미국"],
+    ["United Kingdom", "united kingdom", "UK", "britain", "영국"], ["China", "china", "중국"],
+    ["South Korea", "south korea", "korea", "한국", "대한민국"], ["Brazil", "brazil", "브라질"],
+  ];
+  for (const names of unsupported) {
+    const mentioned = names.slice(1).find(name => {
+      const flags = /^[A-Z]{2,3}$/.test(name) ? "u" : "iu";
+      const suffix = /[가-힣]/.test(name) ? "(?=$|[^\\p{L}]|(?:에서|와|과|은|는|을|를|에|의|만)(?=$|[^\\p{L}]))" : "(?![\\p{L}])";
+      return new RegExp(`(?<![\\p{L}])${escape(name)}${suffix}`, flags).test(raw);
+    });
+    if (!mentioned || unknown.some(value => names.some(name => phrase(name) === phrase(value)))) continue;
+    const modelName = modelNames.find(value => names.some(name => phrase(name) === phrase(value)));
+    const literal = raw.match(new RegExp(escape(mentioned), /^[A-Z]{2,3}$/.test(mentioned) ? "u" : "iu"))?.[0];
+    unknown.push(modelName ?? literal ?? names[0]);
+  }
+  return { countries, unknown };
+}
+
+function requestCostShareBasis(raw: string, share: number | undefined, newShare: boolean, costContext: string | undefined, remembered?: Request["costShareBasis"]): { value?: Request["costShareBasis"]; issues: string[] } {
+  if (share === undefined) return { issues: [] };
+  const before = /\b(?:before|prior to)\s*(?:(?:the|this|cost)\s+)*(?:change|increase|rise|decrease|reduction)\b|\bpre[- ]change\b|(?:변동|변화|상승|인상|인하|증가|감소)\s*전/i.test(raw);
+  const after = /\b(?:after|following)\s*(?:(?:the|this|cost)\s+)*(?:change|increase|rise|decrease|reduction)\b|\bpost[- ]change\b|(?:변동|변화|상승|인상|인하|증가|감소)\s*후/i.test(raw);
+  if (before !== after) return { value: before ? "before_change" : "after_change", issues: [] };
+  const futureCost = /\b(?:will|expected|forecast|next|going to)\b|예정|전망|오를|내릴/i.test(costContext ?? "");
+  const pastCost = /\b(?:rose|risen|increased|fell|fallen|decreased|grew|have|has)\b|올랐|상승했|증가했|내렸|감소했/i.test(costContext ?? "");
+  const currentShare = /\b(?:current|now|today)\b[^%.!?;\n]{0,35}\b(?:unit\s+)?costs?\b|\bunit costs?\s+(?:are|is)\b|현재[^%.!?;\n]{0,25}(?:원가|비용)/i.test(raw);
+  if (!before && !after && futureCost && (currentShare || !newShare)) return { value: "before_change", issues: !newShare ? ["The new future cost change uses the remembered cost share before that new change; the previous change's timing is not reused."] : [] };
+  if (!before && !after && currentShare && pastCost) return { value: "after_change", issues: [] };
+  if (!newShare && !before && !after && remembered) return { value: remembered, issues: [] };
+  return { issues: [before && after ? "Conflicting cost-share timing was supplied; assuming the share is before the cost change until clarified." : "Cost-share timing is not specified; assuming the share is before the cost change. State before or after the change to make the basis explicit."] };
+}
+
 /** A direct inflation/price subject outranks a product introduction; memory fills only absent categories. */
 function explicitMarketConcept(raw: string): { concept?: string; issues: string[] } {
   const aliases: [string, RegExp][] = [
@@ -1070,9 +1125,11 @@ function numOrUndef(v: unknown): number | undefined {
 /** Percentages are grounded in the request, with separate denominators and explicit signs. */
 function requestPercentages(raw: string, model: any): {
   proposedChangePct?: number; costIncreasePct?: number; costSharePct?: number; passThrough?: number;
-  invalidCostShare: boolean; invalidPassThrough: boolean; issues: string[];
+  costContext?: string;
+  invalidCostShare: boolean; invalidPassThrough: boolean; invalidProposal: boolean; invalidCostChange: boolean; issues: string[];
 } {
-  const matches = [...raw.matchAll(/([+＋\-−－]?)\s*(\d+(?:\.\d+)?)\s*(?:%|pct\b|percent\b|퍼센트|프로)/gi)];
+  // A malformed/huge token must never restart at its trailing digits and become a different rate.
+  const matches = [...raw.matchAll(/(?<![\p{N}.,+＋\-−－])([+＋\-−－]?)\s*((?:\d+(?:[.,]\d+)?|[.,]\d+)(?:e[+\-]?\d+)?|Infinity|NaN|∞)\s*(?:%|pct\b|percent\b|퍼센트|프로)/giu)];
   // Keep offsets unchanged while protecting common abbreviations from sentence splitting.
   const context = raw.replace(/\b(?:approx|e\.g|i\.e)\./gi, abbreviation => abbreviation.replace(/\./g, " "));
   const clauseBoundary = /[,;!?\n]|(?<!\d)\.|\.(?!\d)|\b(?:but|and|while|whereas)\b|하지만|그런데|반면|그리고/i;
@@ -1091,32 +1148,47 @@ function requestPercentages(raw: string, model: any): {
     // A later price clause cannot reverse an earlier cost change, even without punctuation.
     const directionAfter = cost ? after.split(/\b(?:prices?|selling)\b|가격/i)[0] : after;
     const direction = /\b(?:fall|fell|decreas\w*|reduc\w*|cut|lower\w*)\b|인하|내리|하락|감소/i.test(`${before} ${directionAfter}`);
-    const x = Number(m[2]) * (/^[\-−－]$/.test(m[1]) || (!m[1] && !share && !pass && direction) ? -1 : 1);
-    return { x, signed: !!m[1], share, pass, cost };
+    const x = Number(m[2].replace(",", ".")) * (/^[\-−－]$/.test(m[1]) || (!m[1] && !share && !pass && direction) ? -1 : 1);
+    const lastIndex = (pattern: RegExp) => [...before.matchAll(pattern)].at(-1)?.index ?? -1;
+    const unrelatedAt = lastIndex(/\b(?:tax|VAT|margin|inflation|CPI|HICP|interest|discount rate)\b|부가세|세율|마진|이익률|물가상승률/gi);
+    const proposalAt = lastIndex(/\b(?:thinking|considering|propos\w*|planning|what about|(?:can|could|should|would|will)\s+[^:;.!?]*?\b(?:raise|increase|reduce|cut|change)\s+(?:our\s+)?prices?)\b|가격(?:은|을|이)?\s*(?:인상|인하|변경)/gi);
+    const unrelated = unrelatedAt >= 0 && proposalAt <= unrelatedAt
+      || /^\s*(?:VAT|tax|margin|inflation|부가세|세율|마진|이익률)\b/i.test(after);
+    const timeContext = `${before} ${after}`.replace(/\b(?:same as|like) last (?:quarter|month|year)\b|지난\s*분기(?:와)?\s*같은\s*조건(?:으로)?/gi, " ");
+    const historical = /\b(?:last year|last quarter|last month|previously|earlier|already|used to|previous price)\b|작년|지난해|지난\s*(?:분기|달)|이전\s*가격/i.test(timeContext);
+    return { x, signed: !!m[1], share, pass, cost, unrelated, historical, context: `${before} ${m[0]} ${directionAfter}` };
   });
-  const choose = (kind: "share" | "pass" | "cost", modelValue: unknown, scale = 1) => {
+  const chooseOption = (kind: "share" | "pass" | "cost", modelValue: unknown, scale = 1) => {
     const options = found.filter(p => p[kind]);
     const fromModel = numOrUndef(modelValue);
-    return options.find(p => fromModel !== undefined && Math.abs(p.x - fromModel * scale) < 1e-9)?.x ?? options.at(-1)?.x;
+    return options.find(p => fromModel !== undefined && Math.abs(p.x - fromModel * scale) < 1e-9) ?? options.at(-1);
   };
+  const choose = (kind: "share" | "pass" | "cost", modelValue: unknown, scale = 1) => chooseOption(kind, modelValue, scale)?.x;
   const share = choose("share", model.cost_share_pct);
   const passPct = choose("pass", model.pass_through, 100);
-  const invalidCostShare = share !== undefined && (share < 0 || share > 100);
-  const invalidPassThrough = passPct !== undefined && (passPct < 0 || passPct > 100);
-  const proposals = found.filter(p => !p.share && !p.pass && !p.cost);
-  const fromModel = numOrUndef(model.proposed_change_pct);
-  const proposal = proposals.find(p => p.signed)
-    ?? proposals.find(p => fromModel !== undefined && Math.abs(p.x - fromModel) < 1e-9)
-    ?? proposals[0];
+  const invalidCostShare = share !== undefined && (!Number.isFinite(share) || share < 0 || share > 100);
+  const invalidPassThrough = passPct !== undefined && (!Number.isFinite(passPct) || passPct < 0 || passPct > 100);
+  const proposals = found.filter(p => !p.share && !p.pass && !p.cost && !p.unrelated && !p.historical);
+  const uniqueProposals = [...new Set(proposals.map(p => p.x))];
+  const ambiguousProposal = uniqueProposals.length > 1;
+  const proposal = proposals[0];
+  const invalidProposal = ambiguousProposal || proposals.some(p => !Number.isFinite(p.x) || p.x < -100);
+  const selectedCost = chooseOption("cost", model.cost_increase_pct);
+  const costChange = selectedCost?.x;
+  const invalidCostChange = costChange !== undefined && (!Number.isFinite(costChange) || costChange < -100);
   const issues: string[] = [];
   if (invalidCostShare) issues.push("Cost share must be between 0% and 100% of the current selling price; the invalid value is not reused from memory and the cost-recovery target is omitted.");
   if (invalidPassThrough) issues.push("Cost pass-through must be between 0% and 100% of the monetary cost increase; the invalid policy is not replaced by a remembered value and the cost-recovery target is omitted.");
+  if (ambiguousProposal) issues.push("Multiple different proposed price changes were supplied; provide one proposal. No proposal is chosen or recalled for this comparison.");
+  if (proposals.some(p => !Number.isFinite(p.x) || p.x < -100)) issues.push("The proposed price change must be finite and at least -100%; the invalid value is omitted and is not replaced from memory.");
+  if (invalidCostChange) issues.push("The cost change must be finite and at least -100%; the invalid value is omitted and is not replaced from memory.");
   return {
-    proposedChangePct: proposal?.x,
-    costIncreasePct: choose("cost", model.cost_increase_pct),
+    proposedChangePct: invalidProposal ? undefined : proposal?.x,
+    costIncreasePct: invalidCostChange ? undefined : costChange,
+    costContext: invalidCostChange ? undefined : selectedCost?.context,
     costSharePct: invalidCostShare ? undefined : share,
     passThrough: invalidPassThrough || passPct === undefined ? undefined : passPct / 100,
-    invalidCostShare, invalidPassThrough, issues,
+    invalidCostShare, invalidPassThrough, invalidProposal, invalidCostChange, issues,
   };
 }
 

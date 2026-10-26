@@ -471,7 +471,7 @@ test("cost side: unit-cost share makes a cost recovery scenario comparable with 
   assert.equal(k.costIncreasePct, 8);
   assert.equal(k.proposedChangePct, 4);
 
-  // 60% cost share × 8% cost rise × 70% recovery = 3.4% of the current selling price
+  // Assumed pre-change cost share × 8% cost rise × 70% recovery = 3.4% of the unchanged selling price.
   a.costSharePct = 60;
   const rows: Record<string, unknown>[] = [];
   for (const [c, base] of [["DE", 1.0], ["CA", 6.0]] as const) for (let m = 1; m <= 9; m++) rows.push({ country: c, concept: "food", category_label: "Food", frequency: "M", period: `2026-0${m}`, yoy_pct: base, source_id: "x" });
@@ -483,7 +483,7 @@ test("cost side: unit-cost share makes a cost recovery scenario comparable with 
   assert.equal(ca.suggested!.high, 6);
   assert.equal(ca.costVsMarket, "below the market benchmark");
   const md = renderBrief({ request: a, facts, notes: [], passThrough: 0.7, compared: { id: "Q1", sql: "", columns: [], rows: [], ms: 0 }, sqlLog: [], views: [], ms: 1, trace: [] } as any);
-  assert.match(md, /Current unit cost is 60% of current selling price; recovering 70% of the incremental cost gives a \+3\.4% selling-price scenario/);
+  assert.match(md, /Cost share is 60%: unit cost before the stated cost change \/ unchanged selling price.*assumed.*recovering 70% of the incremental cost gives a \+3\.4% selling-price scenario/);
   assert.match(md, /## Costs vs\. the market/);
   // the prose may talk about the cost need without tripping the proposal-verdict check
   const allowed = allowedNumbers(facts, a, 0.7);

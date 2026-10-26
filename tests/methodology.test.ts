@@ -76,7 +76,7 @@ test('narrative facts identify coverage, market benchmark and the cost denominat
   assert.equal(payload.suggested_range_pct,undefined);
   assert.equal(payload.category.averageLabel,'1 of 12 monthly observations');
   assert.equal(payload.cost_share_pct,60);
-  assert.equal(payload.cost_share_basis,'current unit cost / current selling price');
+  assert.equal(payload.cost_share_basis,'unit cost before the stated cost change / unchanged selling price (before-change basis assumed because timing was not specified)');
   assert.equal(payload.cost_pass_through_pct,70);
   assert.equal(payload.pass_through_needed_pct,undefined);
 });
@@ -95,13 +95,13 @@ test('an invalid explicit cost policy cannot silently calculate with a default',
 test('Markdown describes benchmark limits and asks for the cost denominator when absent', () => {
   const rows=[row('2026-09',2)];
   const missing=markdown(rows,request({costIncreasePct:8}));
-  assert.match(missing,/current unit cost as a percentage of (?:the )?current selling price/i);
+  assert.match(missing,/unit cost as a percentage of the unchanged selling price.*before or after/i);
   assert.match(missing,/not a forecast|does not forecast/i);
   assert.match(missing,/not.*confidence interval/i);
   assert.match(missing,/1 of 12 monthly observations/);
   assert.doesNotMatch(missing,/Suggested new price|Suggested range|what the market supports|12-period avg|\+5\.6% price rise/);
   const cost=markdown(rows,request({costIncreasePct:8,costSharePct:60}));
-  assert.match(cost,/60%.*current selling price/);
+  assert.match(cost,/60%.*before the stated cost change.*unchanged selling price/);
   assert.match(cost,/\+3\.4%/);
   assert.doesNotMatch(cost,/costs call for|above local inflation|needs .*pass-through/);
 });

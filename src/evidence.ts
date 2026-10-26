@@ -52,7 +52,7 @@ const LIMITATIONS = [
   "Product-series selection, broader-proxy suitability, selection metadata, memory history and the full semantics of model-written prose are not verified.",
   "Unavailable markets and absent pricing evidence remain outside the verified scope. A successful check is not a claim that every requested market or every catalog SKU was covered.",
 ];
-const REQUEST_KEYS = ["raw", "countries", "concept", "conceptWords", "proposedChangePct", "costIncreasePct", "costRemembered", "costSharePct", "costShareRemembered", "passThrough", "invalidPassThrough", "inputIssues", "policyStatement", "unknownCountries", "defaultMarkets"];
+const REQUEST_KEYS = ["raw", "countries", "concept", "conceptWords", "proposedChangePct", "costIncreasePct", "costRemembered", "costSharePct", "costShareBasis", "costShareRemembered", "passThrough", "invalidPassThrough", "inputIssues", "policyStatement", "unknownCountries", "defaultMarkets"];
 const SERIES_KEYS = ["concept", "label", "frequency", "sourceId", "latestPeriod", "latestYoy", "avg12", "averageCount", "averageExpected", "averageLabel", "yoy6Back", "trend", "points"];
 const FACT_KEYS = ["country", "agency", "category", "allItems", "monthsStale", "suggested", "verdict", "costNeed", "passThroughNeeded", "costVsMarket", "cite"];
 const SKU_CALCULATED_KEYS = ["sku", "product", "country", "skuCategory", "currency", "currentPrice", "period", "yoy", "sourceId", "low", "high", "atProposed", "verdict", "cite", "rateLabel", "avg12", "rangeLow", "rangeHigh"];
@@ -148,7 +148,9 @@ function validateRequest(value: unknown): Request {
   for (const [i, country] of value.unknownCountries.entries()) text(country, `request.unknownCountries[${i}]`);
   if (new Set(value.countries).size !== value.countries.length || value.countries.some((c: Country) => !SUPPORTED_COUNTRIES.includes(c))) throw new Error("request.countries: expected distinct supported country codes");
   for (const key of ["proposedChangePct", "costIncreasePct", "costSharePct", "passThrough"]) if (value[key] !== undefined) finite(value[key], `request.${key}`);
+  for (const key of ["proposedChangePct", "costIncreasePct"]) if (value[key] !== undefined && value[key] < -100) throw new Error(`request.${key}: decrease below -100% is invalid`);
   if (value.costSharePct !== undefined && (value.costSharePct < 0 || value.costSharePct > 100)) throw new Error("request.costSharePct: outside 0..100");
+  if (value.costShareBasis !== undefined && !["before_change", "after_change"].includes(value.costShareBasis)) throw new Error("request.costShareBasis: expected before_change or after_change");
   if (value.passThrough !== undefined && (value.passThrough < 0 || value.passThrough > 1)) throw new Error("request.passThrough: outside 0..1");
   for (const key of ["costRemembered", "costShareRemembered", "invalidPassThrough", "defaultMarkets"]) if (value[key] !== undefined && typeof value[key] !== "boolean") throw new Error(`request.${key}: expected a boolean`);
   if (value.policyStatement !== undefined && typeof value.policyStatement !== "string") throw new Error("request.policyStatement: expected a string");

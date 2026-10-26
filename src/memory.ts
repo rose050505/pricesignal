@@ -49,8 +49,8 @@ export class AgentMemory {
   }
 
   /** The last request, so "same as last time" can be resolved next quarter. */
-  rememberRequest(r: { countries: string[]; unknownCountries?: string[]; concept: string; conceptWords: string[]; proposedChangePct?: number; costIncreasePct?: number; costSharePct?: number; raw: string }): string {
-    const slim = { countries: r.countries, unknownCountries: r.unknownCountries ?? [], concept: r.concept, conceptWords: r.conceptWords, proposedChangePct: r.proposedChangePct, costIncreasePct: r.costIncreasePct, costSharePct: r.costSharePct };
+  rememberRequest(r: { countries: string[]; unknownCountries?: string[]; concept: string; conceptWords: string[]; proposedChangePct?: number; costIncreasePct?: number; costSharePct?: number; costShareBasis?: "before_change" | "after_change"; raw: string }): string {
+    const slim = { countries: r.countries, unknownCountries: r.unknownCountries ?? [], concept: r.concept, conceptWords: r.conceptWords, proposedChangePct: r.proposedChangePct, costIncreasePct: r.costIncreasePct, costSharePct: r.costSharePct, costShareBasis: r.costShareBasis };
     return this.hmem.add({
       content: `Last pricing request: markets ${r.countries.join(", ")}${r.unknownCountries?.length ? `; not covered: ${r.unknownCountries.join(", ")}` : ""}, category ${r.concept}${r.proposedChangePct !== undefined ? `, proposed ${r.proposedChangePct > 0 ? "+" : ""}${r.proposedChangePct}%` : ""} ("${r.raw.slice(0, 160)}")`,
       type: "general",
@@ -62,7 +62,7 @@ export class AgentMemory {
     }).id;
   }
 
-  lastRequest(): { id: string; request: { countries: string[]; unknownCountries?: string[]; concept: string; conceptWords: string[]; proposedChangePct?: number; costIncreasePct?: number; costSharePct?: number } } | undefined {
+  lastRequest(): { id: string; request: { countries: string[]; unknownCountries?: string[]; concept: string; conceptWords: string[]; proposedChangePct?: number; costIncreasePct?: number; costSharePct?: number; costShareBasis?: "before_change" | "after_change" } } | undefined {
     const hit = this.structured("last-request").at(-1);
     if (!hit) return undefined;
     const rec: any = this.hmem.store.all().find((r: any) => r.id === hit.id);

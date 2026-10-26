@@ -6,6 +6,7 @@ import type { SqlResult } from "./zetaris.ts";
 import { AGENCY_FOR, Country, normalizeCountry } from "./sources/index.ts";
 import { priceView } from "./sources/pricelist.ts";
 import type { PeriodAlignment } from "./alignment.ts";
+import { costPolicyErrors } from "./narrative-policy.ts";
 
 export interface SeriesFacts {
   concept: string;
@@ -152,10 +153,33 @@ export function marketBenchmark(series: Pick<SeriesFacts, "latestYoy" | "avg12">
   return { low: r1(Math.min(series.latestYoy, series.avg12)), high: r1(Math.max(series.latestYoy, series.avg12)) };
 }
 
-function costScenario(req: Request, passThrough: number): number | undefined {
-  const share = req.costSharePct;
-  if (req.invalidPassThrough || !Number.isFinite(passThrough) || passThrough < 0 || passThrough > 1 || req.costIncreasePct === undefined || !Number.isFinite(req.costIncreasePct) || share === undefined || !Number.isFinite(share) || share < 0 || share > 100) return undefined;
-  return r1((share / 100) * req.costIncreasePct * passThrough);
+function calculateCostScenario(req: Request, passThrough: number): { value?: number; issue?: string } {
+  const share = req.costSharePct, change = req.costIncreasePct;
+  if (req.invalidPassThrough || !Number.isFinite(passThrough) || passThrough < 0 || passThrough > 1) return { issue: "Provide a valid cost pass-through percentage from 0% to 100%." };
+  if (change === undefined || !Number.isFinite(change) || change < -100) return { issue: "Provide a finite unit-cost change of at least -100%; costs cannot fall by more than their full value." };
+  if (req.costShareBasis === "after_change" && change === -100) return { issue: "Provide unit cost before the stated cost change as a percentage of the unchanged selling price; a 100% decrease cannot be reversed from the post-change cost share." };
+  if (share === undefined || !Number.isFinite(share) || share < 0 || share > 100) return { issue: "Provide unit cost as a percentage of the unchanged selling price, and state whether that cost is before or after the stated cost change." };
+  const denominator = req.costShareBasis === "after_change" ? 1 + change / 100 : 1;
+  const raw = (share / 100) * (change / denominator) * passThrough;
+  // A mathematically exact -100% can be a few ulps lower after the division (25%, -80%, 100%).
+  const zeroPriceTolerance = 8 * Number.EPSILON * 100;
+  if (raw < -100 - zeroPriceTolerance) return { issue: "This cost-recovery scenario would imply a negative selling price because the passed-on cost reduction exceeds the selling price. Revise the policy or cost-share basis." };
+  const value = r1(raw);
+  if (!Number.isFinite(value)) return { issue: "The cost-recovery calculation is not finite; revise the cost change or cost-share inputs." };
+  return { value };
+}
+
+/** The cost share always uses the same selling price before the proposed price change. */
+export function costScenario(req: Request, passThrough: number): number | undefined {
+  return calculateCostScenario(req, passThrough).value;
+}
+
+export function costInputNeeded(req: Request, passThrough: number): string | undefined {
+  return calculateCostScenario(req, passThrough).issue;
+}
+
+export function costShareBasisDescription(req: Request): string {
+  return `unit cost ${req.costShareBasis === "after_change" ? "after" : "before"} the stated cost change / unchanged selling price${req.costShareBasis === undefined ? " (before-change basis assumed because timing was not specified)" : ""}`;
 }
 
 export function buildFacts(rows: Record<string, unknown>[], req: Request, cite: string, passThrough: number, now = new Date()): MarketFacts[] {
@@ -463,6 +487,7 @@ export function checkNarrative(n: Narrative, allowed: number[], facts?: MarketFa
       bad.push(...coverage.errors, ...unknownNumbers(coverage.text, f ? [...marketNumbers(f, req, policy), ...extra] : allowed));
       bad.push(...explicitSignErrors(text, [...marketNumbers(f, req, policy, true), ...extra]));
       bad.push(...unsupportedClaims(text));
+      bad.push(...costPolicyErrors(text, f?.costNeed !== undefined));
       bad.push(...namedCountryErrors(text, facts, req, policy, extra));
       if (f) bad.push(...rangeErrors(text, f), ...verdictErrors(text, f), ...observedRateErrors(text, f));
     }
@@ -472,6 +497,7 @@ export function checkNarrative(n: Narrative, allowed: number[], facts?: MarketFa
     bad.push(...coverage.errors, ...unknownNumbers(coverage.text, allowed));
     bad.push(...explicitSignErrors(general, facts.flatMap((f) => marketNumbers(f, req, policy, true))));
     bad.push(...unsupportedClaims(general));
+    for (const text of [n.headline, n.watch]) if (typeof text === "string") bad.push(...costPolicyErrors(text, facts.some(f => f.costNeed !== undefined)));
     for (const text of [n.headline, n.watch]) if (typeof text === "string") bad.push(...namedCountryErrors(text, facts, req, policy, extra));
     if (facts.length === 1) bad.push(...rangeErrors(general, facts[0]), ...verdictErrors(general, facts[0]), ...observedRateErrors(general, facts[0]));
     bad.push(...headlineVerdictErrors(String(n.headline ?? ""), facts));
@@ -492,11 +518,11 @@ export function factsForNarrative(facts: MarketFacts[], req?: Request, policy?: 
     verdict: f.verdict,
     ...(f.costNeed !== undefined && !req?.invalidPassThrough ? {
       cost_need_pct: f.costNeed, cost_vs_market: f.costVsMarket,
-      cost_share_pct: req?.costSharePct, cost_share_basis: "current unit cost / current selling price",
+      cost_share_pct: req?.costSharePct, cost_share_basis: req ? costShareBasisDescription(req) : undefined,
       cost_increase_pct: req?.costIncreasePct, cost_pass_through_pct: policy === undefined ? undefined : Math.round(policy * 100),
     } : {}),
     ...(req?.costIncreasePct !== undefined && f.costNeed === undefined ? {
-      cost_input_needed: req.invalidPassThrough ? "valid cost pass-through from 0% to 100%" : "current unit cost as a percentage of current selling price",
+      cost_input_needed: costInputNeeded(req, policy ?? 1),
     } : {}),
   }));
 }
@@ -551,7 +577,7 @@ export function renderBrief(b: Brief): string {
   L.push(`${req.invalidPassThrough ? "Cost policy unavailable: provide a valid pass-through percentage from 0% to 100%" : `Cost policy: recover ${Math.round(b.passThrough * 100)}% of incremental unit cost${b.policySource ? ` (${b.policySource})` : ""}`}${req.proposedChangePct !== undefined ? ` · proposed change: ${signedPct(req.proposedChangePct)}` : ""}. This policy does not scale the market benchmark.`, "");
   if (req.costIncreasePct !== undefined) {
     const need = costScenario(req, b.passThrough);
-    L.push(`Your unit costs: ${signedPct(req.costIncreasePct)} (${req.costRemembered ? "remembered from your last request" : "stated in this request"}). ${req.invalidPassThrough ? "The cost-recovery price scenario is unavailable until the cost policy is valid." : need === undefined ? "To calculate a cost-recovery price scenario, provide current unit cost as a percentage of current selling price." : `Current unit cost is ${req.costSharePct}% of current selling price${req.costShareRemembered ? " (remembered)" : ""}; recovering ${Math.round(b.passThrough * 100)}% of the incremental cost gives a ${signedPct(need)} selling-price scenario.`}`, "");
+    L.push(`Your unit costs: ${signedPct(req.costIncreasePct)} (${req.costRemembered ? "remembered from your last request" : "stated in this request"}). ${need === undefined ? `Cost-recovery price scenario unavailable. ${costInputNeeded(req, b.passThrough)}` : `Cost share is ${req.costSharePct}%: ${costShareBasisDescription(req)}${req.costShareRemembered ? " (remembered)" : ""}; recovering ${Math.round(b.passThrough * 100)}% of the incremental cost gives a ${signedPct(need)} selling-price scenario.`}`, "");
   }
   L.push(`The historical market benchmark spans the latest YoY rate and the mean of available observations in the year ending at the latest observation. It is not a forecast, a confidence interval or evidence that customers will accept a price change. A single value is a reference point, not a recommended price.`, "");
   L.push(`| Market | Official category | Latest period | YoY | Available-year average | Trend vs. 6 months ago | All-items YoY | Market benchmark | Proposed change |`);
