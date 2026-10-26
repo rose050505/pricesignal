@@ -10,7 +10,7 @@ import { PriceSignalAgent, extractJson } from "../src/agent.ts";
 import { AgentMemory } from "../src/memory.ts";
 import type { SqlResult, SqlRunner } from "../src/zetaris.ts";
 import type { Candidate } from "../src/sources/types.ts";
-import { allowedNumbers, checkNarrative } from "../src/brief.ts";
+import { allowedNumbers, buildFacts, checkNarrative, renderBrief } from "../src/brief.ts";
 
 function fakeRows(): unknown[][] {
   const rows: unknown[][] = [];
@@ -454,4 +454,66 @@ test("grounding also checks verdict words, stray 6/12, 'supports X to Y' ranges,
     DE: "German food inflation for Sugar, confectionery and desserts was 1.4% YoY in September 2026, with a 12-month average of 6.1%. The proposed +5% increase falls above the evidence range of 1.0% to 4.3%, placing it above the evidence.",
     CA: "Canadian food inflation was 2.2% YoY, down from a 12-month average of 4.1%; it eased from 4.1% to 2.2% over 6 months. The proposed +5% exceeds the evidence range of 1.5% to 2.9%, so it is above the evidence.",
   }, watch: "Re-check the 12-period averages next month." }), []);
+});
+
+test("cost side: a stated cost increase becomes a cost-based need, compared with each market's range", async () => {
+  const parseWith = (j: string | Error, q: string, memory = new AgentMemory(fs.mkdtempSync(path.join(os.tmpdir(), "psig-")))) =>
+    new PriceSignalAgent({ llm: async () => { if (j instanceof Error) throw j; return { text: j, model: "f", provider: "f", ms: 1 }; }, sql: new FakeZ(), memory }).parse(q);
+  const q = "DE and CA food: our costs rose 8% - is +4% ok? we pass on 70%";
+  const a = await parseWith('{"countries":["DE","CA"],"concept":"food","proposed_change_pct":4,"pass_through":0.7,"cost_increase_pct":8}', q);
+  assert.equal(a.costIncreasePct, 8);
+  assert.equal(a.proposedChangePct, 4);
+  // without the model, the rules still tell the cost increase from the proposal
+  const b = await parseWith(new Error("HTTP 502"), q);
+  assert.equal(b.costIncreasePct, 8);
+  assert.equal(b.proposedChangePct, 4);
+  const k = await parseWith(new Error("HTTP 502"), "독일 캐나다 식품, 원가가 8% 올랐는데 4프로 올려도 돼?");
+  assert.equal(k.costIncreasePct, 8);
+  assert.equal(k.proposedChangePct, 4);
+
+  // computed in code: 70% of +8% = +5.6%, then compared with each market's range
+  const rows: Record<string, unknown>[] = [];
+  for (const [c, base] of [["DE", 1.0], ["CA", 6.0]] as const) for (let m = 1; m <= 9; m++) rows.push({ country: c, concept: "food", category_label: "Food", frequency: "M", period: `2026-0${m}`, yoy_pct: base, source_id: "x" });
+  const facts = buildFacts(rows, { ...a, countries: ["DE", "CA"] }, "Q1", 0.7, new Date("2026-10-15"));
+  const de = facts.find((f) => f.country === "DE")!;
+  const ca = facts.find((f) => f.country === "CA")!;
+  assert.equal(de.costNeed, 5.6);
+  assert.equal(de.costVsMarket, "ahead of the market");
+  assert.equal(ca.suggested!.high, 4.2);
+  assert.equal(ca.costVsMarket, "ahead of the market");
+  const md = renderBrief({ request: a, facts, notes: [], passThrough: 0.7, compared: { id: "Q1", sql: "", columns: [], rows: [], ms: 0 }, sqlLog: [], views: [], ms: 1, trace: [] } as any);
+  assert.match(md, /Your costs: \+8% .* at 70% pass-through that is a \+5\.6% price rise/);
+  assert.match(md, /## Costs vs\. the market/);
+  // the prose may talk about the cost need without tripping the proposal-verdict check
+  const allowed = allowedNumbers(facts, a, 0.7);
+  assert.deepEqual(checkNarrative({ headline: "+4% is above the evidence in DE and below it in CA.", markets: { DE: "Food is 1.0% YoY; the range is 0.7% to 0.7%, so +4% is above the evidence. Your cost need of 5.6% is above the range too." } }, allowed, facts, a, 0.7), []);
+});
+
+test("an 'above' verdict says what pass-through the proposal would need", () => {
+  const rows: Record<string, unknown>[] = [];
+  for (let m = 1; m <= 12; m++) rows.push({ country: "CA", concept: "food", category_label: "Food", frequency: "M", period: `2025-${String(m).padStart(2, "0")}`, yoy_pct: m === 12 ? 2.2 : 4.27, source_id: "x" });
+  const req: any = { raw: "", countries: ["CA"], concept: "food", conceptWords: [], proposedChangePct: 5, unknownCountries: [] };
+  const [ca] = buildFacts(rows, req, "Q1", 0.7, new Date("2026-01-15"));
+  assert.equal(ca.category!.avg12, 4.1);
+  assert.equal(ca.verdict, "above the evidence");
+  assert.equal(ca.passThroughNeeded, 122, "5 / max(2.2, 4.1) = 122%");
+  assert.match(renderBrief({ request: req, facts: [ca], notes: [], passThrough: 0.7, compared: { id: "Q1", sql: "", columns: [], rows: [], ms: 0 }, sqlLog: [], views: [], ms: 1, trace: [] } as any), /above the evidence \(needs 122% pass-through\)/);
+  const [within] = buildFacts(rows, { ...req, proposedChangePct: 2 }, "Q1", 0.7, new Date("2026-01-15"));
+  assert.equal(within.passThroughNeeded, undefined);
+});
+
+test("headline verdicts are checked market by market, also when the markets differ", () => {
+  const s = (latestYoy: number, avg12: number) => ({ concept: "food", label: "Food", frequency: "M", sourceId: "x", latestPeriod: "2026-09", latestYoy, avg12, yoy6Back: undefined, trend: "easing" as const, points: [] });
+  const f = (country: string, lo: number, hi: number, verdict: string, yoy: number, avg: number): any => ({ country, agency: "a", category: s(yoy, avg), suggested: { low: lo, high: hi, basis: "" }, verdict, cite: "Q1" });
+  const facts = [f("DE", 1.0, 4.3, "within the evidence", 1.4, 6.1), f("CA", 1.5, 2.9, "above the evidence", 2.2, 4.1), f("AU", 0.4, 3.4, "within the evidence", 0.6, 4.9)];
+  const req: any = { raw: "", countries: ["DE", "CA", "AU"], concept: "food", conceptWords: [], proposedChangePct: 3, unknownCountries: [] };
+  const chk = (headline: string, fs = facts) => checkNarrative({ headline, markets: {} }, allowedNumbers(fs, req, 0.7), fs, req, 0.7);
+  // headlines Nemotron (or the code) actually wrote on 26 Oct
+  assert.deepEqual(chk("+3% is within the evidence in DE and AU; above the evidence in CA."), []);
+  assert.deepEqual(chk("+3% increase: within or above evidence across DE, CA, and AU"), []);
+  const two = [f("CA", 1.5, 2.9, "within the evidence", 2.2, 4.1), f("AU", 2.1, 2.2, "below the evidence", 3.0, 3.2)];
+  assert.deepEqual(chk("Proposed 2% increase: within evidence in CA, below in AU", two), []);
+  // wrong attributions are caught
+  assert.ok(chk("+3% is above the evidence in DE, CA and AU.").length);
+  assert.ok(chk("+3% is within the evidence in CA; above in DE and AU").length);
 });

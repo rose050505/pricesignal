@@ -17,6 +17,9 @@ export interface Request {
   concept: Concept; // the user's category, normalized
   conceptWords: string[];
   proposedChangePct?: number;
+  /** how much the exporter's own costs rose, if the user said so ("our costs rose 8%") */
+  costIncreasePct?: number;
+  costRemembered?: boolean;
   passThrough?: number; // from the request, else memory, else 1.0
   policyStatement?: string;
   unknownCountries: string[];
@@ -157,7 +160,7 @@ export class PriceSignalAgent extends EventEmitter {
   async parse(raw: string): Promise<Request> {
     const prompt = `Extract the pricing request as JSON with keys:
 countries (array of strings as the user wrote them), concept (one of: food, all_items, snacks, condiments, or a short noun), concept_words (2-4 lowercase words an official statistics label might use),
-proposed_change_pct (number or null), pass_through (0..1 or null, only if the user states how much of inflation they pass on), policy_statement (string or null).
+proposed_change_pct (number or null), cost_increase_pct (number or null, only if the user states how much their own costs rose), pass_through (0..1 or null, only if the user states how much of inflation they pass on), policy_statement (string or null).
 Request: """${raw}"""
 Reply with JSON only.`;
     let j: any = {};
@@ -193,10 +196,15 @@ Reply with JSON only.`;
     if (defaultMarkets) countries.push("DE", "CA", "AU");
     // A percentage stated as the pass-through share ("we pass on 80% now") is not a proposed price change.
     const passThrough = numOrUndef(j.pass_through);
-    const pcts = [...raw.matchAll(/([+＋]?)\s?(\d+(?:\.\d+)?)\s?(?:%|pct\b|percent\b|퍼센트|프로)/gi)]
-      .filter((m) => !/(pass|반영)/i.test(raw.slice(Math.max(0, m.index! - 30), m.index)))
-      .map((m) => ({ x: Number(m[2]), signed: !!m[1] }))
-      .filter(({ x }) => passThrough === undefined || Math.abs(x - passThrough * 100) > 1e-9);
+    // Each percentage is read with the words just before it (back to the previous percentage):
+    // "pass on 70%" is the policy, "costs rose 8%" / "원가가 8%" is the cost increase, the rest may be the proposal.
+    const found = [...raw.matchAll(/([+＋]?)\s?(\d+(?:\.\d+)?)\s?(?:%|pct\b|percent\b|퍼센트|프로)/gi)].map((m, i, all) => {
+      const from = i ? all[i - 1].index! + all[i - 1][0].length : 0;
+      const before = raw.slice(Math.max(from, m.index! - 30), m.index);
+      return { x: Number(m[2]), signed: !!m[1], pass: /(pass|반영)/i.test(before), cost: /(cost|원가|비용|input|ingredient|material|freight)/i.test(before) };
+    });
+    const pcts = found.filter((p) => !p.pass && !p.cost && (passThrough === undefined || Math.abs(p.x - passThrough * 100) > 1e-9));
+    const costPct = numOrUndef(j.cost_increase_pct) ?? found.find((p) => p.cost)?.x;
     // Other percentages may be costs ("our costs rose 8% - is +4% ok?"): the model's reading wins when the
     // question contains it; otherwise a signed "+N%" is the proposal, then the first percentage.
     const modelPct = numOrUndef(j.proposed_change_pct);
@@ -208,11 +216,13 @@ Reply with JSON only.`;
       conceptWords: last ? last.request.conceptWords : words,
       proposedChangePct: last ? (explicitPct ?? numOrUndef(j.proposed_change_pct) ?? last.request.proposedChangePct) : numOrUndef(j.proposed_change_pct) ?? explicitPct,
       passThrough,
+      costIncreasePct: costPct ?? (last ? last.request.costIncreasePct : undefined),
+      costRemembered: costPct === undefined && last?.request.costIncreasePct !== undefined ? true : undefined,
       policyStatement: j.policy_statement ? String(j.policy_statement) : undefined,
       unknownCountries: unknown,
       defaultMarkets: defaultMarkets || undefined,
     };
-    this.log("request", `markets ${countries.join(", ")} | category "${req.concept}"${req.proposedChangePct !== undefined ? ` | proposed ${signedPct(req.proposedChangePct)}` : ""}${unknown.length ? ` | not covered: ${unknown.join(", ")}` : ""}`, req);
+    this.log("request", `markets ${countries.join(", ")} | category "${req.concept}"${req.proposedChangePct !== undefined ? ` | proposed ${signedPct(req.proposedChangePct)}` : ""}${req.costIncreasePct !== undefined ? ` | costs ${signedPct(req.costIncreasePct)}` : ""}${unknown.length ? ` | not covered: ${unknown.join(", ")}` : ""}`, req);
     return req;
   }
 
@@ -632,9 +642,9 @@ Reply with JSON only.`;
     // Caveats are written by code (e.g. "no data after 2025-12 (10 months ago)"), so their numbers may be repeated.
     const noteNumbers = [...new Set(notes)].join(" ").replace(/\b(19|20)\d{2}(-(Q[1-4]|\d{2}))?\b/g, " ").match(/\d+(?:\.\d+)?/g)?.map(Number) ?? [];
     const allowed = [...allowedNumbers(facts, req, policy), ...noteNumbers];
-    const payload = { request: req.raw, proposed_change_pct: req.proposedChangePct ?? null, pass_through_pct: Math.round(policy * 100), facts: factsForNarrative(facts), caveats: [...new Set(notes)] };
+    const payload = { request: req.raw, proposed_change_pct: req.proposedChangePct ?? null, cost_increase_pct: req.costIncreasePct ?? null, pass_through_pct: Math.round(policy * 100), facts: factsForNarrative(facts), caveats: [...new Set(notes)] };
     const ask: ChatMessage[] = [
-      { role: "system", content: "You write short, plain-English pricing briefs for an exporter's pricing manager. Use ONLY numbers that appear in the facts JSON, written with the same one-decimal rounding. When you state a suggested range, copy suggested_range_pct low and high exactly (for example 1.0% to 4.3%); never compute a range yourself. No new numbers, no forecasts. Each market's verdict field is final: say it as given (above, within or below the evidence) and keep the headline consistent with every market's verdict; never compare the proposal with the range yourself. Mention only the caveats listed in the facts JSON (for example markets that are not covered); do not add claims about methodology or data sources that are not in it." },
+      { role: "system", content: "You write short, plain-English pricing briefs for an exporter's pricing manager. Use ONLY numbers that appear in the facts JSON, written with the same one-decimal rounding. When you state a suggested range, copy suggested_range_pct low and high exactly (for example 1.0% to 4.3%); never compute a range yourself. No new numbers, no forecasts. Each market's verdict field is final: say it as given (above, within or below the evidence) and keep the headline consistent with every market's verdict; never compare the proposal with the range yourself. When a market has cost_need_pct, add one clause on how the exporter's cost-based rise compares with the market, using cost_vs_market as given. Mention only the caveats listed in the facts JSON (for example markets that are not covered); do not add claims about methodology or data sources that are not in it." },
       { role: "user", content: `Facts: ${JSON.stringify(payload)}\nReply with JSON only: {"headline": str (<= 25 words), "markets": {"<country code>": str (2-3 sentences: what the data says and what it means for the proposed change)}, "watch": str (one sentence on what to re-check next month)}` },
     ];
     // One time budget for the prose, retries included: the numbers never wait more than this for the words.

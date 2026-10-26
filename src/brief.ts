@@ -27,6 +27,11 @@ export interface MarketFacts {
   monthsStale?: number;
   suggested?: { low: number; high: number; basis: string };
   verdict?: "above the evidence" | "within the evidence" | "below the evidence";
+  /** cost side: pass-through × the stated cost increase, and how it compares with the market's range */
+  costNeed?: number;
+  /** for an "above" verdict: the pass-through share (in %) the proposal would need, given this market's inflation */
+  passThroughNeeded?: number;
+  costVsMarket?: "ahead of the market" | "within the market range" | "behind the market";
   cite: string;
 }
 
@@ -123,6 +128,13 @@ export function buildFacts(rows: Record<string, unknown>[], req: Request, cite: 
       if (req.proposedChangePct !== undefined) {
         const p = req.proposedChangePct;
         f.verdict = p > hi ? "above the evidence" : p < lo ? "below the evidence" : "within the evidence";
+        const basis = Math.max(main.latestYoy, main.avg12);
+        if (f.verdict === "above the evidence" && basis > 0) f.passThroughNeeded = Math.round((p / basis) * 100);
+      }
+      if (req.costIncreasePct !== undefined) {
+        // The second lens: what the exporter's own costs call for, next to what the market has moved.
+        f.costNeed = r1(passThrough * req.costIncreasePct);
+        f.costVsMarket = f.costNeed > hi ? "ahead of the market" : f.costNeed < lo ? "behind the market" : "within the market range";
       }
     }
     return f;
@@ -152,7 +164,11 @@ export function marketNumbers(f: MarketFacts | undefined, req: Request, policy?:
       add(req.proposedChangePct - f.suggested.high);
       add(req.proposedChangePct - f.suggested.low);
     }
+    add(f.costNeed);
+    add(f.passThroughNeeded);
+    if (f.costNeed !== undefined && f.suggested) add(f.costNeed - f.suggested.high);
   }
+  add(req.costIncreasePct);
   add(req.proposedChangePct);
   if (req.passThrough !== undefined) add(req.passThrough * 100);
   if (policy !== undefined) add(policy * 100);
@@ -205,12 +221,51 @@ function rangeErrors(text: string, f: MarketFacts): string[] {
 function verdictErrors(text: string, verdict?: MarketFacts["verdict"]): string[] {
   if (!verdict) return [];
   const bad: string[] = [];
-  for (const m of text.matchAll(/\b(within|inside|above|exceeds?|exceeding|below|under|outside)\s+(?:the\s+)?(?:suggested\s+|computed\s+)?(?:evidence|range)\b/gi)) {
+  // Sentences about the cost need compare costs with the range, not the proposal: they are not verdict claims.
+  const aboutProposal = text.split(/(?<=[.!?;])\s+/).filter((t) => !/cost|원가/i.test(t)).join(" ");
+  for (const m of aboutProposal.matchAll(/\b(within|inside|above|exceeds?|exceeding|below|under|outside)\s+(?:the\s+)?(?:suggested\s+|computed\s+)?(?:evidence|range)\b/gi)) {
     const w = m[1].toLowerCase();
     const ok = w === "outside" ? verdict !== "within the evidence" : verdict === (/within|inside/.test(w) ? "within the evidence" : /below|under/.test(w) ? "below the evidence" : "above the evidence");
     if (!ok) bad.push(`"${m[0]}" (computed: ${verdict})`);
   }
   return bad;
+}
+
+/**
+ * Verdict words in the headline ("within evidence in CA, below in AU"), market by market: each market named
+ * after a verdict word (or before the first one) must have that verdict; "within or above" allows either.
+ * With no market named, the word must be a verdict some market has (all of them, when they agree).
+ */
+function headlineVerdictErrors(headline: string, facts: MarketFacts[]): string[] {
+  const vf = facts.filter((f) => f.verdict);
+  if (!vf.length) return [];
+  const text = headline.split(/(?<=[.!?;])\s+/).filter((t) => !/cost|원가/i.test(t)).join(" ");
+  const toVerdict = (w: string) => (/within|inside/i.test(w) ? "within the evidence" : /below/i.test(w) ? "below the evidence" : "above the evidence");
+  const claims: { at: number; end: number; words: string[]; verdicts: Set<string> }[] = [];
+  for (const m of text.matchAll(/\b(within|inside|above|exceeds?|exceeding|below)\b/gi)) {
+    const prev = claims.at(-1);
+    if (prev && /^\s*(or|\/)\s*$/i.test(text.slice(prev.end, m.index))) {
+      prev.verdicts.add(toVerdict(m[1]));
+      prev.words.push(m[1]);
+      prev.end = m.index! + m[0].length;
+    } else claims.push({ at: m.index!, end: m.index! + m[0].length, words: [m[1]], verdicts: new Set([toVerdict(m[1])]) });
+  }
+  if (!claims.length) return [];
+  const mentions = [...text.matchAll(/\p{L}+/gu)]
+    .map((m) => ({ at: m.index!, country: normalizeCountry(m[0], false) }))
+    .filter((x) => x.country && vf.some((f) => f.country === x.country));
+  const bad: string[] = [];
+  if (!mentions.length) {
+    const present = new Set<string>(vf.map((f) => f.verdict!));
+    for (const c of claims) if (![...c.verdicts].some((v) => present.has(v))) bad.push(`headline "${c.words.join(" or ")}" (computed: ${[...present].join(", ")})`);
+    return bad;
+  }
+  for (const m of mentions) {
+    const owner = [...claims].reverse().find((c) => c.at < m.at) ?? claims[0];
+    const f = vf.find((x) => x.country === m.country)!;
+    if (!owner.verdicts.has(f.verdict!)) bad.push(`headline "${owner.words.join(" or ")}" for ${m.country} (computed: ${f.verdict})`);
+  }
+  return [...new Set(bad)];
 }
 
 /** The market a prose key refers to ("DE", "de", "Germany"). */
@@ -239,9 +294,7 @@ export function checkNarrative(n: Narrative, allowed: number[], facts?: MarketFa
     const general = [n.headline, n.watch ?? ""].join(" ");
     bad.push(...unknownNumbers(general, allowed));
     if (facts.length === 1) bad.push(...rangeErrors(general, facts[0]));
-    // When every market has the same verdict, the headline may not say another one.
-    const verdicts = [...new Set(facts.map((f) => f.verdict).filter(Boolean))];
-    if (verdicts.length === 1 && facts.every((f) => f.verdict)) bad.push(...verdictErrors(general, verdicts[0]));
+    bad.push(...headlineVerdictErrors(String(n.headline ?? ""), facts));
   } else {
     bad.push(...unknownNumbers([n.headline, ...Object.values(n.markets ?? {}), n.watch ?? ""].join(" "), allowed));
   }
@@ -251,7 +304,7 @@ export function checkNarrative(n: Narrative, allowed: number[], facts?: MarketFa
 /** What the narrative model sees: the facts without the monthly history, so it cannot pick a stray number. */
 export function factsForNarrative(facts: MarketFacts[]): unknown[] {
   const slim = (s?: SeriesFacts) => (s ? { label: s.label, frequency: s.frequency, latestPeriod: s.latestPeriod, latestYoy: s.latestYoy, avg12: s.avg12, yoy6Back: s.yoy6Back, trend: s.trend } : undefined);
-  return facts.map((f) => ({ country: f.country, agency: f.agency, category: slim(f.category), allItems: slim(f.allItems), monthsStale: f.monthsStale, suggested_range_pct: f.suggested ? { low: f.suggested.low, high: f.suggested.high } : undefined, verdict: f.verdict }));
+  return facts.map((f) => ({ country: f.country, agency: f.agency, category: slim(f.category), allItems: slim(f.allItems), monthsStale: f.monthsStale, suggested_range_pct: f.suggested ? { low: f.suggested.low, high: f.suggested.high } : undefined, verdict: f.verdict, ...(f.passThroughNeeded !== undefined ? { pass_through_needed_pct: f.passThroughNeeded } : {}), ...(f.costNeed !== undefined ? { cost_need_pct: f.costNeed, cost_vs_market: f.costVsMarket } : {}) }));
 }
 
 /** One line per market for the same caveat about different categories ("condiments" and "snacks" at the Food level). */
@@ -302,12 +355,13 @@ export function renderBrief(b: Brief): string {
   const headline = b.narrative?.headline ?? fallbackHeadline(b);
   if (headline) L.push(`**${headline}**`, "");
   L.push(`Policy used: pass through ${Math.round(b.passThrough * 100)}% of category inflation${b.policySource ? ` (${b.policySource})` : ""}${req.proposedChangePct !== undefined ? ` · proposed change: ${signedPct(req.proposedChangePct)}` : ""}.`, "");
+  if (req.costIncreasePct !== undefined) L.push(`Your costs: ${signedPct(req.costIncreasePct)} (${req.costRemembered ? "remembered from your last request" : "stated in this request"}); at ${Math.round(b.passThrough * 100)}% pass-through that is a ${signedPct(r1(b.passThrough * req.costIncreasePct))} price rise.`, "");
   L.push(`| Market | Official category | Latest period | YoY | 12-period avg | Trend | All-items YoY | Suggested range | Proposed change |`);
   L.push(`|---|---|---|---|---|---|---|---|---|`);
   for (const f of b.facts) {
     const s = f.category ?? f.allItems;
     L.push(
-      `| ${f.country} (${f.agency}) | ${s?.label ?? "not found"} | ${s?.latestPeriod ?? "-"}${f.monthsStale !== undefined && f.monthsStale > 2 ? ` ⚠ ${f.monthsStale} mo old` : ""} | ${fmt(s?.latestYoy)} | ${fmt(s?.avg12)} | ${s?.trend ?? "-"} | ${fmt(f.allItems?.latestYoy)} | ${f.suggested ? `${f.suggested.low.toFixed(1)}–${f.suggested.high.toFixed(1)}%` : "-"} | ${f.verdict ?? "-"} |`,
+      `| ${f.country} (${f.agency}) | ${s?.label ?? "not found"} | ${s?.latestPeriod ?? "-"}${f.monthsStale !== undefined && f.monthsStale > 2 ? ` ⚠ ${f.monthsStale} mo old` : ""} | ${fmt(s?.latestYoy)} | ${fmt(s?.avg12)} | ${s?.trend ?? "-"} | ${fmt(f.allItems?.latestYoy)} | ${f.suggested ? `${f.suggested.low.toFixed(1)}–${f.suggested.high.toFixed(1)}%` : "-"} | ${f.verdict ?? "-"}${f.passThroughNeeded !== undefined ? ` (needs ${f.passThroughNeeded}% pass-through)` : ""} |`,
     );
   }
   L.push("", `Every rate above comes from Zetaris query **${b.compared.id}** (one federated SQL over the onboarded sources); suggested ranges and verdicts are computed in code from those rates and the pass-through policy.`, "");
@@ -330,6 +384,18 @@ export function renderBrief(b: Brief): string {
     L.push(`### ${f.country} — ${f.agency}`);
     L.push(prose ?? (s ? `${s.label}: ${fmt(s.latestYoy)} year on year in ${s.latestPeriod} (${s.trend}; 12-period average ${fmt(s.avg12)}). Suggested range ${f.suggested?.low.toFixed(1)}–${f.suggested?.high.toFixed(1)}%.` : "No usable series."));
     if (s) L.push(`<sub>source: \`${s.sourceId}\` · ${s.frequency === "Q" ? "quarterly" : "monthly"} · cite ${f.cite}</sub>`);
+    L.push("");
+  }
+  const costed = b.facts.filter((f) => f.costVsMarket && f.suggested);
+  if (costed.length) {
+    L.push(`## Costs vs. the market`);
+    L.push(`Two lenses on the same decision: what your costs call for (computed above) and how far consumer prices for the category have moved in each market (the suggested range).`, "");
+    for (const f of costed) {
+      const s = (f.category ?? f.allItems)!;
+      const range = `${f.suggested!.low.toFixed(1)}–${f.suggested!.high.toFixed(1)}%`;
+      const need = signedPct(f.costNeed!);
+      L.push(`- ${f.country}: ${f.costVsMarket === "ahead of the market" ? `your cost-based rise of ${need} runs ahead of the market (${s.label}: ${range}); passing it on in full would price you above local inflation.` : f.costVsMarket === "behind the market" ? `your cost-based rise of ${need} is below what the market supports (${range}); prices have moved more than your costs.` : `your cost-based rise of ${need} sits within what the market supports (${range}).`}`);
+    }
     L.push("");
   }
   if (b.sinceLast?.length) {

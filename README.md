@@ -32,7 +32,8 @@ Assembling a comparable answer by hand means three APIs, three formats and three
 4. **Answers with one federated SQL query** across all three agencies in Zetaris.
 5. **Joins the company's own price list.** The exporter's internal price list (SKU, market, product category, current shelf price) is a Zetaris REST table too. A second federated query joins each SKU with the official series of its own category in its market (gochujang → condiments, chips → snacks, ramen → food; missing category series are onboarded first), so the brief ends with a suggested new price per SKU.
 6. **Computes the facts in code** (latest year-on-year rate, 12-period average, trend, staleness, suggested range, verdict, new SKU prices) and lets the model write only the prose. Numbers in the prose must match a computed fact, the request or the policy, a stated range must be the computed range, and "within / above / below the evidence" must be the computed verdict (re-checking replies recorded on 26 Oct found Nemotron calling a +3% proposal "above" a 0.4–3.4% range, which the earlier number-only check let through); otherwise the model rewrites once and then a deterministic summary is used.
-7. **Remembers** (Meterless H-MEM): series mappings, the user's pricing policy and the last request persist across sessions. "Same as last time, but +3%?" is resolved from memory, and remembered mappings skip discovery and onboarding.
+7. **Weighs your costs against the market.** If the question says how much your costs rose ("our costs rose 8%", "원가가 8% 올랐는데"), code computes the cost-based rise (pass-through × cost increase) and says for each market whether it runs ahead of, within or behind what consumer prices there support. For an "above" verdict the brief also gives the pass-through the proposal would need ("+5% would need 122% pass-through of Canadian food inflation").
+8. **Remembers** (Meterless H-MEM): series mappings, the user's pricing policy and the last request persist across sessions. "Same as last time, but +3%?" is resolved from memory, and remembered mappings skip discovery and onboarding.
 
 **What the suggested range means.** Range = your pass-through share × how much consumer prices for that category have moved in that market over the latest month and the 12-month average. It is a market-side check ("how much room do shelf prices in this category give us?"), not a measure of your own costs.
 
@@ -83,7 +84,7 @@ Germany, Canada and Australia are the demo markets. Because Eurostat publishes H
 
 - **Canada:** our adapter maps only StatCan's Food and All-items CPI vectors, so narrower categories (snacks, sauces) are compared at the Food level and the brief says so.
 - **SKU categories** are matched to the nearest published series by label, so honey butter chips in Germany are priced on Eurostat's "Sugar, confectionery and desserts" and in Canada on Food; the SKU table names the series used for each product.
-- **The range is a market-side check** on consumer prices, not a cost model; it is often narrow, so most proposals land above or below it.
+- **The range is a market-side check** on consumer prices, not a cost model; it is often narrow, so most proposals land above or below it. The cost lens uses the cost increase you state, not your cost records.
 - **The price list is sample data** for a fictional exporter.
 - **Speed** depends on the model's response time, which varied from 1 s to 43 s per call in our runs: 36–113 s per question in `examples/`. The numbers are shown as soon as they are computed; the prose follows.
 
