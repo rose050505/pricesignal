@@ -12,6 +12,7 @@
     "test": "tsx --test tests/*.test.ts",
     "smoke": "tsx src/smoke.ts",
     "ask": "tsx src/cli.ts",
+    "verify": "tsx src/verify.ts",
     "ui": "tsx src/server.ts",
     "typecheck": "tsc -p ."
   },

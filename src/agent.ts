@@ -201,9 +201,24 @@ Reply with JSON only.`;
     const last = sameAsLast ? this.deps.memory.lastRequest() : undefined;
     const explicitCountries = raw.split(/[^\p{L}]+/u).map((w) => normalizeCountry(w, false)).filter((c): c is Country => !!c);
     if (last) {
-      if (explicitCountries.length) countries.splice(0, countries.length, ...new Set(explicitCountries));
-      else if (!named.some(c => raw.toLowerCase().split(/[^\p{L}]+/u).includes(c.toLowerCase()))) countries.splice(0, countries.length, ...(last.request.countries as Country[]));
-      this.log("memory", `recalled last request ${last.id}: markets ${last.request.countries.join(", ")}, category "${last.request.concept}"${last.request.proposedChangePct !== undefined ? `, ${signedPct(last.request.proposedChangePct)}` : ""}`);
+      const words = raw.split(/[^\p{L}]+/u);
+      const phrase = (text: string) => text.toLowerCase().split(/[^\p{L}]+/u).filter(Boolean).join(" ");
+      const rawPhrase = ` ${phrase(raw)} `;
+      const explicitNames = new Map<string, string>();
+      // A model guess cannot replace remembered markets unless the user actually named it.
+      // Keep multiword unsupported names intact, and preserve upper-case-only ISO codes.
+      for (const name of [...named, ...(last.request.unknownCountries ?? [])]) {
+        const p = phrase(name);
+        if (!p || !rawPhrase.includes(` ${p} `)) continue;
+        if (/^[A-Z]{2}$/.test(name) && !normalizeCountry(name.toLowerCase(), false) && !words.includes(name)) continue;
+        if (!explicitNames.has(p)) explicitNames.set(p, name);
+      }
+      const changedCountries = [...new Set([...explicitCountries, ...[...explicitNames.values()].map(name => normalizeCountry(name)).filter((c): c is Country => !!c)])];
+      const changedUnknown = [...explicitNames.values()].filter(name => !normalizeCountry(name));
+      const changedMarkets = changedCountries.length || changedUnknown.length;
+      countries.splice(0, countries.length, ...(changedMarkets ? changedCountries : last.request.countries as Country[]));
+      unknown.splice(0, unknown.length, ...(changedMarkets ? changedUnknown : last.request.unknownCountries ?? []));
+      this.log("memory", `recalled last request ${last.id}: markets ${last.request.countries.join(", ")}${last.request.unknownCountries?.length ? `; not covered: ${last.request.unknownCountries.join(", ")}` : ""}, category "${last.request.concept}"${last.request.proposedChangePct !== undefined ? `, ${signedPct(last.request.proposedChangePct)}` : ""}`);
     }
     // Nothing named and nothing remembered: the demo markets, said in the brief. Only unsupported markets named: none.
     const defaultMarkets = !countries.length && !unknown.length;
@@ -258,7 +273,8 @@ Reply with JSON only.`;
     if (req.defaultMarkets) notes.push(`No market was named in the question, so the brief covers the default markets ${req.countries.join(", ")}.`);
     if (!req.countries.length) {
       // Only markets PriceSignal does not cover were named: say so instead of answering for markets nobody asked about.
-      const brief: Brief = { request: req, startedAt, facts: [], notes, passThrough: req.passThrough ?? memory.latestPolicy()?.policy ?? 1, compared: { id: "-", sql: "", columns: COMPARE_COLUMNS, rows: [], ms: 0 }, sqlLog: this.sqlLog, views: [], ms: Date.now() - t0, trace: this.trace };
+      memory.rememberRequest(req);
+      const brief: Brief = { request: req, startedAt, calculatedAt: new Date().toISOString(), facts: [], notes, passThrough: req.passThrough ?? memory.latestPolicy()?.policy ?? 1, compared: { id: "-", sql: "", columns: COMPARE_COLUMNS, rows: [], ms: 0 }, sqlLog: this.sqlLog, views: [], ms: Date.now() - t0, trace: this.trace };
       brief.markdown = renderBrief(brief);
       this.log("done", `none of the markets in the question is covered (${req.unknownCountries.join(", ")}) - nothing to compare`);
       return brief;
@@ -348,8 +364,10 @@ Reply with JSON only.`;
     const policy = req.passThrough ?? remembered?.policy ?? 1.0;
     const policySource = req.invalidPassThrough ? "invalid input; cost-recovery target omitted" : req.passThrough !== undefined ? "stated in this request" : remembered ? `remembered from an earlier request (${remembered.id})` : "default: recover the full monetary cost increase (no policy given)";
     if (remembered) this.log("memory", `using remembered pricing policy ${remembered.id}: ${Math.round(policy * 100)}%`);
-    const facts: MarketFacts[] = buildFacts(rowsAsObjects(compared, COMPARE_COLUMNS), req, compared.id, policy);
-    const alignment = buildAlignment(rowsAsObjects(compared, COMPARE_COLUMNS), req, facts, compared.id);
+    const calculatedAt = new Date().toISOString();
+    const calculationTime = new Date(calculatedAt);
+    const facts: MarketFacts[] = buildFacts(rowsAsObjects(compared, COMPARE_COLUMNS), req, compared.id, policy, calculationTime);
+    const alignment = buildAlignment(rowsAsObjects(compared, COMPARE_COLUMNS), req, facts, compared.id, calculationTime);
     for (const p of pairs) if (!views.has(key(p.country, p.concept))) notes.push(`${p.country} ${p.concept}: no usable official series was found.`);
     const ctx = { views, candidates, notes, key, pairs, getCompared: () => compared, setCompared: (c: SqlResult) => (compared = c) };
     const ensureView = async (country: Country, concept: Concept) => {
@@ -360,7 +378,7 @@ Reply with JSON only.`;
     const snapshotMetrics = (): RunMetrics => ({ ...this.metrics, reusedViews: [...views.values()].filter((v) => v.via === "memory").length });
     // Market facts are useful immediately; do not hide them behind slower SKU discovery and pricing.
     this.metrics.numbersMs = Date.now() - t0;
-    const marketPartial: Brief = { request: req, startedAt, facts, alignment, notes: [...notes], passThrough: policy, policySource, compared, sqlLog: [...this.sqlLog], views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: this.metrics.numbersMs, trace: [...this.trace], metrics: snapshotMetrics(), partialStage: "markets" };
+    const marketPartial: Brief = { request: req, startedAt, calculatedAt, facts, alignment, notes: [...notes], passThrough: policy, policySource, compared, sqlLog: [...this.sqlLog], views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: this.metrics.numbersMs, trace: [...this.trace], metrics: snapshotMetrics(), partialStage: "markets" };
     this.log("progress", `market numbers ready in ${(this.metrics.numbersMs / 1000).toFixed(1)} s - pricing SKUs and writing the summary`);
     this.emit("partial", marketPartial);
     // The narrative only needs the market facts, so the model writes it while Zetaris prices the SKUs.
@@ -368,11 +386,11 @@ Reply with JSON only.`;
     const pricing = await this.priceList(req, views, facts, policy, ensureView, notes);
     const sinceLast = this.compareWithLastBrief(facts, req, policy);
     // Everything in the brief except the prose is ready: let the UI show it while the model finishes writing.
-    const partial: Brief = { request: req, startedAt, facts, alignment, notes, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, sinceLast, compared, sqlLog: [...this.sqlLog], views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: [...this.trace], metrics: snapshotMetrics(), partialStage: "pricing" };
+    const partial: Brief = { request: req, startedAt, calculatedAt, facts, alignment, notes, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, sinceLast, compared, sqlLog: [...this.sqlLog], views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: [...this.trace], metrics: snapshotMetrics(), partialStage: "pricing" };
     this.emit("partial", partial);
     const { narrative, issue: narrativeIssue } = await narrativeP;
     memory.rememberRequest(req);
-    const brief: Brief = { request: req, startedAt, facts, alignment, notes, narrative, narrativeIssue, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, sinceLast, compared, sqlLog: this.sqlLog, views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: this.trace, metrics: snapshotMetrics() };
+    const brief: Brief = { request: req, startedAt, calculatedAt, facts, alignment, notes, narrative, narrativeIssue, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, sinceLast, compared, sqlLog: this.sqlLog, views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: this.trace, metrics: snapshotMetrics() };
     brief.markdown = renderBrief(brief);
     this.log("done", `brief ready in ${Math.round(brief.ms / 1000)} s (${this.sqlLog.length} SQL statements, ${[...views.values()].filter((v) => v.via === "memory").length} views reused from memory; ${this.metrics.modelCalls} model calls, ${this.metrics.plannerCalls} planner calls, ${this.metrics.discoveries} discoveries)`);
     return brief;
@@ -415,6 +433,12 @@ Reply with JSON only.`;
             // Nothing in H-MEM for this pair: discover it now instead of spending another planner turn on the error.
             this.log("memory", `nothing remembered for ${country} ${concept} - discovering it`);
             return { not_in_memory: true, discovered: await this.execute({ action: "discover_and_onboard", args: { country, concept } }, req, s) };
+          }
+          if (memory.hmem.store.get(hit.id)?.tags.includes("review")) {
+            const note = `${country} ${concept}: the remembered mapping is marked for review; it must be rediscovered and verified before reuse.`;
+            if (!s.notes.includes(note)) s.notes.push(note);
+            this.log("memory", `mapping ${hit.id} is marked for review - not reusing it`);
+            return { error: "remembered mapping requires review; discover and verify an official series again" };
           }
           const decoderVersion = sourceDecoderVersion(AGENCY_FOR[country].agency);
           if ((hit.mapping.decoderVersion ?? 1) !== decoderVersion) {

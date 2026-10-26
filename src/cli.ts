@@ -6,6 +6,7 @@ import { PriceSignalAgent } from "./agent.ts";
 import { AgentMemory } from "./memory.ts";
 import { ZetarisClient } from "./zetaris.ts";
 import { providerConfig } from "./llm.ts";
+import { exportEvidence, verifyEvidence } from "./evidence.ts";
 
 async function main(): Promise<void> {
   loadEnv();
@@ -21,13 +22,18 @@ async function main(): Promise<void> {
   const agent = new PriceSignalAgent({ sql: new ZetarisClient(), memory: new AgentMemory() });
   agent.on("event", (e) => console.log(`  · [${e.kind}] ${e.title}`));
   const brief = await agent.run(question);
+  const evidence = exportEvidence(brief);
+  const verification = verifyEvidence(evidence);
+  if (!verification.ok) throw new Error(`evidence verification failed: ${verification.errors.join("; ")}`);
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const dir = path.join(ROOT, "out", stamp);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "brief.md"), brief.markdown ?? "");
   fs.writeFileSync(path.join(dir, "trace.json"), JSON.stringify({ question, trace: brief.trace, sql: brief.sqlLog.map((q) => ({ id: q.id, sql: q.sql, rows: q.rows.length, ms: q.ms })) }, null, 2));
+  fs.writeFileSync(path.join(dir, "evidence.json"), JSON.stringify(evidence, null, 2) + "\n");
   console.log("\n" + brief.markdown);
   console.log(`\n[pricesignal] saved ${path.relative(ROOT, dir)}/brief.md`);
+  console.log(`[pricesignal] saved ${path.relative(ROOT, dir)}/evidence.json (${verification.checks} offline checks)`);
   const covered = brief.facts.filter((f) => f.category ?? f.allItems).length;
   process.exit(covered === brief.facts.length ? 0 : 3);
 }

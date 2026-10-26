@@ -22,7 +22,7 @@ A small food exporter selling into Germany, Canada and Australia wants to check 
 | Category scheme | ECOICOP v2 (`coicop18`) | product/vector ids | ABS index codes |
 | Gotcha we hit | the dataset everyone links to (`prc_hicp_manr`) stopped at 2025-12 and was replaced by `prc_hicp_minr` | the data methods used in public recipes are POST-only; the GET method returns a top-level array | a broad query is too large for one fetch; series must be scoped to one key |
 
-Assembling the evidence by hand means reconciling three APIs, three formats, different category schemes and different release calendars. Our latest recorded cold run used a fresh memory store and new Zetaris application tables/views: 107 s including CLI startup, with market numbers at 52.0 s. PriceSignal keeps the receipts; a repeat question reuses remembered mappings after checking their live rows and freshness. When every requested mapping is remembered, it also skips the planning model call; stale or unavailable views go back through discovery.
+Assembling the evidence by hand means reconciling three APIs, three formats, different category schemes and different release calendars. Our latest recorded cold run used a fresh memory store and new Zetaris application tables/views: 110 s including CLI startup, with market numbers at 52.9 s. PriceSignal keeps the receipts; a repeat question reuses remembered mappings after checking their live rows and freshness. When every requested mapping is remembered, it also skips the planning model call; stale or unavailable views go back through discovery.
 
 ## What it does
 
@@ -33,9 +33,11 @@ Assembling the evidence by hand means reconciling three APIs, three formats, dif
 5. **Joins the company's own price list.** The exporter's internal price list (SKU, market, product category, current shelf price) is a Zetaris REST table too. For narrow SKU categories, Nemotron chooses from official candidates using the actual product names (for example, honey butter chips rather than the word snacks alone). Code validates that choice before onboarding. A second federated query joins each SKU to the chosen category or an explicitly marked broader Food proxy, then code calculates hypothetical prices at those benchmark rates.
 6. **Computes the facts in code** — latest year-on-year inflation, a recent one-year mean with the actual observation count, trend where a six-month comparison exists, the historical benchmark and the proposal's position against it. The model explains these facts. Numeric and comparison checks reject mismatches, request one rewrite, then use a computed summary if needed.
 7. **Separates cost recovery from the market.** With "costs rose 8%, unit costs are 60% of our current selling price, pass on 70%", the price-change target is `8% × 60% × 70% = 3.36%` (displayed as 3.4%). If cost share is missing, the brief asks for it and supplies no cost-derived price target. The historical market benchmark is independent of this cost policy.
-8. **Remembers** (Meterless H-MEM): series mappings, the user's pricing policy and the last request persist across sessions. "Same as last time, but +3%?" is resolved from memory, and remembered mappings skip discovery and onboarding while they still pass live freshness checks. If all requested market mappings are remembered, no planning model turn is needed. Product-checked SKU selections have separate memory scopes keyed by their product set; changing products, stale data, a review flag or a selection-version change triggers a new choice. The UI reports actual model requests (including hedges and retries), planning requests, discovery calls and reused views.
+8. **Remembers** (Meterless H-MEM): series mappings, the user's pricing policy and the last request persist across sessions. "Same as last time, but +3%?" is resolved from memory, and remembered mappings skip discovery and onboarding while they still pass live freshness checks. Mappings marked for review must be rediscovered and verified before reuse. Remembered request scope includes unsupported countries; repeating a Japan-only request does not silently switch to default markets. If all requested market mappings are remembered, no planning model turn is needed. Product-checked SKU selections have separate memory scopes keyed by their product set; changing products, stale data, a review flag or a selection-version change triggers a new choice. The UI reports agent model calls (including hedged calls), planning calls, discovery calls and reused views. Internal provider retries can add HTTP attempts beyond this model-call count.
 
 9. **Previews another proposal locally.** After a brief finishes, change the percentage in “Try another price change” to compare it with the same market benchmarks and recalculate available SKU prices from their original current prices. This separate preview sends no request, refreshes no data and writes no memory. The original narrative, proposal, cost target and saved request stay unchanged. The panel shows the run time and each observation period; unsupported or missing market evidence stays unavailable.
+
+10. **Keeps a replayable calculation record.** The CLI writes a versioned `evidence.json` beside the brief: interpreted inputs, calculation time, actual market and pricing query columns/rows, and derived results. `npm run verify -- path/to/evidence.json` checks those calculations offline, without credentials, a memory store or live services. It reports missing coverage explicitly.
 
 The result header distinguishes complete, partial and missing coverage of the requested market category. Unsupported countries count toward the requested total. A recovered SKU series does not imply that the market comparison also recovered. The model badge names successful model responses from the current run; provider-error text is not a model identity.
 
@@ -99,22 +101,22 @@ Germany, Canada and Australia are the demo markets. Because Eurostat publishes H
 - **Historical benchmarks are descriptive.** A point or narrow span is possible; it does not express confidence, price headroom or a prediction. Cost recovery requires both a stated cost change and the current cost-to-price share.
 - **SQL result completeness:** the client refuses results reaching the requested row limit (1,000 by default), because a complete result cannot be confirmed. SKU prices are omitted when their query is incomplete; even a result of exactly 1,000 complete rows is conservatively refused. There is no automatic pagination.
 - **The price list is sample data** for a fictional exporter.
-- **Speed** depends on the provider and source queries: the current six CLI recordings took 40–107 s per question, with market numbers at 14.6–52.0 s. Market numbers are shown immediately after the federated comparison, before SKU discovery and pricing finish; SKU prices and the checked prose follow. A disconnected UI retries the event stream for up to 10 s, preserving available numbers and replaying the latest snapshot on reconnection.
+- **Speed** depends on the provider and source queries: the current six CLI recordings took 21–110 s per question, with market numbers at 9.1–52.9 s. Market numbers are shown immediately after the federated comparison, before SKU discovery and pricing finish; SKU prices and the checked prose follow. A disconnected UI retries the event stream for up to 10 s, preserving available numbers and replaying the latest snapshot on reconnection.
 
 ## Recorded runs in `examples/` (27 Oct 2026 KST, Nemotron via Nightshift)
 
-The six questions were run consecutively by `scripts/15_examples.sh` with a new H-MEM store and fresh Zetaris suffix. Each folder contains the actual brief, full trace and recording metadata. These runs use the current historical-benchmark method and require a cost-to-price share for the cost target.
+The six questions were run consecutively by `scripts/15_examples.sh` with a new H-MEM store and fresh Zetaris suffix. Each folder contains the actual brief, full trace, recording metadata and versioned SQL-row evidence packet. These runs use the current historical-benchmark method and require a cost-to-price share for the cost target.
 
 | Example | What happened | CLI elapsed / first numbers |
 |---|---|---|
-| `01_cold_start` | Messy DE/CA/AU Food request with separate sentences: costs +8%, cost share 60%, policy 70%, proposal +5% → cost target 3.4%. Created 10 REST tables and 13 views; Nemotron selected six product groups in 11.4 s; 9 SKU scenarios. Narrative rejected, rewrite timed out. | 107 s / 52.0 s |
-| `02_same_as_last_time` | Proposal −2%; cost assumptions and markets remembered, 12 views reused, no planning, discovery or new DDL. All product selections were reused. Narrative rejected, rewrite timed out. | 92 s / 36.6 s |
-| `03_typo_market` | “canda” → Canada. Policy changes to 60%; +4% is within the broader Food benchmark used for snacks. Product choices reused; narrative checks passed. | 54 s / 26.8 s |
-| `04_unsupported_market` | Japan explicitly not covered; Canada +5% is above its Food benchmark. Canadian product mappings reused; narrative checks passed. | 40 s / 14.6 s |
-| `05_within_range` | CA/AU Food, +3% within both benchmarks; separate cost target 3.4%. Eight views reused, no planning or discovery. Narrative rejected, rewrite timed out. | 70 s / 14.6 s |
-| `06_eu_markets` | FR/IT/ES: six new Eurostat series, 90 comparison rows, +3% above all benchmarks. No matching sample SKUs. Narrative checks passed. | 97 s / 43.7 s |
+| `01_cold_start` | Messy DE/CA/AU Food request with separate sentences: costs +8%, cost share 60%, policy 70%, proposal +5% → cost target 3.4%. Created 10 REST tables and 13 views; Nemotron selected six product groups in 19.7 s; 9 SKU scenarios. Provider error and timeout omitted the narrative. | 110 s / 52.9 s |
+| `02_same_as_last_time` | Proposal −2%; cost assumptions and markets remembered, 12 views reused, no planning, discovery or new DDL. All product selections were reused. Narrative timed out. | 94 s / 39.5 s |
+| `03_typo_market` | “canda” → Canada. Policy changes to 60%; +4% is within the broader Food benchmark used for snacks. Product choices reused; narrative checks passed. | 66 s / 44.8 s |
+| `04_unsupported_market` | Japan explicitly not covered; Canada +5% is above its Food benchmark. Canadian product mappings reused; narrative checks passed. | 21 s / 9.1 s |
+| `05_within_range` | CA/AU Food, +3% within both benchmarks; separate cost target 3.4%. Eight views reused, no planning or discovery. Narrative rejected, rewrite timed out. | 68 s / 13.0 s |
+| `06_eu_markets` | FR/IT/ES: six new Eurostat series, 90 comparison rows, +3% above all benchmarks. No matching sample SKUs. Narrative checks passed. | 83 s / 44.2 s |
 
-These are measured runs, not speed or completion guarantees. They include the versioned calendar-based ABS/StatCan YoY decoder, explicit comparison-category override, common-period comparison and sentence-boundary correction. The first request resolves to Food even though its product introduction mentions snacks. Examples 01, 02 and 05 had a rejected narrative followed by a provider timeout; the calculated facts remained available. The older policy-scaled and category-mismatched recordings remain in Git history and local recording backups. [Recording notes](examples/README.md) distinguish validated selection, reuse, broader proxies and narrative failure.
+These are measured runs, not speed or completion guarantees. They include the versioned calendar-based ABS/StatCan YoY decoder, explicit comparison-category override, common-period comparison and sentence-boundary correction. The first request resolves to Food even though its product introduction mentions snacks. Examples 01 and 02 had provider failures or timeouts before a validated narrative; example 05 rejected mixed Canadian/Australian values before its rewrite timed out. Calculated facts remained available in each case. All six evidence packets passed offline replay, preserving 368 market rows and 417 pricing rows; the verifier reports the unsupported Japanese request separately. The older policy-scaled and category-mismatched recordings remain in Git history and local recording backups. [Recording notes](examples/README.md) distinguish validated selection, reuse, broader proxies and narrative failure.
 
 ## Run it
 
@@ -127,6 +129,8 @@ npm run setup:conformance   # vendors the H-MEM conformance suite
 npm run conformance         # 13/13 checks pass against src/hmem_impl.ts
 npm test                    # offline agent tests (fake model, fake Zetaris)
 npm run typecheck           # strict TypeScript check of src/ and tests/ (after npm run setup)
+# Verify a recorded calculation without starting Zetaris or Nightshift:
+npm run verify -- examples/01_cold_start/evidence.json
 
 cp .env.example .env        # then fill in (never commit .env):
 #   ZETARIS_REST_URL, ZETARIS_ORG_ID, ZETARIS_API_KEY
@@ -142,7 +146,18 @@ npm run ask -- "is food inflation in deutschland, canada & aus still hot? thinki
 
 `npm run setup` and `setup:conformance` download the upstream H-MEM reference code and conformance suite; they need network access and are not pinned dependency snapshots. `npm test` and `npm run typecheck` run locally after setup. Do not run multiple app processes against the same memory directory.
 
-Helper scripts used on our machine (Ubuntu laptop + Windows desktop running Nightshift) are in `scripts/` (Docker install, Zetaris install, secret entry without echo, smoke tests, integration probe, network check). `scripts/03_app_setup.sh` stops at the first failed step and returns its exit code. `bash scripts/15_examples.sh` creates a fresh experimental store and Zetaris suffix by default. It replaces the six example folders only after every run exits successfully and saves both a brief and a valid trace. Prior recordings and logs remain under `logs/`; a supplied memory directory must not already exist.
+Helper scripts used on our machine (Ubuntu laptop + Windows desktop running Nightshift) are in `scripts/` (Docker install, Zetaris install, secret entry without echo, smoke tests, integration probe, network check). `scripts/03_app_setup.sh` stops at the first failed step and returns its exit code. `bash scripts/15_examples.sh` creates a fresh experimental store and Zetaris suffix by default. It replaces the six example folders only after every run exits successfully and saves a brief, a valid trace and its evidence packet. Prior recordings and logs remain under `logs/`; a supplied memory directory must not already exist.
+
+## Verify a saved calculation
+
+Each new CLI run writes `out/<run>/evidence.json` alongside `brief.md` and `trace.json`. The schema and calculation method are versioned. The packet preserves query IDs, SQL, returned column metadata, unrounded rows, interpreted request, cost policy, calculation time and computed results. The CLI checks the packet before reporting a saved run; an unsupported format or inconsistent calculation fails verification.
+
+```bash
+npm run verify -- out/<run>/evidence.json
+npm run --silent verify -- out/<run>/evidence.json --json
+```
+
+Verification replays market means and observation counts, benchmarks, proposal and cost comparisons, common-period alignment and available SKU price arithmetic. Missing market evidence or omitted SKU pricing is reported, not filled in. The same saved calculation time is used even if verification runs months later. This checks consistency between the saved rows and results: it does not authenticate an agency response, recompute index-to-YoY decoding from upstream raw indices, assess product-category suitability, or validate all meanings in model prose. Changing both inputs and results consistently can still pass. Keep the original packet when comparing changes. The UI does not currently export these CLI packets.
 
 ## Repository layout
 
@@ -153,7 +168,9 @@ src/brief.ts          facts computed from Zetaris rows, number and verdict check
 src/sources/          one adapter per agency: discover() + Lightning SQL onboarding templates;
                       pricelist.ts registers the internal price list and joins it with the rates
 data/price_list.json  sample internal price list (fictional exporter)
-examples/             real runs: brief.md plus trace.json with every model call and SQL statement
+examples/             real runs: brief.md, trace.json, recording.json and evidence.json
+src/evidence.ts       versioned SQL-row snapshots and offline calculation verification
+src/verify.ts         local evidence verification command
 src/zetaris.ts        Zetaris REST client
 src/llm.ts            Meterless Runtime provider (plus dev fallbacks)
 src/memory.ts         agent memory on H-MEM

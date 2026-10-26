@@ -9,7 +9,7 @@ import { COMPARE_COLUMNS, type Candidate } from "../src/sources/index.ts";
 import { renderBrief, type Brief } from "../src/brief.ts";
 
 test("messy request and remembered follow-up expose the common period without replacing latest evidence", async (t) => {
-  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-27T00:00:00Z") });
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-31T23:59:59Z") });
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "psig-alignment-"));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const memory = new AgentMemory(dir);
@@ -29,6 +29,7 @@ test("messy request and remembered follow-up expose the common period without re
     llm: async (messages: any[]) => {
       const prompt = messages.at(-1).content as string;
       const followup = prompt.includes("same as last time");
+      if (prompt.startsWith("Extract")) t.mock.timers.setTime(new Date("2026-11-01T00:00:01Z").getTime());
       const text = prompt.startsWith("Extract")
         ? JSON.stringify({ countries: followup ? [] : ["DE", "CA", "AU"], concept: followup ? null : "food", proposed_change_pct: followup ? -2 : 5, cost_increase_pct: followup ? null : 8, cost_share_pct: followup ? null : 60, pass_through: followup ? null : 0.7 })
         : messages[0].content.startsWith("You write short") ? '{"headline":"Check the historical evidence.","markets":{}}' : "{}";
@@ -44,8 +45,12 @@ test("messy request and remembered follow-up expose the common period without re
   const partials: Brief[] = [];
   first.on("partial", (b) => partials.push(b));
   const b = await first.run("our gochujang & snacks: is food inflation in deutschland, canada & aus still hot? costs rose 8%, costs are 60% of our selling price; pass on 70%; thinking +5%?");
-  assert.equal(b.startedAt, "2026-10-27T00:00:00.000Z");
+  assert.equal(b.startedAt, "2026-10-31T23:59:59.000Z");
   assert.ok(partials.every((p) => p.startedAt === b.startedAt));
+  assert.equal(b.calculatedAt, "2026-11-01T00:00:01.000Z");
+  assert.deepEqual(b.facts.map(f => f.monthsStale), [2, 2, 3]);
+  assert.equal(b.alignment?.status === "aligned" && b.alignment.monthsOld, 3);
+  assert.ok(partials.every((p) => p.calculatedAt === b.calculatedAt));
   assert.equal(b.alignment?.status, "aligned");
   assert.equal(b.alignment?.status === "aligned" && b.alignment.period, "2026-08");
   assert.deepEqual(b.facts.map((f) => f.category?.latestPeriod), ["2026-09", "2026-09", "2026-08"]);

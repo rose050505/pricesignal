@@ -14,7 +14,7 @@ The historical market benchmark spans the latest YoY rate and the mean of availa
 Every rate above comes from Zetaris query **Q3** (one federated SQL over the onboarded sources); market benchmarks and comparisons are computed in code from those rates.
 
 ## Your price list
-Internal SKUs (Zetaris view `psig.v_price_list_night1027c11`) joined in query **Q8** with official category series for the products in each market; broader proxies are marked. Each SKU's benchmark price scenario applies its selected series' historical rates to its current price, computed in code.
+Internal SKUs (Zetaris view `psig.v_price_list_night1027c12`) joined in query **Q8** with official category series for the products in each market; broader proxies are marked. Each SKU's benchmark price scenario applies its selected series' historical rates to its current price, computed in code.
 
 | SKU | Product | Market | Current price | Benchmark price scenario | At +4% | Rate used |
 |---|---|---|---|---|---|---|
@@ -24,7 +24,7 @@ Internal SKUs (Zetaris view `psig.v_price_list_night1027c11`) joined in query **
 
 ## By market
 ### CA — Statistics Canada (CPI)
-Canada's food CPI rose 2.2% YoY in September 2026, with a 12-month average of 4.1% across 12 monthly observations and an easing trend. The proposed 4% price increase falls within the historical benchmark range 2.2–4.1, matching the verdict 'within the market benchmark.' With a 60% cost pass-through applied, the adjustment is evaluated against the Food CPI benchmark, though snacks are mapped to the broader Food category (coarser than sector-level detail).
+Canada's food CPI rose 2.2% YoY in September 2026, with a 12-month average of 4.1% across 12 monthly observations and an easing trend. The proposed 4% price increase falls within the historical benchmark range 2.2–4.1, matching the verdict 'within the market benchmark.' Snacks are compared at the Food level, as noted in the source caveats.
 <sub>source: `statcan:18100004:v41690974` · monthly · cite Q3</sub>
 
 ## Fragmentation the agent found
@@ -33,61 +33,61 @@ Canada's food CPI rose 2.2% YoY in September 2026, with a 12-month average of 4.
 - CA condiments: For Canada this agent maps only StatCan's "Food" and "All-items" CPI vectors, so "condiments" is compared at the Food level (coarser than the other markets). Food is used as a broader category proxy (coarser) for these products. (remembered SKU selection)
 - CA snacks: For Canada this agent maps only StatCan's "Food" and "All-items" CPI vectors, so "snacks" is compared at the Food level (coarser than the other markets). Food is used as a broader category proxy (coarser) for these products. (remembered SKU selection)
 
-**Watch:** Re-check Canada's next monthly food CPI print to confirm whether the 2.2% YoY pace and easing trend continue, given the Food-category mapping context.
+**Watch:** Re-check Canada's upcoming monthly food CPI release to verify if the 2.2% YoY pace and easing trend endure, considering the Food-category mapping context.
 
 ## Evidence
-Views: `psig.v_ca_snacks_v41690974_live_yoyv2_night1027c11` (onboarded), `psig.v_ca_all_items_v41690973_live_yoyv2_night1027c11` (memory), `psig.v_ca_condiments_v41690974_live_yoyv2_night1027c11` (memory), `psig.v_ca_snacks_v41690974_live_yoyv2_night1027c11` (memory), `psig.v_ca_food_v41690974_live_yoyv2_night1027c11` (memory)
+Views: `psig.v_ca_snacks_v41690974_live_yoyv2_night1027c12` (onboarded), `psig.v_ca_all_items_v41690973_live_yoyv2_night1027c12` (memory), `psig.v_ca_condiments_v41690974_live_yoyv2_night1027c12` (memory), `psig.v_ca_snacks_v41690974_live_yoyv2_night1027c12` (memory), `psig.v_ca_food_v41690974_live_yoyv2_night1027c12` (memory)
 
-<details><summary>Q1 · 1 rows · 1302 ms</summary>
+<details><summary>Q1 · 1 rows · 1293 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_yoyv2_night1027c11 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_yoyv2_night1027c12 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q2 · 1 rows · 921 ms</summary>
+<details><summary>Q2 · 1 rows · 1041 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_all_items_v41690973_live_yoyv2_night1027c11 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_all_items_v41690973_live_yoyv2_night1027c12 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q3 · 28 rows · 841 ms</summary>
+<details><summary>Q3 · 28 rows · 819 ms</summary>
 
 ```sql
-SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_night1027c11 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
+SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_night1027c12 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
 UNION ALL
-SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_all_items_v41690973_live_yoyv2_night1027c11 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
+SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_all_items_v41690973_live_yoyv2_night1027c12 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
 ORDER BY country, concept, period
 ```
 </details>
-<details><summary>Q5 · 1 rows · 430 ms</summary>
+<details><summary>Q5 · 1 rows · 433 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_condiments_v41690974_live_yoyv2_night1027c11 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_condiments_v41690974_live_yoyv2_night1027c12 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q6 · 1 rows · 477 ms</summary>
+<details><summary>Q6 · 1 rows · 391 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_yoyv2_night1027c11 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_yoyv2_night1027c12 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q7 · 1 rows · 398 ms</summary>
+<details><summary>Q7 · 1 rows · 441 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_food_v41690974_live_yoyv2_night1027c11 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_food_v41690974_live_yoyv2_night1027c12 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q8 · 42 rows · 1261 ms</summary>
+<details><summary>Q8 · 42 rows · 1033 ms</summary>
 
 ```sql
 SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept AS rate_concept, s.category_label, s.frequency, s.period, s.yoy_pct, s.source_id
-FROM psig.v_price_list_night1027c11 p
+FROM psig.v_price_list_night1027c12 p
 JOIN (
-    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_condiments_v41690974_live_yoyv2_night1027c11 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
+    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_condiments_v41690974_live_yoyv2_night1027c12 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
     UNION ALL
-    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_night1027c11 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
+    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_night1027c12 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
     UNION ALL
-    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_night1027c11 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
+    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_night1027c12 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
 ) s ON p.country = s.country AND p.sku_category = s.concept
 WHERE p.country IN ('CA')
 ORDER BY p.country, p.sku, s.period

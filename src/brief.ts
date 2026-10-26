@@ -62,7 +62,7 @@ const NARRATIVE_ISSUE: Record<NarrativeIssue, string> = {
 };
 
 export interface RunMetrics {
-  /** Actual model requests, including hedges and retries. */
+  /** Agent model calls, including hedges; internal provider HTTP retries are not counted. */
   modelCalls: number;
   plannerCalls: number;
   discoveries: number;
@@ -74,6 +74,8 @@ export interface Brief {
   request: Request;
   /** UTC start of this run, kept stable across partial and final snapshots. */
   startedAt?: string;
+  /** UTC calculation time shared by facts, alignment, and offline evidence replay. */
+  calculatedAt?: string;
   metrics?: RunMetrics;
   partialStage?: "markets" | "pricing";
   facts: MarketFacts[];
