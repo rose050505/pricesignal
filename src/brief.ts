@@ -40,6 +40,10 @@ export interface SkuLine {
   period: string; yoy: number; sourceId: string; low?: number; high?: number; atProposed?: number; verdict?: string; cite: string;
   /** the official series this SKU was priced on (its own category where the agency publishes it) */
   rateLabel?: string; avg12?: number; rangeLow?: number; rangeHigh?: number; coarser?: boolean;
+  /** Product-scope series selection, separate from the requested market category. */
+  selectionReason?: string;
+  selectionSource?: "model" | "memory" | "fallback";
+  selectionFit?: "specific" | "broader";
 }
 
 export interface Narrative { headline: string; markets: Record<string, string>; watch?: string }
@@ -381,11 +385,11 @@ export function renderBrief(b: Brief): string {
     L.push(`## Your price list`);
     const perSku = b.skus.some((s) => s.rateLabel);
     L.push(perSku
-      ? `Internal SKUs (Zetaris view \`psig.${priceView()}\`) joined in query **${b.pricingQuery?.id}** with the official series of each product's own category in its market (sauces, snacks, food); each SKU's range uses that series, computed in code.`
+      ? `Internal SKUs (Zetaris view \`psig.${priceView()}\`) joined in query **${b.pricingQuery?.id}** with official category series for the products in each market; broader proxies are marked and each SKU's range uses its selected series, computed in code.`
       : `Internal SKUs (Zetaris view \`psig.${priceView()}\`) joined with the latest official category rate in query **${b.pricingQuery?.id}**.`, "");
     L.push(`| SKU | Product | Market | Current price | Suggested new price | At ${req.proposedChangePct !== undefined ? signedPct(req.proposedChangePct) : "-"} | Rate used |`);
     L.push(`|---|---|---|---|---|---|---|`);
-    for (const s of b.skus) L.push(`| ${s.sku} | ${s.product} | ${s.country} | ${money(s.currentPrice, s.currency)} | ${s.low !== undefined ? `${s.low.toFixed(2)}–${money(s.high, s.currency)}${s.rangeLow !== undefined ? ` (+${s.rangeLow.toFixed(1)}–${s.rangeHigh!.toFixed(1)}%)` : ""}` : "-"} | ${money(s.atProposed, s.currency)}${s.verdict ? ` (${s.verdict})` : ""} | ${fmt(s.yoy)} ${s.period}${s.rateLabel ? ` · ${s.rateLabel}${s.coarser ? " (coarser)" : ""}` : ""} |`);
+    for (const s of b.skus) L.push(`| ${s.sku} | ${s.product} | ${s.country} | ${money(s.currentPrice, s.currency)} | ${s.low !== undefined ? `${s.low.toFixed(2)}–${money(s.high, s.currency)}${s.rangeLow !== undefined ? ` (${s.rangeLow > 0 ? "+" : ""}${s.rangeLow.toFixed(1)}–${s.rangeHigh!.toFixed(1)}%)` : ""}` : "-"} | ${money(s.atProposed, s.currency)}${s.verdict ? ` (${s.verdict})` : ""} | ${fmt(s.yoy)} ${s.period}${s.rateLabel ? ` · ${s.rateLabel}${s.selectionSource ? ` (${s.selectionFit === "broader" ? "broader proxy" : "product match"}; ${{ model: "model-selected", memory: "remembered match", fallback: "unconfirmed match" }[s.selectionSource]})` : s.coarser ? " (coarser)" : ""}` : ""} |`);
     L.push("");
   }
   L.push(`## By market`);

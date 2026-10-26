@@ -7,9 +7,10 @@ import { EventEmitter } from "node:events";
 import { chat, ChatMessage, ChatResult } from "./llm.ts";
 import { AgentMemory } from "./memory.ts";
 import { SqlResult, SqlRunner, rowsAsObjects } from "./zetaris.ts";
-import { AGENCY_FOR, COMPARE_COLUMNS, Candidate, Concept, Country, CONCEPT_WORDS, compareSql, discover, monthsBack, normalizeCountry, onboard } from "./sources/index.ts";
+import { AGENCY_FOR, COMPARE_COLUMNS, Candidate, Concept, Country, CONCEPT_WORDS, compareSql, discover, monthsBack, normalizeCountry, onboard, skuSearchWords, isBroadFoodLabel } from "./sources/index.ts";
 import { MarketFacts, Brief, RunMetrics, SkuLine, buildFacts, renderBrief, signedPct, marketKey, allowedNumbers, checkNarrative, factsForNarrative, seriesFacts, Narrative, NarrativeIssue } from "./brief.ts";
 import { PRICE_DB, PRICING_COLUMNS, SKU_RATE_COLUMNS, ensurePriceList, priceTable, priceView, pricingSql, skuCategoriesSql, skuRatesSql } from "./sources/pricelist.ts";
+import { BROADER_COVERAGE_REASON, SELECTION_VERSION, skuScope, selectionMessages, validateSelections, fallbackSelection, type SelectionGroup, type SelectionDecision } from "./selection.ts";
 
 export interface Request {
   raw: string;
@@ -361,7 +362,7 @@ Reply with JSON only.`;
     this.emit("partial", marketPartial);
     // The narrative only needs the market facts, so the model writes it while Zetaris prices the SKUs.
     const narrativeP = this.narrate(req, facts, [...notes], policy);
-    const pricing = await this.priceList(req, views, facts, policy, ensureView);
+    const pricing = await this.priceList(req, views, facts, policy, ensureView, notes);
     const sinceLast = this.compareWithLastBrief(facts, req, policy);
     // Everything in the brief except the prose is ready: let the UI show it while the model finishes writing.
     const partial: Brief = { request: req, facts, notes, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, sinceLast, compared, sqlLog: [...this.sqlLog], views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: [...this.trace], metrics: snapshotMetrics(), partialStage: "pricing" };
@@ -486,7 +487,12 @@ Reply with JSON only.`;
           const how = r.existed ? "Zetaris already had it - reused and verified" : "created REST table + view";
           this.log("onboard", `${r.ok ? "onboarded" : "FAILED"} ${c.agency} ${c.code} -> psig.${r.view}${r.ok ? ` (${how}: ${r.rows} rows, latest ${r.latest})` : `: ${r.error}`}`, { candidate: c, result: { ...r, sql: r.sql } });
           if (r.ok) {
-            const own: string[] = (s.candidates as any).get(s.key(country, concept) + ":notes") ?? [];
+            const own: string[] = [...((s.candidates as any).get(s.key(country, concept) + ":notes") ?? [])];
+            if (c.isBroadFallback) {
+              const broader = `${c.label} is used as a broader category proxy (coarser) for ${concept}.`;
+              own.push(broader);
+              s.notes.push(`${country}: ${broader}`);
+            }
             const note = own.join(" ") || undefined;
             s.views.set(s.key(country, concept), { view: r.view, label: c.label, via: "onboarded", note });
             const id = memory.rememberMapping({ country, concept, agency: c.agency, dataset: c.dataset, code: c.code, label: c.label, view: r.view, frequency: c.frequency, note });
@@ -521,16 +527,16 @@ Reply with JSON only.`;
 
   /**
    * Join the company's internal price list (a Zetaris REST table) with official inflation.
-   * Each SKU is priced on the series of its OWN category in its market (gochujang -> condiments,
-   * chips -> snacks, ramen -> food); missing series are found in H-MEM or onboarded first.
-   * Falls back to the requested category if the per-category path is not possible.
+   * Narrow SKU categories use product-aware series choices or explicitly marked Food proxies.
+   * Only legacy rows without product hints retain the requested-category fallback.
    */
   private async priceList(
     req: Request,
-    views: Map<string, { view: string; note?: string }>,
+    views: Map<string, { view: string; label: string; via: "memory" | "onboarded"; note?: string; memoryId?: string }>,
     facts: MarketFacts[],
     policy: number,
     ensureView: (country: Country, concept: Concept) => Promise<{ view: string; label?: string; note?: string } | undefined>,
+    notes: string[],
   ): Promise<{ skus: SkuLine[]; query: SqlResult } | undefined> {
     try {
       const ready = await ensurePriceList(this.sql);
@@ -543,20 +549,39 @@ Reply with JSON only.`;
       this.log("warn", `price list registration failed: ${String(e).slice(0, 160)}`);
       return undefined;
     }
+    let allowLegacyFallback = false;
     try {
       const catRes = await this.sql.run(skuCategoriesSql(req.countries));
-      const cats = catRes.rows
-        .map((r) => ({ country: normalizeCountry(String(r[0])), concept: String(r[1] ?? "").toLowerCase().trim() }))
-        .filter((c): c is { country: Country; concept: string } => !!c.country && !!c.concept);
-      if (!cats.length) return await this.priceListFlat(req, views, facts);
-      this.log("pricing", `the price list sells ${[...new Set(cats.map((c) => c.concept))].join(", ")} in ${[...new Set(cats.map((c) => c.country))].join(", ")} - pricing each SKU on its own category`);
-      const skuViews = new Map<string, { view: string; note?: string }>();
-      await byAgency(cats, async (c) => {
+      const grouped = new Map<string, { country: Country; concept: string; products: string[] }>();
+      for (const row of catRes.rows) {
+        const country = normalizeCountry(String(row[0]));
+        const concept = cleanConcept(row[1]);
+        const product = String(row[2] ?? "").trim();
+        if (!country || !req.countries.includes(country) || !concept) continue;
+        const key = `${country}:${concept}`;
+        if (!grouped.has(key)) grouped.set(key, { country, concept, products: [] });
+        if (product && !grouped.get(key)!.products.includes(product)) grouped.get(key)!.products.push(product);
+      }
+      const cats = [...grouped.values()];
+      if (!cats.length) {
+        notes.push("No usable SKU category information was returned; SKU prices are omitted.");
+        return undefined;
+      }
+      allowLegacyFallback = cats.every(c => c.products.length === 0);
+      this.log("pricing", `the price list sells ${[...new Set(cats.map((c) => c.concept))].join(", ")} in ${[...new Set(cats.map((c) => c.country))].join(", ")} - checking official category coverage for its products`);
+      const skuViews = new Map<string, SkuView>();
+      const narrow = cats.filter(c => c.products.length && /^(snacks|condiments)$/.test(c.concept));
+      await this.selectSkuViews(narrow, skuViews, views, notes);
+      await byAgency(cats.filter(c => !narrow.includes(c)), async (c) => {
         const v = await ensureView(c.country, c.concept);
         if (v) skuViews.set(`${c.country}:${c.concept}`, v);
         else this.log("warn", `no official ${c.concept} series for ${c.country}; those SKUs are left out`);
       });
-      if (!skuViews.size) return await this.priceListFlat(req, views, facts);
+      if (!skuViews.size) {
+        if (allowLegacyFallback) return await this.priceListFlat(req, views, facts);
+        notes.push("No verified official category series is available for the listed products; SKU prices are omitted.");
+        return undefined;
+      }
       const res = await this.sql.run(skuRatesSql([...new Set([...skuViews.values()].map((v) => v.view))], req.countries, monthsBack(15)));
       const rows = rowsAsObjects(res, SKU_RATE_COLUMNS);
       const bySku = new Map<string, Record<string, unknown>[]>();
@@ -576,22 +601,162 @@ Reply with JSON only.`;
         const lo = Math.max(0, r1(policy * Math.min(sf.latestYoy, sf.avg12)));
         const hi = Math.max(0, r1(policy * Math.max(sf.latestYoy, sf.avg12)));
         const p = req.proposedChangePct;
-        const note = skuViews.get(`${r0.country}:${String(r0.sku_category).toLowerCase()}`)?.note ?? "";
+        const selectedView = skuViews.get(`${r0.country}:${String(r0.sku_category).toLowerCase()}`);
+        const note = selectedView?.note ?? "";
         skus.push({
           sku: String(r0.sku), product: String(r0.product), country: String(r0.country), skuCategory: String(r0.sku_category), currency: String(r0.currency),
           currentPrice: price, period: sf.latestPeriod, yoy: sf.latestYoy, sourceId: sf.sourceId, avg12: sf.avg12, rangeLow: lo, rangeHigh: hi,
           low: at(lo), high: at(hi), atProposed: at(p),
           verdict: p === undefined ? undefined : p > hi ? "above the evidence" : p < lo ? "below the evidence" : "within the evidence",
           cite: res.id, rateLabel: sf.label, coarser: /coarser|Food level/i.test(note),
+          selectionReason: selectedView?.selectionReason, selectionSource: selectedView?.selectionSource, selectionFit: selectedView?.selectionFit,
         });
       }
       skus.sort((a, b) => a.country.localeCompare(b.country) || a.sku.localeCompare(b.sku));
-      this.log("pricing", `federated query ${res.id} joined ${skus.length} SKUs with the official series of their own category -> ${skus.length} SKUs priced`);
+      this.log("pricing", `federated query ${res.id} joined ${skus.length} SKUs with official category series (${skus.filter(s => s.coarser).length} broader proxies) -> ${skus.length} SKUs priced`);
       return { skus, query: res };
     } catch (e) {
+      if (!allowLegacyFallback) {
+        this.log("warn", `SKU category lookup or pricing unavailable (${String(e).slice(0, 140)}); keeping the market brief without substituting an unverified category`);
+        notes.push("SKU pricing is unavailable because category lookup or pricing failed; market figures are still shown, but SKU prices are omitted.");
+        return undefined;
+      }
       this.log("warn", `per-category pricing failed (${String(e).slice(0, 140)}); pricing on the requested category instead`);
       return await this.priceListFlat(req, views, facts);
     }
+  }
+
+  /** Product-aware choices are separate from market concepts; one bounded model call serves every missing SKU scope. */
+  private async selectSkuViews(
+    categories: { country: Country; concept: string; products: string[] }[],
+    skuViews: Map<string, SkuView>,
+    views: Map<string, { view: string; label: string; via: "memory" | "onboarded"; note?: string; memoryId?: string }>,
+    notes: string[],
+  ): Promise<void> {
+    if (!categories.length) return;
+    const memory = this.deps.memory;
+    const groups: SelectionGroup[] = [];
+    const discoveries = new Map<string, string[]>();
+    await byAgency(categories, async (category) => {
+      const { country, concept, products } = category;
+      const id = `${country}:${concept}`;
+      const scope = skuScope(products);
+      const hit = memory.findMapping(country, concept, scope);
+      const mapping = hit?.mapping;
+      if (hit && mapping?.selectionVersion === SELECTION_VERSION && mapping.selection?.by === "model" && !memory.hmem.store.get(hit.id)?.tags.includes("review")) {
+        try {
+          const probe = await this.sql.run(`SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.${mapping.view} WHERE yoy_pct IS NOT NULL`);
+          const latest = String(probe.rows[0]?.[1] ?? "");
+          if (Number(probe.rows[0]?.[0] ?? 0) > 0 && hasFreshSkuPeriod(latest, mapping.frequency)) {
+            const selected: SkuView = { view: mapping.view, note: mapping.note, selectionReason: mapping.selection.fit === "broader" ? BROADER_COVERAGE_REASON : mapping.selection.reason, selectionSource: "memory", selectionFit: mapping.selection.fit };
+            skuViews.set(id, selected);
+            views.set(`${id}:${scope}`, { view: mapping.view, label: mapping.label, via: "memory", note: mapping.note, memoryId: hit.id });
+            if (mapping.note) notes.push(`${country} ${concept}: ${mapping.note} (remembered SKU selection)`);
+            memory.feedback(hit.id, "helpful");
+            this.log("memory", `reused product-checked SKU mapping ${hit.id}: ${id} -> psig.${mapping.view}`, { products, selection: mapping.selection });
+            return;
+          }
+          this.log("memory", `product-checked SKU mapping ${hit.id} has no fresh rows - selecting again`);
+        } catch {
+          this.log("memory", `product-checked SKU mapping ${hit.id} is unavailable - selecting again`);
+        }
+      }
+      let candidates: Candidate[] = [];
+      const foundNotes: string[] = [];
+      try {
+        this.metrics.discoveries++;
+        const found = await this.discoverFn(country, concept, skuSearchWords(concept, products));
+        candidates = found.candidates.filter(c => !c.isBroadFallback || isOfficialBroadFood(c));
+        foundNotes.push(...found.notes);
+      } catch (e) {
+        this.log("warn", `SKU candidate discovery failed for ${id}: ${String(e).slice(0, 120)}`);
+      }
+      if (!candidates.some(c => c.isBroadFallback)) {
+        try {
+          this.metrics.discoveries++;
+          const broad = await this.discoverFn(country, "food");
+          candidates.push(...broad.candidates.filter(isOfficialBroadFood).map(c => ({ ...c, isBroadFallback: true })));
+          foundNotes.push(...broad.notes);
+        } catch (e) {
+          this.log("warn", `Food fallback discovery failed for ${id}: ${String(e).slice(0, 120)}`);
+        }
+      }
+      if (!candidates.length) {
+        notes.push(`${country} ${concept}: no usable official series was found for these products; their SKU prices are omitted.`);
+        return;
+      }
+      groups.push({ id, country, concept, products: [...products].sort(), candidates });
+      discoveries.set(id, foundNotes);
+      this.log("discover", `${AGENCY_FOR[country].name}: ${candidates.length} SKU candidate(s) for ${concept}`, { country, concept, products, candidates });
+    });
+    if (!groups.length) return;
+    groups.sort((a, b) => a.id.localeCompare(b.id));
+    let decisions = new Map<string, SelectionDecision>();
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const expired = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => { controller.abort(); reject(new Error("SKU selection time budget expired")); }, 20_000);
+      });
+      const reply = await Promise.race([
+        this.llm(selectionMessages(groups), { lane: "fast", temperature: 0, maxTokens: 2500, attempts: 1, timeoutMs: 20_000, signal: controller.signal }),
+        expired,
+      ]);
+      decisions = validateSelections(extractJson(reply.text), groups, reply.model);
+      this.log("llm", `SKU category selection (${reply.model}, ${reply.ms} ms${via(reply)}) - ${groups.length} product group(s) checked in one request`);
+    } catch (e) {
+      this.log("warn", `SKU category selection unavailable or invalid - using marked Food fallbacks where available (${String(e).slice(0, 140)})`);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+    await byAgency(groups, async (group) => {
+      let decision = decisions.get(group.id) ?? fallbackSelection(group);
+      if (!decision) {
+        notes.push(`${group.country} ${group.concept}: no verified category or official Food fallback is available; these SKU prices are omitted.`);
+        return;
+      }
+      const register = async (choice: SelectionDecision) => {
+        const candidate = group.candidates[choice.candidate];
+        try {
+          const result = await this.onboardFn(this.sql, candidate, group.concept);
+          this.log("onboard", `${result.ok ? "onboarded" : "FAILED"} SKU ${candidate.agency} ${candidate.code} -> psig.${result.view}${result.ok ? ` (${result.existed ? "Zetaris already had it - reused and verified" : "created REST table + view"}: ${result.rows} rows, latest ${result.latest})` : `: ${result.error}`}`, { candidate, selection: choice, result });
+          if (!result.ok) return undefined;
+          if (result.rows <= 0 || !hasFreshSkuPeriod(result.latest, candidate.frequency)) {
+            this.log("warn", `selected SKU view psig.${result.view} has no fresh dated rows (latest ${result.latest ?? "unknown"}); it cannot be used for pricing`);
+            return undefined;
+          }
+          return { candidate, result };
+        } catch (e) {
+          this.log("warn", `selected SKU series could not be onboarded: ${String(e).slice(0, 140)}`);
+          return undefined;
+        }
+      };
+      let registered = await register(decision);
+      if (!registered) {
+        const broad = fallbackSelection(group);
+        if (broad && broad.candidate !== decision.candidate) {
+          decision = broad;
+          registered = await register(broad);
+        }
+      }
+      if (!registered) {
+        notes.push(`${group.country} ${group.concept}: the selected series and Food fallback are unavailable; these SKU prices are omitted.`);
+        return;
+      }
+      const { candidate, result } = registered;
+      const scope = skuScope(group.products);
+      const ownNotes = discoveries.get(group.id) ?? [];
+      if (decision.fit === "broader") ownNotes.push(`${candidate.label} is used as a broader category proxy (coarser) for these products${decision.by === "fallback" ? "; a product-specific selection was unavailable or unusable" : ""}.`);
+      const note = [...new Set(ownNotes)].join(" ") || undefined;
+      if (note) notes.push(`${group.country} ${group.concept}: ${note}`);
+      skuViews.set(group.id, { view: result.view, note, selectionReason: decision.reason, selectionSource: decision.by, selectionFit: decision.fit });
+      let memoryId: string | undefined;
+      if (decision.by === "model") {
+        memoryId = memory.rememberMapping({ country: group.country, concept: group.concept, agency: candidate.agency, dataset: candidate.dataset, code: candidate.code, label: candidate.label, view: result.view, frequency: candidate.frequency, note, scope, selectionVersion: SELECTION_VERSION, selection: decision });
+        this.log("memory", `stored product-checked SKU mapping ${memoryId}`, { scope, products: group.products, selection: decision });
+      }
+      views.set(`${group.id}:${scope}`, { view: result.view, label: candidate.label, via: "onboarded", note, memoryId });
+    });
   }
 
   /** Fallback: every SKU priced on the requested category's latest rate. */
@@ -692,6 +857,23 @@ Reply with JSON only.`;
 
 // ---------- helpers ----------
 type ExecCtx = { views: Map<string, any>; candidates: Map<string, Candidate[]>; notes: string[]; key: (a: string, b: string) => string; pairs: { country: Country; concept: Concept }[]; getCompared: () => SqlResult | undefined; setCompared: (c: SqlResult) => void };
+type SkuView = { view: string; note?: string; selectionReason?: string; selectionSource?: "model" | "memory" | "fallback"; selectionFit?: "specific" | "broader" };
+
+/** A label match alone must not turn a narrow catalog hit into an official Food proxy. */
+function isOfficialBroadFood(candidate: Candidate): boolean {
+  const code = { eurostat: "CP01", abs: "20001", statcan: "v41690974" }[candidate.agency];
+  return candidate.code === code && isBroadFoodLabel(candidate.label);
+}
+
+/** Both reused and newly onboarded SKU views need a valid, non-future release within the freshness window. */
+function hasFreshSkuPeriod(period: unknown, frequency: string, now = new Date()): boolean {
+  if (typeof period !== "string") return false;
+  const match = frequency === "M" ? period.match(/^(\d{4})-(0[1-9]|1[0-2])$/) : frequency === "Q" ? period.match(/^(\d{4})-Q([1-4])$/) : null;
+  if (!match) return false;
+  const month = Number(match[1]) * 12 + Number(match[2]) * (frequency === "Q" ? 3 : 1) - 1;
+  const age = now.getUTCFullYear() * 12 + now.getUTCMonth() - month;
+  return age >= 0 && age <= (frequency === "Q" ? 6 : 3);
+}
 
 /** Run fn for every item: items of different agencies in parallel, items of the same agency one after another. */
 async function byAgency<T extends { country: Country }>(items: T[], fn: (item: T) => Promise<void>): Promise<void> {

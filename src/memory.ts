@@ -7,8 +7,9 @@
 import path from "node:path";
 import { ROOT, env } from "./env.ts";
 import { HMEM } from "./hmem_impl.ts";
+import type { SelectionDecision } from "./selection.ts";
 
-export interface SeriesMapping { country: string; concept: string; agency: string; dataset: string; code: string; label: string; view: string; frequency: string; note?: string }
+export interface SeriesMapping { country: string; concept: string; agency: string; dataset: string; code: string; label: string; view: string; frequency: string; note?: string; scope?: string; selectionVersion?: number; selection?: SelectionDecision }
 
 export interface Outcome { country: string; concept: string; period: string; yoy: number; low: number; high: number; policy: number; proposed?: number; verdict?: string; at: string }
 
@@ -21,7 +22,7 @@ export class AgentMemory {
   }
 
   rememberMapping(m: SeriesMapping): string {
-    const content = `Series mapping: ${m.country} ${m.concept} -> ${m.agency} ${m.dataset} ${m.code} (${m.label}), ${m.frequency}, Zetaris view psig.${m.view}.${m.note ? ` Note: ${m.note}` : ""}`;
+    const content = `Series mapping: ${m.country} ${m.concept}${m.scope ? ` [${m.scope}]` : ""} -> ${m.agency} ${m.dataset} ${m.code} (${m.label}), ${m.frequency}, Zetaris view psig.${m.view}.${m.note ? ` Note: ${m.note}` : ""}`;
     const rec = this.hmem.add({
       content,
       type: "factual",
@@ -29,7 +30,7 @@ export class AgentMemory {
       confidence: 0.9,
       tags: ["series-mapping", `country:${m.country}`, `concept:${m.concept}`, `json:${JSON.stringify(m)}`],
       layer: "long_term",
-      supersedes: this.findMapping(m.country, m.concept)?.id,
+      supersedes: this.findMapping(m.country, m.concept, m.scope)?.id,
     });
     return rec.id;
   }
@@ -105,8 +106,8 @@ export class AgentMemory {
   }
 
   /** Structured lookup used by the agent before discovering a series again. */
-  findMapping(country: string, concept: string): Recall | undefined {
-    const recs = this.structured("series-mapping").filter((i) => i.mapping?.country === country && i.mapping?.concept === concept);
+  findMapping(country: string, concept: string, scope?: string): Recall | undefined {
+    const recs = this.structured("series-mapping").filter((i) => i.mapping?.country === country && i.mapping?.concept === concept && i.mapping?.scope === scope);
     const hit = recs.at(-1);
     if (hit) this.hmem.store.touch(hit.id);
     return hit;

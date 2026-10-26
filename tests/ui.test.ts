@@ -132,3 +132,27 @@ test("a pricing partial with no SKU rows never claims SKU prices are ready", () 
   b.run('render(sample,"food +3%")');
   assert.doesNotMatch(b.node("#out").innerHTML, /SKU prices ready/);
 });
+
+test('SKU choices distinguish a model match, remembered match and an unconfirmed Food fallback', () => {
+  const b=browser();
+  const sku={sku:'CHIPS',product:'Honey butter chips',country:'DE',currentPrice:3,currency:'EUR',yoy:1,period:'2026-09',rateLabel:'Food',coarser:true,selectionFit:'broader',selectionReason:'<unsafe> broader product coverage'};
+  for (const [source,label] of [['model','Model-selected'],['memory','Remembered match'],['fallback','Unconfirmed match']] as const) {
+    b.context.sample={...result(),skus:[{...sku,selectionSource:source}]};
+    b.run('render(sample,"chips +3%")');
+    const html=b.node('#out').innerHTML;
+    assert.ok(html.includes(label),html);
+    assert.match(html,/Broader proxy/);
+    assert.match(html,/&lt;unsafe&gt;/);
+    assert.doesNotMatch(html,/<unsafe>/);
+  }
+});
+
+test('evidence distinguishes the market comparison from the SKU rate query',()=>{
+  const b=browser();
+  b.context.sample={...result(),facts:[{country:'DE',agency:'Eurostat',category:{label:'Food',latestYoy:1,avg12:1,latestPeriod:'2026-09',trend:'steady',points:[]}}],pricing:{id:'Q2',sql:'SELECT sku_fixture'}};
+  b.run('render(sample,"food")');
+  const output=b.node('#out').innerHTML;
+  assert.doesNotMatch(output,/Every rate above comes from/);
+  assert.match(output,/Market rates[\s\S]*?<b>Q1<\/b>/);
+  assert.match(output,/SKU rates[\s\S]*?<b>Q2<\/b>/);
+});

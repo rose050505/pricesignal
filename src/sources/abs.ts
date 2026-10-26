@@ -1,7 +1,7 @@
 // Australian Bureau of Statistics CPI (SDMX-JSON). Fragmentation handled here:
 // index numbers rather than rates, a new monthly series alongside the
 // quarterly one, and finer categories (e.g. "Snacks and confectionery").
-import { Candidate, Concept, Country, CONCEPT_WORDS, DiscoverResult, OnboardPlan, getJson, labelScore, monthsBack, zetarisName } from "./types.ts";
+import { Candidate, Concept, Country, CONCEPT_WORDS, DiscoverResult, OnboardPlan, getJson, isBroadFoodLabel, labelScore, monthsBack, zetarisName } from "./types.ts";
 
 const BASE = "https://data.api.abs.gov.au/rest";
 export const ABS_DB = "PSIG_ABS";
@@ -31,13 +31,17 @@ export async function discover(country: Country, concept: Concept, words = CONCE
   const cl = await getJson(`${BASE}/codelist/ABS/CL_CPI_INDEX`, { accept: "application/vnd.sdmx.structure+json" });
   const codes: { id: string; name: string }[] = cl?.data?.codelists?.[0]?.codes ?? [];
   const exact = concept === "all_items" ? "10001" : concept === "food" ? "20001" : undefined;
-  const ranked = exact
+  let ranked: { id: string; name: string }[] = exact
     ? codes.filter((c) => c.id === exact)
     : codes
         .map((c) => ({ ...c, score: labelScore(c.name, words) }))
         .filter((c) => c.score > 0)
         .sort((a, b) => b.score - a.score)
         .slice(0, 3);
+  const broadFood = concept === "snacks" || concept === "condiments"
+    ? codes.find((c) => c.id === "20001" && isBroadFoodLabel(c.name))
+    : undefined;
+  if (broadFood) ranked = [...ranked.filter((c) => c.id !== broadFood.id), broadFood];
   const candidates: Candidate[] = [];
   for (const c of ranked) {
     const m = await lastPeriod(c.id, "M");
@@ -59,6 +63,7 @@ export async function discover(country: Country, concept: Concept, words = CONCE
       measure: "index",
       lastPeriod: m ?? q,
       status: "active",
+      ...(broadFood && c.id === broadFood.id ? { isBroadFallback: true } : {}),
       sourceUrl: `${BASE}/data/ABS,CPI/1.${c.id}.10.50.${freq}?startPeriod=${start}&detail=dataonly`,
     });
   }

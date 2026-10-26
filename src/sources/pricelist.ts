@@ -14,7 +14,7 @@ export const SKU_RATE_COLUMNS = ["sku", "product", "country", "sku_category", "c
 
 /** Which product categories the company sells in each market (read from the internal price list in Zetaris). */
 export function skuCategoriesSql(countries: string[]): string {
-  return `SELECT DISTINCT country, sku_category FROM psig.${priceView()} WHERE country IN (${countries.map((c) => `'${c}'`).join(", ")}) ORDER BY country, sku_category`;
+  return `SELECT DISTINCT country, sku_category, product FROM psig.${priceView()} WHERE country IN (${countries.map((c) => `'${c}'`).join(", ")}) ORDER BY country, sku_category, product`;
 }
 
 /**

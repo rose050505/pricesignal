@@ -21,6 +21,7 @@ export interface Candidate {
   measure: "yoy_pct" | "index"; // what the raw series holds
   lastPeriod?: string;
   status: "active" | "discontinued" | "unknown";
+  isBroadFallback?: boolean; // a verified Food aggregate offered for a narrower food category
   note?: string; // e.g. "replaced by prc_hicp_minr"
   sourceUrl: string; // the GET endpoint Zetaris will read
 }
@@ -127,3 +128,24 @@ export const CONCEPT_WORDS: Record<string, string[]> = {
   snacks: ["snack", "confectionery", "sugar, jam, honey, chocolate"],
   condiments: ["condiment", "sauce", "salt, spices"],
 };
+
+/** Broad Food is usable only when the official catalog actually calls it Food. */
+export function isBroadFoodLabel(label: unknown): label is string {
+  return typeof label === "string" && /^food(?: and non[- ]alcoholic beverages)?$/i.test(label.trim().replace(/\s+/g, " "));
+}
+
+/** Remove the chocolate-chip phrase, not other chips or crisps in a mixed product. */
+export function hasSavouryChipContext(product: unknown): boolean {
+  if (typeof product !== "string") return false;
+  const otherWords = product.replace(/\bchocolate[\s-]+chips?\b/gi, " ");
+  return /\b(?:chips?|crisps?)\b/i.test(otherWords);
+}
+
+/** Product names can refine SKU lookup without changing a market-level concept. */
+export function skuSearchWords(concept: Concept, products: readonly string[]): string[] {
+  const words = [...(CONCEPT_WORDS[concept] ?? [concept])];
+  if (concept === "snacks" && products.some(hasSavouryChipContext)) {
+    words.push("potato", "crisp", "chip");
+  }
+  return [...new Set(words)];
+}

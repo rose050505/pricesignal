@@ -44,6 +44,7 @@ export async function discover(country: Country, concept: Concept): Promise<Disc
       measure: "index",
       lastPeriod: last,
       status: last ? "active" : "unknown",
+      ...(key === "food" && concept !== "food" ? { isBroadFallback: true } : {}),
       // Open-ended range: a view onboarded today keeps picking up new releases next quarter.
       sourceUrl: rangeUrl(entry.vector, monthsBack(26), "2035-12"),
     },

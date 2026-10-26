@@ -1,7 +1,7 @@
 // Eurostat HICP (JSON-stat 2.0). Real-world fragmentation handled here:
 // the long-used dataset prc_hicp_manr was discontinued after 2025-12 and
 // replaced by prc_hicp_minr (ECOICOP v2, dimension `coicop18`).
-import { Candidate, Concept, Country, CONCEPT_WORDS, DiscoverResult, OnboardPlan, getJson, labelScore, monthsBack, zetarisName } from "./types.ts";
+import { Candidate, Concept, Country, CONCEPT_WORDS, DiscoverResult, OnboardPlan, getJson, isBroadFoodLabel, labelScore, monthsBack, zetarisName } from "./types.ts";
 
 const BASE = "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data";
 const LEGACY = "prc_hicp_manr";
@@ -73,7 +73,14 @@ export async function discover(country: Country, concept: Concept, words = CONCE
   const exact = concept === "all_items" ? ["TOTAL", "CP00"] : concept === "food" ? ["CP01"] : [];
   const labels: Record<string, string> = meta?.dimension?.[dimId]?.category?.label ?? {};
   const picks = exact.filter((c) => labels[c]).map((code) => ({ code, label: labels[code], score: 999 }));
-  for (const c of picks.length ? picks : categoryCandidates(meta, dimId, words)) {
+  let ranked = picks.length ? picks : categoryCandidates(meta, dimId, words);
+  const broadFood = (concept === "snacks" || concept === "condiments") && isBroadFoodLabel(labels.CP01);
+  if (broadFood) {
+    // Preserve the official code and label from this response; the aggregate is
+    // a final alternative, never a guessed narrow-category match.
+    ranked = [...ranked.filter((c) => c.code !== "CP01"), { code: "CP01", label: labels.CP01, score: 0 }];
+  }
+  for (const c of ranked) {
     candidates.push({
       agency: "eurostat",
       country,
@@ -84,6 +91,7 @@ export async function discover(country: Country, concept: Concept, words = CONCE
       measure: "yoy_pct",
       lastPeriod: last,
       status: "active",
+      ...(broadFood && c.code === "CP01" ? { isBroadFallback: true } : {}),
       sourceUrl: `${BASE}/${dataset}?format=JSON&geo=${country}&${dimId}=${c.code}&unit=RCH_A&sinceTimePeriod=${monthsBack(26)}&lang=EN`,
     });
   }
