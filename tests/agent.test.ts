@@ -258,7 +258,7 @@ test("'same as last time' keeps the remembered proposal when the only new percen
 test("a concept from the model cannot break the SQL literal it lands in; the trace names the runtime", async () => {
   const agent = new PriceSignalAgent({ llm: async () => ({ text: `{"countries":["DE"],"concept":"Children's Snacks'; --","proposed_change_pct":4}`, model: "openrouter/nvidia/nemotron-3.5-lightning", provider: "meterless", ms: 1 }), sql: new FakeZ(), memory: new AgentMemory(fs.mkdtempSync(path.join(os.tmpdir(), "psig-"))) });
   const r = await agent.parse("children's snacks in germany +4%");
-  assert.equal(r.concept, "childrens snacks --");
+  assert.equal(r.concept, "snacks", "an explicitly named supported category overrides the model's malformed concept");
   assert.ok(agent.trace.some((e) => e.title === "parsed request (openrouter/nvidia/nemotron-3.5-lightning, 1 ms via Meterless Nightshift)"), agent.trace.map((e) => e.title).join("\n"));
 });
 
@@ -508,12 +508,15 @@ test("headline verdicts are checked market by market, also when the markets diff
   const f = (country: string, lo: number, hi: number, verdict: string, yoy: number, avg: number): any => ({ country, agency: "a", category: s(yoy, avg), suggested: { low: lo, high: hi, basis: "" }, verdict, cite: "Q1" });
   const facts = [f("DE", 1.0, 4.3, "within the market benchmark", 1.4, 6.1), f("CA", 1.5, 2.9, "above the market benchmark", 2.2, 4.1), f("AU", 0.4, 3.4, "within the market benchmark", 0.6, 4.9)];
   const req: any = { raw: "", countries: ["DE", "CA", "AU"], concept: "food", conceptWords: [], proposedChangePct: 3, unknownCountries: [] };
-  const chk = (headline: string, fs = facts) => checkNarrative({ headline, markets: {} }, allowedNumbers(fs, req, 0.7), fs, req, 0.7);
+  const chk = (headline: string, fs = facts, proposedChangePct = req.proposedChangePct) => {
+    const request = { ...req, proposedChangePct };
+    return checkNarrative({ headline, markets: {} }, allowedNumbers(fs, request, 0.7), fs, request, 0.7);
+  };
   // headlines Nemotron (or the code) actually wrote on 26 Oct
   assert.deepEqual(chk("+3% is within the market benchmark in DE and AU; above the market benchmark in CA."), []);
   assert.deepEqual(chk("+3% increase: within or above evidence across DE, CA, and AU"), []);
   const two = [f("CA", 1.5, 2.9, "within the market benchmark", 2.2, 4.1), f("AU", 2.1, 2.2, "below the market benchmark", 3.0, 3.2)];
-  assert.deepEqual(chk("Proposed 2% increase: within evidence in CA, below in AU", two), []);
+  assert.deepEqual(chk("Proposed 2% increase: within evidence in CA, below in AU", two, 2), []);
   // wrong attributions are caught
   assert.ok(chk("+3% is above the market benchmark in DE, CA and AU.").length);
   assert.ok(chk("+3% is within the market benchmark in CA; above in DE and AU").length);

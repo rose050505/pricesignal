@@ -196,3 +196,13 @@ test('an invalid cost pass-through is not displayed as a valid default or rememb
   assert.match(output,/invalid.*cost target omitted/i);
   assert.doesNotMatch(output,/pass through 100%/i);
 });
+
+test('the interpreted category is visible separately from the official series label', () => {
+  const b = browser();
+  b.context.sample = { ...result(true), concept: 'condiments' };
+  b.run('render(sample,"same as last time, but condiments")');
+  assert.match(b.node('#out').innerHTML, /Interpreted market category:.*Condiments/);
+  b.context.sample = { ...result(), concept: '<script>fake</script>' };
+  b.run('render(sample,"category")');
+  assert.doesNotMatch(b.node('#out').innerHTML, /<script>fake<\/script>/);
+});

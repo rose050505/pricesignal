@@ -326,7 +326,7 @@ function verdictErrors(text: string, f: MarketFacts): string[] {
  * after a verdict word (or before the first one) must have that verdict; "within or above" allows either.
  * With no market named, the word must be a verdict some market has (all of them, when they agree).
  */
-function headlineVerdictErrors(headline: string, facts: MarketFacts[]): string[] {
+function headlineVerdictErrors(headline: string, facts: MarketFacts[], field = "headline"): string[] {
   const vf = facts.filter((f) => f.verdict || f.costVsMarket);
   if (!vf.length) return [];
   const text = headline;
@@ -341,14 +341,12 @@ function headlineVerdictErrors(headline: string, facts: MarketFacts[]): string[]
     } else claims.push({ at: m.index!, end: m.index! + m[0].length, words: [m[1]], verdicts: new Set([toVerdict(m[1])]), subject: comparisonSubject(text, m.index!) });
   }
   if (!claims.length) return [];
-  const mentions = [...text.matchAll(/\p{L}+/gu)]
-    .map((m) => ({ at: m.index!, country: normalizeCountry(m[0], false) }))
-    .filter((x) => x.country && vf.some((f) => f.country === x.country));
+  const mentions = countryMentions(text, vf);
   const bad: string[] = [];
   if (!mentions.length) {
     for (const c of claims) {
       const present = new Set(vf.map((f) => c.subject === "cost" ? f.costVsMarket : f.verdict));
-      if (![...c.verdicts].some((v) => present.has(v as MarketFacts["verdict"]))) bad.push(`headline "${c.words.join(" or ")}" (computed: ${[...present].join(", ")})`);
+      if (![...c.verdicts].some((v) => present.has(v as MarketFacts["verdict"]))) bad.push(`${field} "${c.words.join(" or ")}" (computed: ${[...present].join(", ")})`);
     }
     return bad;
   }
@@ -356,7 +354,7 @@ function headlineVerdictErrors(headline: string, facts: MarketFacts[]): string[]
     const owner = [...claims].reverse().find((c) => c.at < m.at) ?? claims[0];
     const f = vf.find((x) => x.country === m.country)!;
     const verdict = owner.subject === "cost" ? f.costVsMarket : f.verdict;
-    if (!verdict || !owner.verdicts.has(verdict)) bad.push(`headline "${owner.words.join(" or ")}" for ${m.country} (computed: ${verdict})`);
+    if (!verdict || !owner.verdicts.has(verdict)) bad.push(`${field} "${owner.words.join(" or ")}" for ${m.country} (computed: ${verdict})`);
   }
   return [...new Set(bad)];
 }
@@ -381,13 +379,72 @@ function unsupportedClaims(text: string): string[] {
   return bad;
 }
 
+// Narrative adjectives supplement the request parser's names and ISO codes.
+const NARRATIVE_COUNTRY_ADJECTIVES: Record<string, Country> = {
+  german: "DE", australian: "AU", french: "FR", italian: "IT", spanish: "ES", belgian: "BE",
+  austrian: "AT", irish: "IE", portuguese: "PT", finnish: "FI", swedish: "SE", danish: "DK", polish: "PL",
+};
+
+function countryMentions(text: string, facts: MarketFacts[]): { at: number; end: number; country: Country }[] {
+  return [...text.matchAll(/\p{L}+/gu)].flatMap((m) => {
+    const country = normalizeCountry(m[0], false) ?? NARRATIVE_COUNTRY_ADJECTIVES[m[0].toLowerCase()];
+    return country && facts.some((f) => f.country === country) ? [{ at: m.index!, end: m.index! + m[0].length, country }] : [];
+  });
+}
+
+/** Scope explicit country claims only. Countryless aggregate prose keeps the existing checks. */
+function namedCountryErrors(text: string, facts: MarketFacts[], req: Request, policy?: number, extra: number[] = []): string[] {
+  const bad: string[] = [];
+  const hasNumber = (part: string) => /\d/.test(stripWindows(stripYears(part)));
+  for (const sentence of text.split(/(?<=[.!?;])\s+|\n+/)) {
+    const mentions = countryMentions(sentence, facts);
+    const cuts = [0];
+    for (let i = 1; i < mentions.length; i++) {
+      const previous = mentions[i - 1], next = mentions[i];
+      const between = sentence.slice(previous.end, next.at);
+      // "Germany and Canada: 2.2%" is one shared claim; "Germany: 1.4%, Canada: 2.2%"
+      // and "1.4% in Germany and 2.2% in Canada" contain separate numeric clauses.
+      const separate = hasNumber(between) || (hasNumber(sentence.slice(cuts.at(-1), previous.at)) && hasNumber(sentence.slice(next.end)));
+      if (!separate) continue;
+      const boundary = [...between.matchAll(/[,;]|\b(?:and|but|while|whereas|compared\s+with)\b/gi)].at(-1);
+      cuts.push(boundary ? previous.end + boundary.index! + boundary[0].length : next.at);
+    }
+    cuts.push(sentence.length);
+    for (let i = 0; i < cuts.length - 1; i++) {
+      const clause = sentence.slice(cuts[i], cuts[i + 1]);
+      const countries = new Set(countryMentions(clause, facts).map((m) => m.country));
+      for (const country of countries) {
+        const f = facts.find((x) => x.country === country)!;
+        const coverage = checkCoverage(clause, [f]);
+        const errors = [
+          ...coverage.errors,
+          ...unknownNumbers(coverage.text, [...marketNumbers(f, req, policy), ...extra]),
+          ...explicitSignErrors(clause, [...marketNumbers(f, req, policy, true), ...extra]),
+          ...observedRateErrors(clause, f),
+          ...rangeErrors(clause, f),
+        ];
+        bad.push(...errors.map((error) => `${country}: ${error}`));
+      }
+    }
+  }
+  return bad;
+}
+
+function internalPayloadErrors(text: string): string[] {
+  // Markdown underscores are formatting boundaries even though JavaScript's \b treats them as word characters.
+  const keys = /(?<![\p{L}\p{N}])(?:benchmark_range_pct|suggested_range_pct|benchmark_basis|proposed_change_pct|pass_through_pct|pass_through_needed_pct|cost_need_pct|cost_vs_market|cost_share_pct|cost_share_basis|cost_increase_pct|cost_pass_through_pct|cost_input_needed|latestPeriod|latestYoy|avg12|yoy6Back|monthsStale|averageCount|averageExpected|averageLabel|allItems)(?![\p{L}\p{N}])/giu;
+  return [...text.matchAll(keys)].map((m) => `internal payload key in prose: ${m[0]}`);
+}
+
 /**
  * Numbers in the prose that are not facts (years and period labels are ignored).
  * With facts, each market's paragraph is checked against that market's own numbers and its stated range;
  * without facts (unit tests), the flat allowed list is used.
  */
 export function checkNarrative(n: Narrative, allowed: number[], facts?: MarketFacts[], req?: Request, policy?: number, extra: number[] = []): string[] {
-  const bad: string[] = [];
+  const bad = [n.headline, n.watch, ...Object.values(n.markets ?? {})]
+    .filter((text): text is string => typeof text === "string")
+    .flatMap(internalPayloadErrors);
   if (facts && req) {
     for (const [code, text] of Object.entries(n.markets ?? {})) {
       if (typeof text !== "string") {
@@ -399,6 +456,7 @@ export function checkNarrative(n: Narrative, allowed: number[], facts?: MarketFa
       bad.push(...coverage.errors, ...unknownNumbers(coverage.text, f ? [...marketNumbers(f, req, policy), ...extra] : allowed));
       bad.push(...explicitSignErrors(text, [...marketNumbers(f, req, policy, true), ...extra]));
       bad.push(...unsupportedClaims(text));
+      bad.push(...namedCountryErrors(text, facts, req, policy, extra));
       if (f) bad.push(...rangeErrors(text, f), ...verdictErrors(text, f), ...observedRateErrors(text, f));
     }
     if (typeof n.headline !== "string" || (n.watch !== undefined && typeof n.watch !== "string")) bad.push("headline or watch: not text");
@@ -407,8 +465,10 @@ export function checkNarrative(n: Narrative, allowed: number[], facts?: MarketFa
     bad.push(...coverage.errors, ...unknownNumbers(coverage.text, allowed));
     bad.push(...explicitSignErrors(general, facts.flatMap((f) => marketNumbers(f, req, policy, true))));
     bad.push(...unsupportedClaims(general));
+    for (const text of [n.headline, n.watch]) if (typeof text === "string") bad.push(...namedCountryErrors(text, facts, req, policy, extra));
     if (facts.length === 1) bad.push(...rangeErrors(general, facts[0]), ...verdictErrors(general, facts[0]), ...observedRateErrors(general, facts[0]));
     bad.push(...headlineVerdictErrors(String(n.headline ?? ""), facts));
+    if (typeof n.watch === "string") bad.push(...headlineVerdictErrors(n.watch, facts, "watch"));
   } else {
     bad.push(...unknownNumbers([n.headline, ...Object.values(n.markets ?? {}), n.watch ?? ""].join(" "), allowed));
   }

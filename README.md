@@ -6,7 +6,7 @@ Open Agent Hackathon 2026 · Track 01 — Solving Fragmented Intelligence · bui
 
 ![PriceSignal: agent trace on the left, a verdict per market and new prices per SKU on the right](docs/img/ui.png)
 
-*A live UI run on 27 Oct 2026: the messy three-market request supplied an 8% cost rise, a 60% unit-cost share and a 70% pass-through policy, producing a separate 3.4% cost recovery target. Market numbers appeared at 30.5 s; the full brief took 85.5 s. It reused 11 views with no planning calls. The provider failed while writing the summary, so the UI retained computed facts. The parser chose snacks for this mixed food/snacks request; market category lookup still uses catalogue matching, while SKU selection checks the actual product names. Current CLI recordings are in [`examples/`](examples/). These measurements are not speed guarantees.*
+*A live UI run on 27 Oct 2026: an explicit Food inflation question takes priority over the gochujang/snacks introduction. The stated 8% cost rise, 60% unit-cost share and 70% pass-through produce a separate 3.4% cost recovery target. Market numbers appeared at 20.5 s; the full brief took 75.5 s. It reused 10 views with no planning calls, remembered Canadian/Australian product choices and selected two German product categories. The first narrative failed checks and its rewrite timed out, so the UI retained computed facts. Current CLI recordings are in [`examples/`](examples/); they predate the category interpretation guard. These measurements are not speed guarantees.*
 
 ---
 
@@ -26,7 +26,7 @@ Assembling a comparable answer by hand means three APIs, three formats and three
 
 ## What it does
 
-1. **Understands a messy request** — typos, country nicknames (`deutschland`, `aus`), category slang (`gochujang & snacks`), Korean or English, a proposed change (`+5%` or `-2%`), a cost recovery policy (`we pass on ~70% of cost increases`), a stated cost change and an optional cost share (`unit costs are 60% of the current selling price`).
+1. **Understands a messy request** — typos, country nicknames (`deutschland`, `aus`), Korean or English, a proposed change (`+5%` or `-2%`), a cost recovery policy (`we pass on ~70% of cost increases`), a stated cost change and an optional cost share (`unit costs are 60% of the current selling price`). An explicit comparison such as “food inflation” takes priority over product names in the introduction. The UI shows the interpreted market category; “same as last time” keeps only assumptions the user did not change. One market category is compared per brief.
 2. **Looks up official series** — by catalogue lookup at Eurostat and ABS, from a vetted vector list at Statistics Canada — and reports what it had to work around (a discontinued dataset, a coarser category, a different frequency).
 3. **Onboards each series into Zetaris** as a Lightning REST table plus a decoding view with a common schema — the agency APIs become governed SQL tables.
 4. **Answers with one federated SQL query** across all three agencies in Zetaris.
@@ -85,7 +85,7 @@ Germany, Canada and Australia are the demo markets. Because Eurostat publishes H
 ## Limits (stated, not hidden)
 
 - **Canada:** our adapter maps only StatCan's Food and All-items CPI vectors, so narrower categories (snacks, sauces) are compared at the Food level and the brief says so.
-- **SKU categories** use product-aware model selection from a bounded official shortlist. A broader series can still be the best available proxy; the table distinguishes model-selected, remembered and unconfirmed matches and names the actual series. This is a coverage check, not a guarantee that an official category precisely describes each product. Market-category lookup is a separate catalogue-matching path: the mixed food/snacks request in example 01 still chose a German confectionery market series even though its chips SKU used a broader Food proxy. The market card is not a validated product match.
+- **SKU categories** use product-aware model selection from a bounded official shortlist. A broader series can still be the best available proxy; the table distinguishes model-selected, remembered and unconfirmed matches and names the actual series. This is a coverage check, not a guarantee that an official category precisely describes each product. Market-category lookup is a separate catalogue-matching path. A guard rejects known sweet-only categories for a snacks comparison and uses a verified broader Food alternative or omits the category. This targeted guard does not validate every possible product match. The recordings below predate this guard and the explicit comparison-category override.
 - **Historical benchmarks are descriptive.** A point or narrow span is possible; it does not express confidence, price headroom or a prediction. Cost recovery requires both a stated cost change and the current cost-to-price share.
 - **The price list is sample data** for a fictional exporter.
 - **Speed** depends on the provider and source queries: the current six CLI recordings took 19–85 s per question, with market numbers at 9.2–38.1 s. Market numbers are shown immediately after the federated comparison, before SKU discovery and pricing finish; SKU prices and the checked prose follow. A disconnected UI retries the event stream for up to 10 s, preserving available numbers and replaying the latest snapshot on reconnection.
@@ -103,7 +103,7 @@ The six questions were run consecutively by `scripts/15_examples.sh` with a new 
 | `05_within_range` | CA/AU Food, +3% within both benchmarks; separate cost target 3.4%. Australian product selection succeeded in 7.9 s and narrative checks passed. | 47 s / 13.2 s |
 | `06_eu_markets` | FR/IT/ES: six new Eurostat series, 90 comparison rows, +3% above all benchmarks. No matching sample SKUs. Narrative checks passed. | 79 s / 38.1 s |
 
-These are measured runs, not speed or completion guarantees. The mixed food/snacks request in 01 selected `snacks` for its market comparison; the German market series and SKU proxies differ, as explained in [the recording notes](examples/README.md). The older policy-scaled recordings remain in Git history. See the actual labels and failure messages instead of assuming every source is a product-specific match or every run includes model-written prose.
+These are measured runs, not speed or completion guarantees. They predate the explicit comparison-category override and market coverage guard. The mixed food/snacks request in 01 selected `snacks` for its market comparison; the German market series and SKU proxies differ, as explained in [the recording notes](examples/README.md). The older policy-scaled recordings remain in Git history. See the actual labels and failure messages instead of assuming every source is a product-specific match or every run includes model-written prose.
 
 ## Run it
 

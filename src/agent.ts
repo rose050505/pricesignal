@@ -170,7 +170,7 @@ export class PriceSignalAgent extends EventEmitter {
     const prompt = `Extract the pricing request as JSON with keys:
 countries (array of strings as the user wrote them), concept (one of: food, all_items, snacks, condiments, or a short noun), concept_words (2-4 lowercase words an official statistics label might use),
 proposed_change_pct (signed number or null, preserve price reductions), cost_increase_pct (signed number or null, only if the user states how much their own costs changed), cost_share_pct (0..100 or null, only if the user states current unit cost / current selling price as a percentage), pass_through (0..1 or null, the share of the monetary cost increase to recover in selling prices), policy_statement (string or null).
-These percentages have different denominators: never infer cost_share_pct from a cost increase, pass-through policy, or proposed change. For "same as last time", return null for values the user did not change. Do not invent a cost share.
+These percentages have different denominators: never infer cost_share_pct from a cost increase, pass-through policy, or proposed change. For "same as last time", return null for values the user did not change. Do not invent a cost share. The concept is the category whose inflation or prices the user asks to compare; product names introducing their business do not override an explicit comparison category.
 Request: """${raw}"""
 Reply with JSON only.`;
     let j: any = {};
@@ -191,14 +191,16 @@ Reply with JSON only.`;
       if (n && !countries.includes(n)) countries.push(n);
       else if (!n && named.length) unknown.push(c);
     }
-    const concept = cleanConcept(j.concept) || "food";
-    const words = Array.isArray(j.concept_words) && j.concept_words.length ? j.concept_words.map((w: unknown) => String(w).toLowerCase()) : CONCEPT_WORDS[concept] ?? [concept];
+    const intent = explicitMarketConcept(raw);
+    const concept = intent.concept ?? (cleanConcept(j.concept) || "food");
+    const words = intent.concept ? CONCEPT_WORDS[concept] : Array.isArray(j.concept_words) && j.concept_words.length ? j.concept_words.map((w: unknown) => String(w).toLowerCase()) : CONCEPT_WORDS[concept] ?? [concept];
     // "same as last time": start from the request H-MEM remembered, keep only what the user changed.
-    const sameAsLast = /\b(same as (last|before|previous)|like last time|as last time|as usual|same again)\b|지난번|저번|지난 분기|같은 조건/i.test(raw);
+    const sameAsLast = sameAsLastRequest(raw);
     const last = sameAsLast ? this.deps.memory.lastRequest() : undefined;
     const explicitCountries = raw.split(/[^\p{L}]+/u).map((w) => normalizeCountry(w, false)).filter((c): c is Country => !!c);
     if (last) {
-      if (!explicitCountries.length) countries.splice(0, countries.length, ...(last.request.countries as Country[]));
+      if (explicitCountries.length) countries.splice(0, countries.length, ...new Set(explicitCountries));
+      else if (!named.some(c => raw.toLowerCase().split(/[^\p{L}]+/u).includes(c.toLowerCase()))) countries.splice(0, countries.length, ...(last.request.countries as Country[]));
       this.log("memory", `recalled last request ${last.id}: markets ${last.request.countries.join(", ")}, category "${last.request.concept}"${last.request.proposedChangePct !== undefined ? `, ${signedPct(last.request.proposedChangePct)}` : ""}`);
     }
     // Nothing named and nothing remembered: the demo markets, said in the brief. Only unsupported markets named: none.
@@ -209,8 +211,8 @@ Reply with JSON only.`;
     const req: Request = {
       raw,
       countries,
-      concept: last ? last.request.concept : concept,
-      conceptWords: last ? last.request.conceptWords : words,
+      concept: intent.concept ?? last?.request.concept ?? concept,
+      conceptWords: intent.concept ? words : last?.request.conceptWords ?? words,
       proposedChangePct: explicitPct ?? last?.request.proposedChangePct,
       passThrough,
       costIncreasePct: costPct ?? (last ? last.request.costIncreasePct : undefined),
@@ -218,7 +220,7 @@ Reply with JSON only.`;
       costSharePct: percentages.invalidCostShare ? undefined : costSharePct ?? last?.request.costSharePct,
       costShareRemembered: !percentages.invalidCostShare && costSharePct === undefined && last?.request.costSharePct !== undefined ? true : undefined,
       invalidPassThrough: percentages.invalidPassThrough || undefined,
-      inputIssues: percentages.issues.length ? percentages.issues : undefined,
+      inputIssues: [...percentages.issues, ...intent.issues].length ? [...percentages.issues, ...intent.issues] : undefined,
       policyStatement: j.policy_statement ? String(j.policy_statement) : undefined,
       unknownCountries: unknown,
       defaultMarkets: defaultMarkets || undefined,
@@ -410,6 +412,13 @@ Reply with JSON only.`;
             this.log("memory", `nothing remembered for ${country} ${concept} - discovering it`);
             return { not_in_memory: true, discovered: await this.execute({ action: "discover_and_onboard", args: { country, concept } }, req, s) };
           }
+          if (!marketCategoryUsable(concept, hit.mapping)) {
+            const note = `${country}: remembered ${hit.mapping.label} is not usable for the requested ${concept} comparison; checking official alternatives.`;
+            if (!s.notes.includes(note)) s.notes.push(note);
+            memory.feedback(hit.id, "not_helpful");
+            this.log("memory", `rejected ${hit.id}: ${hit.mapping.label} does not cover the requested ${concept} category`);
+            return { error: "remembered category failed the market coverage guard; discover again" };
+          }
           const probe = await this.sql.run(`SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.${hit.mapping.view} WHERE yoy_pct IS NOT NULL`);
           const n = Number(probe.rows[0]?.[0] ?? 0);
           if (!n) return { error: `remembered view psig.${hit.mapping.view} returned no rows; onboard again` };
@@ -441,6 +450,21 @@ Reply with JSON only.`;
             if (!s.notes.includes(note)) s.notes.push(note);
             this.log("warn", `${AGENCY_FOR[country].name} did not answer for ${country} ${concept}: ${String(e).slice(0, 120)}`);
             return { error: "agency did not answer", candidates: [] };
+          }
+          const rejected = d.candidates.filter(c => !marketCategoryUsable(concept, c));
+          d = { ...d, candidates: d.candidates.filter(c => marketCategoryUsable(concept, c)).map(c => concept !== "food" && concept !== "all_items" && isOfficialBroadFood(c) ? { ...c, isBroadFallback: true } : c), notes: [...d.notes] };
+          if (rejected.length) d.notes.push(`Excluded ${rejected.map(c => c.label).join("; ")} from ${concept}: a sweet-only or unverified broad category cannot stand in for this market comparison.`);
+          // One deterministic Food lookup is enough when the narrow shortlist has no usable candidate.
+          if (concept === "snacks" && !d.candidates.length) {
+            try {
+              this.metrics.discoveries++;
+              const broad = await this.discoverFn(country, "food", CONCEPT_WORDS.food);
+              d.candidates.push(...broad.candidates.filter(isOfficialBroadFood).map(c => ({ ...c, isBroadFallback: true })));
+              d.notes.push(...broad.notes);
+            } catch (e) {
+              d.notes.push(`The official Food alternative could not be checked (${String(e).replace(/^Error: /, "").slice(0, 80)}).`);
+            }
+            if (!d.candidates.length) d.notes.push(`No usable snack category or verified official Food alternative was found; this market category is omitted.`);
           }
           s.candidates.set(s.key(country, concept), d.candidates);
           if (!d.candidates.length) s.candidates.set(s.key(country, concept) + ":gaveup", []);
@@ -480,12 +504,16 @@ Reply with JSON only.`;
           const list = s.candidates.get(s.key(country, concept));
           if (!list?.length) return { error: "run discover_series for this pair first" };
           const c = list[Math.max(0, Math.min(list.length - 1, Number(a.candidate ?? 0)))];
+          if (!c || !marketCategoryUsable(concept, c)) {
+            this.log("warn", `refused ${c?.label ?? "invalid candidate"} for ${country} ${concept}: market coverage guard failed`);
+            return { error: "candidate failed the market coverage guard; use a suitable category or verified Food alternative" };
+          }
           const r = await this.onboardFn(this.sql, c, concept);
           const how = r.existed ? "Zetaris already had it - reused and verified" : "created REST table + view";
           this.log("onboard", `${r.ok ? "onboarded" : "FAILED"} ${c.agency} ${c.code} -> psig.${r.view}${r.ok ? ` (${how}: ${r.rows} rows, latest ${r.latest})` : `: ${r.error}`}`, { candidate: c, result: { ...r, sql: r.sql } });
           if (r.ok) {
             const own: string[] = [...((s.candidates as any).get(s.key(country, concept) + ":notes") ?? [])];
-            if (c.isBroadFallback) {
+            if (c.isBroadFallback || concept !== "food" && concept !== "all_items" && isOfficialBroadFood(c)) {
               const broader = `${c.label} is used as a broader category proxy (coarser) for ${concept}.`;
               own.push(broader);
               s.notes.push(`${country}: ${broader}`);
@@ -835,7 +863,7 @@ Reply with JSON only.`;
     const allowed = [...allowedNumbers(facts, req, policy), ...noteNumbers];
     const payload = { request: req.raw, proposed_change_pct: req.proposedChangePct ?? null, cost_increase_pct: req.costIncreasePct ?? null, cost_share_pct: req.costSharePct ?? null, cost_share_basis: "current unit cost / current selling price", cost_pass_through_pct: req.invalidPassThrough ? null : Math.round(policy * 100), facts: factsForNarrative(facts, req, policy), caveats: [...new Set(notes)] };
     const ask: ChatMessage[] = [
-      { role: "system", content: "You write short, plain-English pricing briefs for an exporter's pricing manager. Use ONLY numbers that appear in the facts JSON, written with the same rounding. Copy benchmark_range_pct low and high exactly; never compute a range yourself. This is a historical year-on-year consumer-price benchmark, not a recommended price, willingness-to-pay estimate, or forecast. Each market's verdict field is final: say it as given (above, within or below the market benchmark), keeping every market and the headline consistent. Average coverage states how many monthly or quarterly observations were available; do not call partial coverage a complete annual average or insufficient history a flat trend. cost_need_pct, when provided, is a conditional cost-recovery scenario computed from current unit cost / current selling price, stated cost change and monetary cost pass-through. It does not assume or preserve a profit margin. If cost share or a valid policy is absent, do not invent a price target from the cost increase. Use cost_vs_market exactly when comparing that scenario with the historical benchmark. No new numbers, no predictions about customers accepting a price. Mention the caveats supplied in the facts JSON and do not invent other source or methodology claims." },
+      { role: "system", content: "You write short, plain-English pricing briefs for an exporter's pricing manager. Use ONLY numbers that appear in the facts JSON, written with the same rounding. Copy benchmark_range_pct low and high exactly; never compute a range yourself. This is a historical year-on-year consumer-price benchmark, not a recommended price, willingness-to-pay estimate, or forecast. Each market's verdict field is final: say it as given (above, within or below the market benchmark), keeping every market and the headline consistent. Average coverage states how many monthly or quarterly observations were available; do not call partial coverage a complete annual average or insufficient history a flat trend. cost_need_pct, when provided, is a conditional cost-recovery scenario computed from current unit cost / current selling price, stated cost change and monetary cost pass-through. It does not assume or preserve a profit margin. If cost share or a valid policy is absent, do not invent a price target from the cost increase. Use cost_vs_market exactly when comparing that scenario with the historical benchmark. Never write internal JSON keys in the prose; name the cost recovery target and its explicit percentage as the subject of a cost comparison, separately from the proposed price change. No new numbers, no predictions about customers accepting a price. Mention the caveats supplied in the facts JSON and do not invent other source or methodology claims." },
       { role: "user", content: `Facts: ${JSON.stringify(payload)}\nReply with JSON only: {"headline": str (<= 25 words), "markets": {"<country code>": str (2-3 sentences: what the data says and what it means for the proposed change)}, "watch": str (one sentence on what to re-check next month)}` },
     ];
     // One time budget for the prose, retries included: the numbers never wait more than this for the words.
@@ -856,7 +884,7 @@ Reply with JSON only.`;
         this.log("llm", `narrative (${r.model}, ${r.ms} ms${via(r)})${bad.length ? ` - does not match the facts: ${bad.join(", ")}` : " - numbers and verdicts match the facts"}`);
         if (!bad.length) return { narrative: { ...n, markets: Object.fromEntries(Object.entries(n.markets ?? {}).map(([k, v]) => [marketKey(k), v])) } };
         issue = "grounding";
-        ask.push({ role: "assistant", content: r.text }, { role: "user", content: `These numbers, ranges or verdicts do not match the facts for that market: ${bad.join(", ")}. Rewrite using only that market's numbers; a suggested range must be exactly suggested_range_pct low to high, and each market's verdict must be exactly its verdict field. JSON only.` });
+        ask.push({ role: "assistant", content: r.text }, { role: "user", content: `These numbers, ranges or verdicts do not match the facts for that market: ${bad.join(", ")}. Rewrite using only that market's numbers; the benchmark range must be exactly benchmark_range_pct low to high, and each market's verdict must be exactly its verdict field. JSON only.` });
       } catch (e) {
         this.log("warn", `narrative attempt failed: ${String(e).slice(0, 120)}`);
         issue = /no headline in reply/.test(String(e)) ? "unusable" : "provider";
@@ -872,9 +900,18 @@ type ExecCtx = { views: Map<string, any>; candidates: Map<string, Candidate[]>; 
 type SkuView = { view: string; note?: string; selectionReason?: string; selectionSource?: "model" | "memory" | "fallback"; selectionFit?: "specific" | "broader" };
 
 /** A label match alone must not turn a narrow catalog hit into an official Food proxy. */
-function isOfficialBroadFood(candidate: Candidate): boolean {
-  const code = { eurostat: "CP01", abs: "20001", statcan: "v41690974" }[candidate.agency];
+function isOfficialBroadFood(candidate: { agency: string; code: string; label: string }): boolean {
+  const code = new Map([["eurostat", "CP01"], ["abs", "20001"], ["statcan", "v41690974"]]).get(candidate.agency);
   return candidate.code === code && isBroadFoodLabel(candidate.label);
+}
+
+/** Reject a known catalogue ambiguity, without claiming that every remaining label is a product match. */
+function marketCategoryUsable(concept: Concept, candidate: { agency: string; code: string; label: string; isBroadFallback?: boolean }): boolean {
+  if (candidate.isBroadFallback && !isOfficialBroadFood(candidate)) return false;
+  if (concept !== "snacks") return true;
+  if (isBroadFoodLabel(candidate.label)) return isOfficialBroadFood(candidate);
+  return !/\b(?:sugar|confectionery|desserts?|chocolate|jams?|honey|cand(?:y|ies)|sweets?)\b/i.test(candidate.label)
+    || /\b(?:snacks?|chips?|crisps?|savoury|savory|potato)\b/i.test(candidate.label);
 }
 
 /** Both reused and newly onboarded SKU views need a valid, non-future release within the freshness window. */
@@ -949,6 +986,49 @@ function via(r: ChatResult): string {
 /** A concept name from the model ends up in view names and SQL string literals: keep it to plain words. */
 function cleanConcept(v: unknown): string {
   return v === null || v === undefined ? "" : String(v).toLowerCase().replace(/['"`\\;]/g, "").trim();
+}
+
+function sameAsLastRequest(raw: string): boolean {
+  return /\b(same as (last|before|previous)|like last time|as last time|as usual|same again)\b|지난번|저번|지난 분기|같은 조건/i.test(raw);
+}
+
+/** A direct inflation/price subject outranks a product introduction; memory fills only absent categories. */
+function explicitMarketConcept(raw: string): { concept?: string; issues: string[] } {
+  const aliases: [string, RegExp][] = [
+    ["all_items", /\b(?:all[-_ ]items|all groups|overall|headline)\b|전체|총지수/gi],
+    ["food", /\b(?:food|grocer(?:y|ies))\b|식품|식료품/gi],
+    ["snacks", /\bsnacks?\b|간식|과자/gi],
+    ["condiments", /\b(?:condiments?|sauces?)\b|조미료|양념|소스/gi],
+  ];
+  const hits: { concept: string; index: number; direct: boolean }[] = [];
+  for (const [concept, pattern] of aliases) for (const match of raw.matchAll(pattern)) {
+    const before = raw.slice(Math.max(0, match.index! - 24), match.index);
+    const after = raw.slice(match.index! + match[0].length);
+    // An explicit exclusion is not a second requested category.
+    if (/\b(?:not|except|excluding)\s*$/i.test(before) || /^\s*(?:말고|아닌|제외)/.test(after)) continue;
+    const direct = /^\s*(?:consumer\s+)?(?:price(?:s| inflation)?|inflation|CPI|HICP)\b/i.test(after)
+      || /^\s*(?:의\s*)?(?:물가|인플레이션|가격)/.test(after)
+      || /\b(?:compare|benchmark)\s+(?:the\s+)?$/i.test(before)
+      || /\b(?:inflation|prices?|CPI|HICP)\s+(?:for|of|in)\s+(?:the\s+)?$/i.test(before);
+    if (!direct) {
+      // A category word in the business introduction or ordinary prose is not a changed request.
+      // Keep concise market/category inputs and explicit category changes without needing "inflation".
+      if (/^\s*(?:business|company|exporter|products?)\b/i.test(after) || /^\s*(?:수출업체|업체|제품)/.test(after) || /^(?:overall|headline)$/i.test(match[0])) continue;
+      if (/^[가-힣]/.test(match[0]) && !/^(?:(?:으로|은|는|을|를|의|이|가|로))?(?=\s|[,.:;!?+−\-\d]|$)/.test(after)) continue;
+      const preceding = before.trim().split(/[^\p{L}]+/u).filter(Boolean).at(-1);
+      const following = after.replace(/^\s*(?:in|for|of|from)\s+/i, "").trim().split(/[^\p{L}]+/u).filter(Boolean)[0];
+      const marketShorthand = !!(preceding && normalizeCountry(preceding, false) || following && normalizeCountry(following, false));
+      const changed = /\b(?:switch\s+to|change\s+(?:the\s+)?category\s+to|category\s*[:=])\s*$/i.test(before)
+        || /(?:이번에는|대신|범주[는를가]?|카테고리[는를가]?)\s*$/.test(before)
+        || sameAsLastRequest(raw) && /\bbut\s*$/i.test(before) && /^[\s.!?]*$/.test(after);
+      if (!marketShorthand && !changed) continue;
+    }
+    hits.push({ concept, index: match.index!, direct });
+  }
+  const direct = hits.filter(h => h.direct).sort((a, b) => a.index - b.index);
+  const choices = [...new Set((direct.length ? direct : hits.sort((a, b) => a.index - b.index)).map(h => h.concept))];
+  if (!choices.length || !direct.length && choices.length > 1) return { issues: [] };
+  return { concept: choices[0], issues: choices.length > 1 ? [`This request names multiple market categories; PriceSignal compares one market category per brief. Using the first explicit category, ${choices[0]}; ${choices.slice(1).join(", ")} is not included in this market comparison.`] : [] };
 }
 
 function numOrUndef(v: unknown): number | undefined {
