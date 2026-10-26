@@ -48,7 +48,7 @@ test("exports only run evidence and verifies a JSON round-trip with unrounded ob
   assert.doesNotMatch(serialized, /must-not-export|credentials|HEADER Authorization/);
   assert.equal(JSON.stringify(b), before);
   assert.equal(evidence.schemaVersion, 1);
-  assert.equal(evidence.methodVersion, 2);
+  assert.equal(evidence.methodVersion, 3);
   assert.equal(evidence.calculatedAt, calculatedAt);
   assert.equal(evidence.queries.market.rows[0][5], 0.25);
   assert.equal(evidence.queries.market.rows[2][5], 2.85);

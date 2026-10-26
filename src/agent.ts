@@ -855,8 +855,8 @@ Reply with JSON only.`;
         const o = prev.outcome;
         const when = o.at.slice(0, 10);
         const parts: string[] = [];
-        let comparable = o.methodVersion === 2 && !!o.sourceId && o.sourceId === s.sourceId && (o.decoderVersion ?? 1) === decoderVersion;
-        if (o.methodVersion !== 2) parts.push("methodology changed: the earlier policy-scaled range and current historical market benchmark are not directly comparable");
+        let comparable = o.methodVersion === 3 && !!o.sourceId && o.sourceId === s.sourceId && (o.decoderVersion ?? 1) === decoderVersion;
+        if (o.methodVersion !== 3) parts.push("methodology changed: earlier outcomes may use a policy-scaled range or an all-items fallback; current requested-category benchmarks are not directly comparable");
         else if (!o.sourceId) parts.push("the earlier source identity was not recorded; the outcomes are not directly comparable");
         else if (o.sourceId !== s.sourceId) parts.push(`official source changed (${o.sourceId} -> ${s.sourceId}); the outcomes are not directly comparable`);
         else if ((o.decoderVersion ?? 1) !== decoderVersion) parts.push(`series decoder calculation changed (version ${o.decoderVersion ?? 1} -> ${decoderVersion}); the outcomes are not directly comparable, and this change is not evidence of an official data revision`);
@@ -882,7 +882,7 @@ Reply with JSON only.`;
         }
         out.push(`${f.country} ${s.label} (last brief ${when}, ${prev.id}): ${parts.join("; ")}.`);
       }
-      if (!retainNewerOutcome) memory.rememberOutcome({ country: f.country, concept: s.concept, period: s.latestPeriod, yoy: s.latestYoy, low: f.suggested.low, high: f.suggested.high, policy: req.invalidPassThrough ? undefined : policy, proposed: req.proposedChangePct, verdict: f.verdict, sourceId: s.sourceId, methodVersion: 2, decoderVersion, at: new Date().toISOString() });
+      if (!retainNewerOutcome) memory.rememberOutcome({ country: f.country, concept: s.concept, period: s.latestPeriod, yoy: s.latestYoy, low: f.suggested.low, high: f.suggested.high, policy: req.invalidPassThrough ? undefined : policy, proposed: req.proposedChangePct, verdict: f.verdict, sourceId: s.sourceId, methodVersion: 3, decoderVersion, at: new Date().toISOString() });
     }
     if (out.length) this.log("memory", `compared with ${out.length} remembered brief outcome(s): ${out.map((x) => x.split(" (")[0]).join(", ")}`, out);
     return out;
@@ -1156,10 +1156,39 @@ function requestPercentages(raw: string, model: any): {
       || /^\s*(?:VAT|tax|margin|inflation|부가세|세율|마진|이익률)\b/i.test(after);
     const timeContext = `${before} ${after}`.replace(/\b(?:same as|like) last (?:quarter|month|year)\b|지난\s*분기(?:와)?\s*같은\s*조건(?:으로)?/gi, " ");
     const historical = /\b(?:last year|last quarter|last month|previously|earlier|already|used to|previous price)\b|작년|지난해|지난\s*(?:분기|달)|이전\s*가격/i.test(timeContext);
-    return { x, signed: !!m[1], share, pass, cost, unrelated, historical, context: `${before} ${m[0]} ${directionAfter}` };
+    return { x, signed: !!m[1], share, pass, cost, unrelated, historical, before, after: directionAfter, previousValue: false, context: `${before} ${m[0]} ${directionAfter}` };
   });
+  // A named field changed "from A% to B%" has one current value, B. Keep this
+  // link narrow: intervening field names and alternatives must not inherit A's role.
+  for (let i = 1; i < found.length; i++) {
+    const previous = found[i - 1], current = found[i];
+    const previousMatch = matches[i - 1], currentMatch = matches[i];
+    const bridge = raw.slice(previousMatch.index! + previousMatch[0].length, currentMatch.index).trim();
+    const english = /^to$/i.test(bridge) && /\bfrom\s*$/i.test(previous.before);
+    const korean = bridge === "에서" && /^\s*(?:으)?로(?=$|[\s.,;!?]|바꾸|바꿔|변경|조정|낮추|높이)/.test(current.after);
+    if (!english && !korean) continue;
+    if (/\b(?:range|ranges|ranging|anywhere)\b|범위/i.test(previous.before)) continue;
+    const role = (p: typeof current) => p.share ? "share" : p.pass ? "pass" : p.cost ? "cost" : p.unrelated ? "unrelated" : "proposal";
+    if (role(current) !== "proposal" && role(current) !== role(previous)) continue;
+    previous.previousValue = true;
+    current.share = previous.share;
+    current.pass = previous.pass;
+    current.cost = previous.cost;
+    current.unrelated = previous.unrelated;
+    current.historical = previous.historical;
+    // A named reduction is negative; "lower the proposal" only lowers its rate.
+    // Use the subject next to A, not an earlier direction word or A's inferred sign.
+    const subject = previous.before.replace(/\bfrom\s*$/i, "").trim();
+    const reduction = !current.share && !current.pass && (
+      /\b(?:prices?|costs?)\s+(?:reduction|decrease|decline|fall|cut)(?:\s+(?:rate|percentage))?$/i.test(subject)
+      || /\b(?:reduction|decrease|decline|fall|cut)\s+(?:in|of)\s+(?:the\s+)?(?:prices?|costs?)$/i.test(subject)
+      || /(?:가격|원가|비용)\s*(?:인하|하락|감소)(?:율|률)?(?:을|를|은|는)?$/.test(subject)
+    );
+    current.x = Number(currentMatch[2].replace(",", ".")) * (/^[\-−－]$/.test(currentMatch[1]) || !currentMatch[1] && reduction ? -1 : 1);
+    current.context = `${previous.before} ${currentMatch[0]} ${current.after}`;
+  }
   const chooseOption = (kind: "share" | "pass" | "cost", modelValue: unknown, scale = 1) => {
-    const options = found.filter(p => p[kind]);
+    const options = found.filter(p => p[kind] && !p.previousValue);
     const fromModel = numOrUndef(modelValue);
     return options.find(p => fromModel !== undefined && Math.abs(p.x - fromModel * scale) < 1e-9) ?? options.at(-1);
   };
@@ -1168,7 +1197,7 @@ function requestPercentages(raw: string, model: any): {
   const passPct = choose("pass", model.pass_through, 100);
   const invalidCostShare = share !== undefined && (!Number.isFinite(share) || share < 0 || share > 100);
   const invalidPassThrough = passPct !== undefined && (!Number.isFinite(passPct) || passPct < 0 || passPct > 100);
-  const proposals = found.filter(p => !p.share && !p.pass && !p.cost && !p.unrelated && !p.historical);
+  const proposals = found.filter(p => !p.previousValue && !p.share && !p.pass && !p.cost && !p.unrelated && !p.historical);
   const uniqueProposals = [...new Set(proposals.map(p => p.x))];
   const ambiguousProposal = uniqueProposals.length > 1;
   const proposal = proposals[0];

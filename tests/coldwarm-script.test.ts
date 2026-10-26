@@ -21,7 +21,7 @@ if(role!=='app'){console.log('# tests 1\\n# pass 1\\n# fail 0');process.exit(Num
 const n=calls.filter(c=>c.role==='app').length, dir='out/run-'+n;fs.mkdirSync(dir,{recursive:true});
 if(process.env.FAKE_MISSING!=='brief')fs.writeFileSync(dir+'/brief.md','# PriceSignal brief\\nfixture');
 if(process.env.FAKE_MISSING!=='trace')fs.writeFileSync(dir+'/trace.json',JSON.stringify({trace:[],sql:[]}));
-if(process.env.FAKE_MISSING!=='evidence')fs.writeFileSync(dir+'/evidence.json',process.env.FAKE_MISSING==='invalid-json'?'{':JSON.stringify({schemaVersion:1,methodVersion:2,queries:{market:{columns:[],rows:[]}},results:{facts:[],skus:[]}}));
+if(process.env.FAKE_MISSING!=='evidence')fs.writeFileSync(dir+'/evidence.json',process.env.FAKE_MISSING==='invalid-json'?'{':JSON.stringify({schemaVersion:1,methodVersion:Number(process.env.FAKE_METHOD_VERSION||2),queries:{market:{columns:[],rows:[]}},results:{facts:[],skus:[]}}));
 console.log('[done] offline fixture');console.log('[pricesignal] saved '+dir+'/brief.md');
 process.exit(Number(process.env.FAKE_FAIL_AT)===n?7:0);
 `;
@@ -113,4 +113,21 @@ test("warm-only requires an explicit store and namespace matching a successful c
     const apps = f.calls().filter(c => c.role === "app"); assert.equal(apps.length, 1);
     assert.equal(apps[0].memory, requested.PSIG_MEMORY_DIR); assert.equal(apps[0].namespace, requested.PSIG_ZETARIS_NS);
   } finally { f.dispose(); }
+});
+
+
+test("cold recordings accept both preserved and current evidence methods but reject unknown methods", () => {
+  for (const version of [2, 3, 999]) {
+    const f = fixture();
+    try {
+      const r = f.run(undefined, { ...requested, FAKE_METHOD_VERSION: String(version) });
+      if (version === 999) {
+        assert.notEqual(r.status, 0, "unknown evidence method must fail");
+        assert.equal(f.calls().filter(c => c.role === "app").length, 1);
+      } else {
+        assert.equal(r.status, 0, r.stdout + r.stderr);
+        assert.equal(f.calls().filter(c => c.role === "app").length, 2);
+      }
+    } finally { f.dispose(); }
+  }
 });

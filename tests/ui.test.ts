@@ -48,6 +48,32 @@ const result = (partial = false) => ({
   metrics: { modelCalls: 2, plannerCalls: 0, discoveries: 0, reusedViews: 6, numbersMs: 2200 },
 });
 
+test('a card with only all-items evidence labels it as context and withholds the requested-category comparison', () => {
+  const b=browser();
+  const fact={country:'DE',agency:'Eurostat',allItems:{concept:'all_items',label:'All-items',frequency:'M',sourceId:'fixture:all',latestYoy:4,avg12:4,latestPeriod:'2026-09',trend:'flat',points:[]},suggested:{low:4,high:4},verdict:'below the market benchmark',costNeed:3.4,costVsMarket:'below the market benchmark'};
+  b.context.sample={...result(),concept:'food',requestedCountries:['DE'],proposed:3,cost:8,costShare:60,facts:[fact]};
+  b.run('render(sample,"Germany food +3%")');
+  const output=b.node('#out').innerHTML;
+  assert.match(output,/0\/1 requested markets/);
+  assert.match(output,/All-items/);
+  assert.match(output,/context only/i);
+  assert.match(output,/no food comparison/i);
+  assert.doesNotMatch(output,/class="verdict|class="band"/);
+  assert.match(output,/cost recovery target 3\.4%/i,'the independent cost target remains available');
+});
+
+test('explicit all-items requests and a marked broader Food proxy keep their own comparisons',()=>{
+  for(const [concept,key,label] of [['all_items','allItems','All-items'],['snacks','category','Food']] as const){
+    const b=browser();
+    b.context.sample={...result(),concept,requestedCountries:['DE'],proposed:3,facts:[{country:'DE',agency:'Eurostat',[key]:{concept,label,frequency:'M',sourceId:'fixture:'+concept,latestYoy:4,avg12:4,latestPeriod:'2026-09',trend:'flat',points:[]},suggested:{low:4,high:4},verdict:'below the market benchmark'}]};
+    b.run('render(sample,"comparison +3%")');
+    const output=b.node('#out').innerHTML;
+    assert.match(output,/1\/1 requested markets/);
+    assert.match(output,/class="verdict below"/);
+    assert.doesNotMatch(output,/context only/i);
+  }
+});
+
 test("trace scrolling stays inside its panel and preserves a reader's earlier position", () => {
   const b = browser(); const trace = b.node("#trace");
   trace.scrollHeight = 500; trace.clientHeight = 100; trace.scrollTop = 400;

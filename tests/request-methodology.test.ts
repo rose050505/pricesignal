@@ -113,7 +113,7 @@ function market(period = "2026-09", yoy = 4, sourceId = "official:food") {
   return { country: "DE", agency: "Official", category: { concept: "food", label: "Food", frequency: "M", sourceId, latestPeriod: period, latestYoy: yoy, avg12: yoy, trend: "flat", points: [] }, suggested: { low: yoy, high: yoy, basis: "benchmark" }, verdict: "above the market benchmark", cite: "Q1" };
 }
 function prior(extra: Record<string, unknown> = {}) {
-  return { country: "DE", concept: "food", period: "2026-09", yoy: 2, low: 2, high: 2, policy: 0.7, at: "2026-10-26T00:00:00Z", sourceId: "official:food", methodVersion: 2, ...extra };
+  return { country: "DE", concept: "food", period: "2026-09", yoy: 2, low: 2, high: 2, policy: 0.7, at: "2026-10-26T00:00:00Z", sourceId: "official:food", methodVersion: 3, ...extra };
 }
 function compare(old: any, current: any) {
   const memory = memoryOnly();
@@ -142,7 +142,7 @@ test("old methodology or a changed source is not presented as a like-for-like ma
   assert.match(changed.text, /not directly comparable|cannot.*compar/i);
   const stored: any = changed.memory.lastOutcome("DE", "food")!.outcome;
   assert.equal(stored.sourceId, "official:other-food");
-  assert.equal(stored.methodVersion, 2);
+  assert.equal(stored.methodVersion, 3);
 });
 
 test("SKU benchmark retains deflation and is independent of the cost recovery policy", async () => {

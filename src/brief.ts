@@ -183,13 +183,25 @@ export function costShareBasisDescription(req: Request): string {
 }
 
 export function buildFacts(rows: Record<string, unknown>[], req: Request, cite: string, passThrough: number, now = new Date()): MarketFacts[] {
+  return buildFactsForMethod(rows, req, cite, passThrough, now, false);
+}
+
+/** Replay method-2 packets exactly: their missing-category fallback is historical behavior, not a current recommendation. */
+export function buildFactsLegacyV2(rows: Record<string, unknown>[], req: Request, cite: string, passThrough: number, now = new Date()): MarketFacts[] {
+  return buildFactsForMethod(rows, req, cite, passThrough, now, true);
+}
+
+function buildFactsForMethod(rows: Record<string, unknown>[], req: Request, cite: string, passThrough: number, now: Date, legacyFallback: boolean): MarketFacts[] {
   const nowIdx = now.getUTCFullYear() * 12 + now.getUTCMonth();
   return req.countries.map((country) => {
     const mine = rows.filter((r) => r.country === country);
     const category = req.concept === "all_items" ? undefined : seriesFacts(mine.filter((r) => r.concept === req.concept));
     const allItems = seriesFacts(mine.filter((r) => r.concept === "all_items"));
-    const main = category ?? allItems;
+    const main = legacyFallback ? category ?? allItems : req.concept === "all_items" ? allItems : category;
     const f: MarketFacts = { country, agency: AGENCY_FOR[country].name, category, allItems, cite };
+    // Cost recovery is an independent calculation from the supplied cost inputs.
+    // Method 2 only exposed it when some market series existed.
+    if (!legacyFallback || main) f.costNeed = costScenario(req, passThrough);
     if (main) {
       f.monthsStale = nowIdx - periodIndex(main.latestPeriod);
       const { low: lo, high: hi } = marketBenchmark(main);
@@ -198,13 +210,16 @@ export function buildFacts(rows: Record<string, unknown>[], req: Request, cite: 
         const p = req.proposedChangePct;
         f.verdict = p > hi ? "above the market benchmark" : p < lo ? "below the market benchmark" : "within the market benchmark";
       }
-      f.costNeed = costScenario(req, passThrough);
       if (f.costNeed !== undefined) {
         f.costVsMarket = f.costNeed > hi ? "above the market benchmark" : f.costNeed < lo ? "below the market benchmark" : "within the market benchmark";
       }
     }
     return f;
   });
+}
+
+function requestedSeries(f: MarketFacts, req: Request): SeriesFacts | undefined {
+  return req.concept === "all_items" ? f.allItems : f.category;
 }
 
 /** Numbers one market's prose may use: that market's own facts, the request and the policy - not the whole history. */
@@ -271,27 +286,50 @@ function explicitSignErrors(text: string, signedFacts: number[]): string[] {
 }
 
 /** Check explicit descriptions of observed YoY levels or price movements, preserving fall magnitudes. */
-function observedRateErrors(text: string, f: MarketFacts): string[] {
+function observedRateErrors(text: string, f: MarketFacts, req?: Request): string[] {
   const bad: string[] = [];
   for (const sentence of text.split(/(?<=[.!?;])\s+/)) {
     for (const m of sentence.matchAll(/(?<![\w.])([+−-]?\d+(?:\.\d+)?)\s*%/g)) {
       const before = sentence.slice(0, m.index);
       const after = sentence.slice(m.index! + m[0].length);
-      const clause = before.split(/[,;]|\b(?:while|whereas|but)\b/i).at(-1)!;
+      const clause = before.split(/[,;]|\b(?:and|while|whereas|but)\b/i).at(-1)!;
       // User proposals and cost assumptions are not observations of consumer prices.
       if (/propos|cost|pass[ -]?through|recover|target|scenario/i.test(clause)) continue;
       const movement = clause.match(/\b(?:prices?\s+(?:have\s+|has\s+)?|prices?\s+(?:are|were)\s+)(rose|risen|increased|grew|up|fell|fallen|declined|decreased|dropped|down)(?:\s+by)?\s*$/i);
       const followsRate = /^\s*(?:YoY\b|year[ -]on[ -]year\b)/i.test(after);
       const precedesRate = /\b(?:inflation|YoY|year[ -]on[ -]year)(?:\s+(?:is|was|at|of|rate|stood|stands))*\s*$/i.test(clause);
       if (!movement && !followsRate && !precedesRate) continue;
-      const allItemsMentioned = /all[ -]items|headline inflation/i.test(before);
-      const s = allItemsMentioned ? f.allItems ?? f.category : f.category ?? f.allItems;
-      if (!s) continue;
+      const allItemsMentioned = /all[ -]items|headline inflation/i.test(clause);
+      const s = allItemsMentioned ? f.allItems : req ? requestedSeries(f, req) : f.category ?? f.allItems;
+      if (!s) {
+        if (req) bad.push(`observed rate unavailable for ${allItemsMentioned ? "all-items" : `requested category ${req.concept}`}: ${m[0]}`);
+        continue;
+      }
       const literal = Number(m[1].replace("−", "-"));
       const down = movement && /fell|fallen|declined|decreased|dropped|down/i.test(movement[1]);
       const stated = movement ? (down ? -Math.abs(literal) : Math.abs(literal)) : literal;
       const observed = /average|mean/i.test(clause) ? [s.avg12] : /\b(?:from|previous|earlier|ago)\b/i.test(clause) ? [s.latestYoy, s.avg12, s.yoy6Back].filter((x): x is number => x !== undefined) : [s.latestYoy];
       if (!observed.some((x) => near(x, stated))) bad.push(`observed rate contradicts the series: ${m[0]}`);
+    }
+  }
+  return bad;
+}
+
+/** Narrow English claim checks for an absent requested series; this is not general semantic verification. */
+function unavailableCategoryErrors(text: string, f: MarketFacts, req: Request): string[] {
+  if (requestedSeries(f, req)) return [];
+  const bad: string[] = [];
+  for (const clause of text.split(/(?<=[.!?;])\s+|[,;]|\b(?:and|while|whereas|but)\b/i)) {
+    for (const m of clause.matchAll(/\b(?:within|inside|above|exceeds?|exceeding|below|under|outside)\b[^.;!?%]{0,45}\b(?:benchmark|evidence|range)\b/gi)) {
+      bad.push(`requested category ${req.concept} comparison unavailable: ${m[0]}`);
+    }
+    // Common numeric shorthand is still an observation/benchmark claim: e.g.
+    // "Food CPI is 4%" or "Food inflation: 4%". Explicit all-items context is separate.
+    if (!/all[ -]items|headline inflation/i.test(clause) && /\b(?:inflation|CPI|HICP|benchmark)\b\s*(?:(?:is|was|at|of|rate|stood|stands|remains?)\s+)*[:=]?\s*[+−-]?\d+(?:\.\d+)?\s*%/i.test(clause)) {
+      bad.push(`requested category ${req.concept} numeric observation or benchmark unavailable: ${clause.trim()}`);
+    }
+    if (!/all[ -]items|headline inflation/i.test(clause) && /\b(?:inflation|prices?)\b\s+(?:(?:is|are|was|were|remains?|still|running)\s+)*(?:hot|high|low|rising|falling|easing|accelerating|elevated)\b/i.test(clause)) {
+      bad.push(`requested category ${req.concept} observation unavailable: ${clause.trim()}`);
     }
   }
   return bad;
@@ -451,7 +489,8 @@ function namedCountryErrors(text: string, facts: MarketFacts[], req: Request, po
           ...coverage.errors,
           ...unknownNumbers(coverage.text, [...marketNumbers(f, req, policy), ...extra]),
           ...explicitSignErrors(clause, [...marketNumbers(f, req, policy, true), ...extra]),
-          ...observedRateErrors(clause, f),
+          ...observedRateErrors(clause, f, req),
+          ...unavailableCategoryErrors(clause, f, req),
           ...rangeErrors(clause, f),
         ];
         bad.push(...errors.map((error) => `${country}: ${error}`));
@@ -463,7 +502,7 @@ function namedCountryErrors(text: string, facts: MarketFacts[], req: Request, po
 
 function internalPayloadErrors(text: string): string[] {
   // Markdown underscores are formatting boundaries even though JavaScript's \b treats them as word characters.
-  const keys = /(?<![\p{L}\p{N}])(?:benchmark_range_pct|suggested_range_pct|benchmark_basis|proposed_change_pct|pass_through_pct|pass_through_needed_pct|cost_need_pct|cost_vs_market|cost_share_pct|cost_share_basis|cost_increase_pct|cost_pass_through_pct|cost_input_needed|latestPeriod|latestYoy|avg12|yoy6Back|monthsStale|averageCount|averageExpected|averageLabel|allItems)(?![\p{L}\p{N}])/giu;
+  const keys = /(?<![\p{L}\p{N}])(?:benchmark_range_pct|suggested_range_pct|benchmark_basis|proposed_change_pct|pass_through_pct|pass_through_needed_pct|cost_need_pct|cost_vs_market|cost_share_pct|cost_share_basis|cost_increase_pct|cost_pass_through_pct|cost_input_needed|requested_category_available|requested_category|all_items_context_only|coverage_note|latestPeriod|latestYoy|avg12|yoy6Back|monthsStale|averageCount|averageExpected|averageLabel|allItems)(?![\p{L}\p{N}])/giu;
   return [...text.matchAll(keys)].map((m) => `internal payload key in prose: ${m[0]}`);
 }
 
@@ -489,7 +528,7 @@ export function checkNarrative(n: Narrative, allowed: number[], facts?: MarketFa
       bad.push(...unsupportedClaims(text));
       bad.push(...costPolicyErrors(text, f?.costNeed !== undefined));
       bad.push(...namedCountryErrors(text, facts, req, policy, extra));
-      if (f) bad.push(...rangeErrors(text, f), ...verdictErrors(text, f), ...observedRateErrors(text, f));
+      if (f) bad.push(...rangeErrors(text, f), ...verdictErrors(text, f), ...observedRateErrors(text, f, req), ...unavailableCategoryErrors(text, f, req));
     }
     if (typeof n.headline !== "string" || (n.watch !== undefined && typeof n.watch !== "string")) bad.push("headline or watch: not text");
     const general = [n.headline, n.watch ?? ""].join(" ");
@@ -499,7 +538,13 @@ export function checkNarrative(n: Narrative, allowed: number[], facts?: MarketFa
     bad.push(...unsupportedClaims(general));
     for (const text of [n.headline, n.watch]) if (typeof text === "string") bad.push(...costPolicyErrors(text, facts.some(f => f.costNeed !== undefined)));
     for (const text of [n.headline, n.watch]) if (typeof text === "string") bad.push(...namedCountryErrors(text, facts, req, policy, extra));
-    if (facts.length === 1) bad.push(...rangeErrors(general, facts[0]), ...verdictErrors(general, facts[0]), ...observedRateErrors(general, facts[0]));
+    if (facts.length === 1) bad.push(...rangeErrors(general, facts[0]), ...verdictErrors(general, facts[0]), ...observedRateErrors(general, facts[0], req));
+    // A countryless statement cannot borrow another market's coverage. Explicit
+    // country clauses are checked above against only the market they name.
+    for (const sentence of general.split(/(?<=[.!?;])\s+|\n+/)) {
+      if (countryMentions(sentence, facts).length) continue;
+      for (const f of facts.filter(f => !requestedSeries(f, req))) bad.push(...observedRateErrors(sentence, f, req), ...unavailableCategoryErrors(sentence, f, req));
+    }
     bad.push(...headlineVerdictErrors(String(n.headline ?? ""), facts));
     if (typeof n.watch === "string") bad.push(...headlineVerdictErrors(n.watch, facts, "watch"));
   } else {
@@ -513,8 +558,10 @@ export function factsForNarrative(facts: MarketFacts[], req?: Request, policy?: 
   const slim = (s?: SeriesFacts) => (s ? { label: s.label, frequency: s.frequency, latestPeriod: s.latestPeriod, latestYoy: s.latestYoy, avg12: s.avg12, averageCount: s.averageCount, averageExpected: s.averageExpected, averageLabel: s.averageLabel, yoy6Back: s.yoy6Back, trend: s.trend } : undefined);
   return facts.map((f) => ({
     country: f.country, agency: f.agency, category: slim(f.category), allItems: slim(f.allItems), monthsStale: f.monthsStale,
+    ...(req ? { requested_category: req.concept, requested_category_available: !!requestedSeries(f, req), all_items_context_only: req.concept !== "all_items" && !!f.allItems } : {}),
     benchmark_range_pct: f.suggested ? { low: f.suggested.low, high: f.suggested.high } : undefined,
-    benchmark_basis: "latest YoY and available-observation mean in the year ending at the latest observation; historical reference only, not a forecast, confidence interval or evidence of customer acceptance",
+    benchmark_basis: f.suggested ? "latest YoY and available-observation mean in the year ending at the latest observation; historical reference only, not a forecast, confidence interval or evidence of customer acceptance" : undefined,
+    ...(!req || requestedSeries(f, req) ? {} : { coverage_note: "The requested category is unavailable. Do not state its inflation, benchmark or proposal/cost verdict. Any all-items observations are context only; cost recovery can still be calculated independently." }),
     verdict: f.verdict,
     ...(f.costNeed !== undefined && !req?.invalidPassThrough ? {
       cost_need_pct: f.costNeed, cost_vs_market: f.costVsMarket,
@@ -553,13 +600,15 @@ const fmt = (x?: number, suffix = "%") => (x === undefined ? "n/a" : `${x > 0 ? 
 export function fallbackHeadline(b: Brief): string | undefined {
   const p = b.request.proposedChangePct;
   const withVerdict = b.facts.filter((f) => f.verdict);
+  const missing = b.facts.filter(f => !requestedSeries(f, b.request));
+  const unavailable = missing.length ? `${missing.map(f => f.country).join(", ")}: requested category (${b.request.concept}) unavailable.${missing.some(f => f.allItems) ? " All-items observations are context only." : " No market benchmark is available."}` : "";
   if (p !== undefined && withVerdict.length) {
     const groups = new Map<string, string[]>();
     for (const f of withVerdict) groups.set(f.verdict!, [...(groups.get(f.verdict!) ?? []), f.country]);
-    return `${signedPct(p)} is ${[...groups.entries()].map(([v, cs]) => `${v} in ${cs.length > 1 ? `${cs.slice(0, -1).join(", ")} and ${cs.at(-1)}` : cs[0]}`).join("; ")}.`;
+    return `${signedPct(p)} is ${[...groups.entries()].map(([v, cs]) => `${v} in ${cs.length > 1 ? `${cs.slice(0, -1).join(", ")} and ${cs.at(-1)}` : cs[0]}`).join("; ")}.${unavailable ? ` ${unavailable}` : ""}`;
   }
-  const parts = b.facts.map((f) => (f.category ?? f.allItems) && `${f.country} ${fmt((f.category ?? f.allItems)!.latestYoy)}`).filter(Boolean);
-  return parts.length ? `Latest year-on-year rates: ${parts.join(", ")}.` : undefined;
+  const parts = b.facts.flatMap(f => { const s = requestedSeries(f, b.request); return s ? [`${f.country} ${fmt(s.latestYoy)}`] : []; });
+  return [parts.length ? `Latest year-on-year rates: ${parts.join(", ")}.` : "", unavailable].filter(Boolean).join(" ") || undefined;
 }
 
 export function renderBrief(b: Brief): string {
@@ -583,9 +632,10 @@ export function renderBrief(b: Brief): string {
   L.push(`| Market | Official category | Latest period | YoY | Available-year average | Trend vs. 6 months ago | All-items YoY | Market benchmark | Proposed change |`);
   L.push(`|---|---|---|---|---|---|---|---|---|`);
   for (const f of b.facts) {
-    const s = f.category ?? f.allItems;
+    const s = requestedSeries(f, req);
+    const context = f.allItems && req.concept !== "all_items" ? `${fmt(f.allItems.latestYoy)} (All-items context only; ${f.allItems.latestPeriod})` : fmt(f.allItems?.latestYoy);
     L.push(
-      `| ${f.country} (${f.agency}) | ${s?.label ?? "not found"} | ${s?.latestPeriod ?? "-"}${f.monthsStale !== undefined && f.monthsStale > 2 ? ` ⚠ ${f.monthsStale} mo old` : ""} | ${fmt(s?.latestYoy)} | ${fmt(s?.avg12)}${s ? ` (${s.averageLabel ?? "available observations"})` : ""} | ${s?.trend ?? "-"} | ${fmt(f.allItems?.latestYoy)} | ${f.suggested ? `${f.suggested.low.toFixed(1)}–${f.suggested.high.toFixed(1)}%` : "-"} | ${f.verdict ?? "-"} |`,
+      `| ${f.country} (${f.agency}) | ${s?.label ?? `${req.concept} unavailable`} | ${s?.latestPeriod ?? "-"}${f.monthsStale !== undefined && f.monthsStale > 2 ? ` ⚠ ${f.monthsStale} mo old` : ""} | ${fmt(s?.latestYoy)} | ${fmt(s?.avg12)}${s ? ` (${s.averageLabel ?? "available observations"})` : ""} | ${s?.trend ?? "-"} | ${context} | ${f.suggested ? `${f.suggested.low.toFixed(1)}–${f.suggested.high.toFixed(1)}%` : "-"} | ${f.verdict ?? "-"} |`,
     );
   }
   L.push("", `Every rate above comes from Zetaris query **${b.compared.id}** (one federated SQL over the onboarded sources); market benchmarks and comparisons are computed in code from those rates.`, "");
@@ -615,11 +665,16 @@ export function renderBrief(b: Brief): string {
   }
   L.push(`## By market`);
   for (const f of b.facts) {
-    const s = f.category ?? f.allItems;
+    const s = requestedSeries(f, req);
     const prose = b.narrative?.markets?.[f.country];
     L.push(`### ${f.country} — ${f.agency}`);
-    L.push(prose ?? (s ? `${s.label}: ${fmt(s.latestYoy)} year on year in ${s.latestPeriod} (${s.trend} vs. six months ago; average ${fmt(s.avg12)}, ${s.averageLabel ?? "available observations"}). Historical market benchmark ${f.suggested?.low.toFixed(1)}–${f.suggested?.high.toFixed(1)}%.` : "No usable series."));
+    L.push(prose ?? (s ? `${s.label}: ${fmt(s.latestYoy)} year on year in ${s.latestPeriod} (${s.trend} vs. six months ago; average ${fmt(s.avg12)}, ${s.averageLabel ?? "available observations"}). Historical market benchmark ${f.suggested?.low.toFixed(1)}–${f.suggested?.high.toFixed(1)}%.` : `Requested category (${req.concept}) unavailable; no market benchmark or proposal/cost comparison is available.`));
     if (s) L.push(`<sub>source: \`${s.sourceId}\` · ${s.frequency === "Q" ? "quarterly" : "monthly"} · cite ${f.cite}</sub>`);
+    else if (f.allItems) {
+      const context = f.allItems;
+      L.push(`All-items context only: ${context.label}, ${fmt(context.latestYoy)} year on year in ${context.latestPeriod}; it does not supply the requested ${req.concept} benchmark.`);
+      L.push(`<sub>context source: \`${context.sourceId}\` · ${context.frequency === "Q" ? "quarterly" : "monthly"} · cite ${f.cite}</sub>`);
+    }
     L.push("");
   }
   const costed = b.facts.filter((f) => f.costVsMarket && f.suggested);

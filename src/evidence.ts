@@ -1,5 +1,5 @@
 import type { Request } from "./agent.ts";
-import { buildFacts, marketBenchmark, seriesFacts, type Brief, type MarketFacts, type SkuLine } from "./brief.ts";
+import { buildFacts, buildFactsLegacyV2, marketBenchmark, seriesFacts, type Brief, type MarketFacts, type SkuLine } from "./brief.ts";
 import { buildAlignment, type PeriodAlignment } from "./alignment.ts";
 import { COMPARE_COLUMNS } from "./sources/index.ts";
 import { SUPPORTED_COUNTRIES, type Country } from "./sources/types.ts";
@@ -7,7 +7,7 @@ import { PRICING_COLUMNS, SKU_RATE_COLUMNS } from "./sources/pricelist.ts";
 import type { SqlResult } from "./zetaris.ts";
 
 export const EVIDENCE_SCHEMA_VERSION = 1;
-export const EVIDENCE_METHOD_VERSION = 2;
+export const EVIDENCE_METHOD_VERSION = 3;
 export type PricingEvidenceMode = "sku-history" | "legacy-pricing";
 export interface EvidenceQuery {
   id: string;
@@ -20,7 +20,7 @@ export interface EvidenceQuery {
 }
 export interface EvidencePacket {
   schemaVersion: 1;
-  methodVersion: 2;
+  methodVersion: 2 | 3;
   calculatedAt: string;
   startedAt?: string;
   request: Request;
@@ -259,7 +259,8 @@ export function verifyEvidence(value: unknown): EvidenceVerification {
     const packet = jsonCopy(value);
     shape(packet, "evidence", ["schemaVersion", "methodVersion", "calculatedAt", "request", "passThrough", "queries", "results"], ["startedAt"]);
     if (packet.schemaVersion !== EVIDENCE_SCHEMA_VERSION) throw new Error("Unsupported evidence schemaVersion");
-    if (packet.methodVersion !== EVIDENCE_METHOD_VERSION) throw new Error("Unsupported evidence methodVersion");
+    if (packet.methodVersion !== 2 && packet.methodVersion !== EVIDENCE_METHOD_VERSION) throw new Error("Unsupported evidence methodVersion");
+    if (packet.methodVersion === 2) report.warnings.push("Legacy method 2 is replayed as recorded: it could use all-items as a fallback benchmark when the requested category was unavailable. Method 3 keeps that series as context only.");
     const now = isoDate(packet.calculatedAt, "calculatedAt");
     if (packet.startedAt !== undefined && isoDate(packet.startedAt, "startedAt").getTime() > now.getTime()) throw new Error("calculatedAt precedes startedAt");
     const req = validateRequest(packet.request);
@@ -275,7 +276,7 @@ export function verifyEvidence(value: unknown): EvidenceVerification {
     report.coverage.unsupportedMarkets = [...req.unknownCountries];
     if (req.unknownCountries.length) report.warnings.push(`Unsupported requested markets are outside verification coverage: ${req.unknownCountries.join(", ")}.`);
     report.coverage.rawMarketRows = rows.length;
-    const facts = buildFacts(rows, req, packet.queries.market.id, packet.passThrough, now);
+    const facts = (packet.methodVersion === 2 ? buildFactsLegacyV2 : buildFacts)(rows, req, packet.queries.market.id, packet.passThrough, now);
     compare(packet.results.facts, facts, "results.facts");
     if (req.countries.length || packet.results.alignment !== undefined) compare(packet.results.alignment, buildAlignment(rows, req, facts, packet.queries.market.id, now), "results.alignment");
     const verifiedMarkets = facts.filter(f => (f.category ?? f.allItems)?.concept === req.concept).map(f => f.country);

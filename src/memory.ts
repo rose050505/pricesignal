@@ -73,7 +73,7 @@ export class AgentMemory {
   /** What a brief concluded for one market, so the next brief can say what changed since. */
   rememberOutcome(o: Outcome): string {
     return this.hmem.add({
-      content: `Brief outcome: ${o.country} ${o.concept} ${o.period} ${o.yoy}% YoY, ${o.methodVersion === 2 ? "historical market benchmark" : "legacy suggested range"} ${o.low}-${o.high}%${o.policy !== undefined ? `; cost-recovery policy ${Math.round(o.policy * 100)}%` : ""}${o.sourceId ? `; source ${o.sourceId}` : ""}${o.proposed !== undefined ? `, ${o.proposed > 0 ? "+" : ""}${o.proposed}% was ${o.verdict}` : ""} (${o.at.slice(0, 10)})`,
+      content: `Brief outcome: ${o.country} ${o.concept} ${o.period} ${o.yoy}% YoY, ${o.methodVersion === 2 || o.methodVersion === 3 ? "historical market benchmark" : "legacy suggested range"} ${o.low}-${o.high}%${o.policy !== undefined ? `; cost-recovery policy ${Math.round(o.policy * 100)}%` : ""}${o.sourceId ? `; source ${o.sourceId}` : ""}${o.proposed !== undefined ? `, ${o.proposed > 0 ? "+" : ""}${o.proposed}% was ${o.verdict}` : ""} (${o.at.slice(0, 10)})`,
       type: "general",
       source: "pricesignal:agent",
       confidence: 0.9,

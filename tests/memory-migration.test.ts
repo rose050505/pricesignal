@@ -155,7 +155,7 @@ test("failed SKU decoder migration keeps the old record for audit without pricin
 test("a decoder change is not described as an official same-period revision", () => {
   for (const decoderVersion of [undefined, 1]) {
     const f = fixture();
-    f.memory.rememberOutcome({ country: "CA", concept: "food", period: "2026-09", yoy: 3, low: 3, high: 3, sourceId: "statcan:food", methodVersion: 2, decoderVersion, at: "2026-10-26T00:00:00Z" } as any);
+    f.memory.rememberOutcome({ country: "CA", concept: "food", period: "2026-09", yoy: 3, low: 3, high: 3, sourceId: "statcan:food", methodVersion: 3, decoderVersion, at: "2026-10-26T00:00:00Z" } as any);
     const facts = [{ country: "CA", category: { concept: "food", label: "Food", sourceId: "statcan:food", latestPeriod: "2026-09", latestYoy: 2.2 }, suggested: { low: 2.2, high: 2.6 } }];
     const text = (f.agent as any).compareWithLastBrief(facts, f.req, 0.7).join(" ");
     assert.match(text, /decoder|calculation.*version/i);
@@ -164,7 +164,7 @@ test("a decoder change is not described as an official same-period revision", ()
     const outcome: any = f.memory.lastOutcome("CA", "food")!.outcome;
     assert.equal(outcome.decoderVersion, 2);
     assert.equal(outcome.sourceId, "statcan:food");
-    assert.equal(outcome.methodVersion, 2);
+    assert.equal(outcome.methodVersion, 3);
   }
 });
 
@@ -179,5 +179,19 @@ test("mixed onboarding reports the new decoding view separately from the existin
     assert.match(title, /created 1 SQL object/i, mode);
     assert.match(title, /1 already existed/i, mode);
     assert.doesNotMatch(title, /Zetaris already had it - reused/i, mode);
+  }
+});
+
+test("remembered outcomes identify current and preserved historical methods without calling them legacy suggestions", () => {
+  for (const methodVersion of [undefined, 1, 2, 3]) {
+    const memory = memoryOnly();
+    const id = memory.rememberOutcome({country:"DE",concept:"food",period:"2026-09",yoy:4,low:4,high:4,methodVersion,at:"2026-10-27T00:00:00Z"});
+    const record = memory.hmem.store.all().find((r: any) => r.id === id);
+    assert.ok(record);
+    if (methodVersion === 2 || methodVersion === 3) {
+      assert.match(record.content, /historical market benchmark/);
+      assert.doesNotMatch(record.content, /legacy suggested range/);
+    } else assert.match(record.content, /legacy suggested range/);
+    assert.equal(memory.lastOutcome("DE", "food")?.outcome.methodVersion, methodVersion);
   }
 });

@@ -76,7 +76,7 @@ try {
   if(path.dirname(dir)!==path.resolve('out')) throw Error('Unexpected output location');
   const trace=JSON.parse(fs.readFileSync(path.join(dir,'trace.json'),'utf8'));
   const evidence=JSON.parse(fs.readFileSync(path.join(dir,'evidence.json'),'utf8'));
-  if(!Array.isArray(trace.trace)||!Array.isArray(trace.sql)||evidence.schemaVersion!==1||evidence.methodVersion!==2||!Array.isArray(evidence.queries?.market?.rows)||!Array.isArray(evidence.results?.facts)||!Array.isArray(evidence.results?.skus)) throw Error('Malformed saved artifacts');
+  if(!Array.isArray(trace.trace)||!Array.isArray(trace.sql)||evidence.schemaVersion!==1||![2,3].includes(evidence.methodVersion)||!Array.isArray(evidence.queries?.market?.rows)||!Array.isArray(evidence.results?.facts)||!Array.isArray(evidence.results?.skus)) throw Error('Malformed saved artifacts');
 } catch(error) { console.error(String(error)); process.exit(2); }
 NODE
   then
