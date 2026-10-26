@@ -3,7 +3,12 @@
 // this concept here, and is it still alive?" (discover) and "how do I make it a
 // governed Zetaris table?" (onboardSql).
 
-export type Country = "DE" | "CA" | "AU";
+// Eurostat publishes HICP for every EU member with the same API, so any of these
+// markets goes through the same discover/onboard path as Germany.
+export const EU_CODES = ["DE", "FR", "IT", "ES", "NL", "BE", "AT", "IE", "PT", "FI", "SE", "DK", "PL", "CZ"] as const;
+export type EuCountry = (typeof EU_CODES)[number];
+export type Country = EuCountry | "CA" | "AU";
+export const SUPPORTED_COUNTRIES: Country[] = [...EU_CODES, "CA", "AU"];
 export type Concept = "all_items" | "food" | string;
 
 export interface Candidate {
@@ -37,10 +42,26 @@ export const COUNTRY_ALIASES: Record<string, Country> = {
   de: "DE", ger: "DE", germany: "DE", deutschland: "DE", "독일": "DE",
   ca: "CA", canada: "CA", canadian: "CA", "캐나다": "CA",
   au: "AU", aus: "AU", australia: "AU", oz: "AU", "호주": "AU",
+  france: "FR", frankreich: "FR", "프랑스": "FR",
+  italy: "IT", italia: "IT", "이탈리아": "IT",
+  spain: "ES", espana: "ES", "españa": "ES", "스페인": "ES",
+  netherlands: "NL", holland: "NL", nederland: "NL", dutch: "NL", "네덜란드": "NL",
+  belgium: "BE", belgique: "BE", "벨기에": "BE",
+  austria: "AT", "österreich": "AT", oesterreich: "AT", "오스트리아": "AT",
+  ireland: "IE", "아일랜드": "IE",
+  portugal: "PT", "포르투갈": "PT",
+  finland: "FI", suomi: "FI", "핀란드": "FI",
+  sweden: "SE", sverige: "SE", "스웨덴": "SE",
+  denmark: "DK", danmark: "DK", "덴마크": "DK",
+  poland: "PL", polska: "PL", "폴란드": "PL",
+  czechia: "CZ", czech: "CZ", "체코": "CZ",
 };
 
 export function normalizeCountry(raw: string): Country | null {
-  const k = raw.trim().toLowerCase();
+  const t = raw.trim();
+  // Upper-case ISO codes ("FR", "IT") only; lower-case "it", "be", "at" are ordinary words.
+  if (/^[A-Z]{2}$/.test(t) && (SUPPORTED_COUNTRIES as string[]).includes(t)) return t as Country;
+  const k = t.toLowerCase();
   if (COUNTRY_ALIASES[k]) return COUNTRY_ALIASES[k];
   // Tolerate one typo in names of 5+ letters ("canda", "austrlia", "germny").
   if (k.length >= 4) {

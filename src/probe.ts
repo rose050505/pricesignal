@@ -3,15 +3,17 @@
 // so template fixes are quick.
 import { loadEnv } from "./env.ts";
 import { ZetarisClient, rowsAsObjects } from "./zetaris.ts";
-import { COMPARE_COLUMNS, bootstrap, compareSql, discover, monthsBack, onboard, onboardPlan } from "./sources/index.ts";
+import { COMPARE_COLUMNS, Country, bootstrap, compareSql, discover, monthsBack, onboard, onboardPlan } from "./sources/index.ts";
 
 loadEnv();
 const z = new ZetarisClient();
-const only = process.argv[2]?.toUpperCase();
+// Usage: npx tsx src/probe.ts            (DE, CA, AU)
+//        npx tsx src/probe.ts FR IT ES   (any supported market codes)
+const asked = process.argv.slice(2).map((a) => a.toUpperCase());
+const markets = (asked.length ? asked : ["DE", "CA", "AU"]) as Country[];
 console.log("bootstrap:", (await bootstrap(z)).join(" | "));
 const views: string[] = [];
-for (const country of ["DE", "CA", "AU"] as const) {
-  if (only && only !== country) continue;
+for (const country of markets) {
   for (const concept of ["food", "all_items"]) {
     try {
       const d = await discover(country, concept);
@@ -36,4 +38,4 @@ if (views.length) {
   for (const r of rows) latest[`${r.country}:${r.concept}`] = `${r.period} ${r.yoy_pct}%`;
   console.log(latest);
 }
-console.log(`\nPROBE_DONE views=${views.length}/6`);
+console.log(`\nPROBE_DONE views=${views.length}/${markets.length * 2}`);

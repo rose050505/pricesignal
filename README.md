@@ -4,6 +4,10 @@
 
 Open Agent Hackathon 2026 · Track 01 — Solving Fragmented Intelligence · built with **Zetaris**, **Meterless** (Nightshift runtime + H-MEM engine) and **NVIDIA Nemotron** (via Nightshift).
 
+![PriceSignal: agent trace on the left, a verdict per market and new prices per SKU on the right](docs/img/ui.png)
+
+*A live run on 26 Oct 2026: every model call in the trace was answered by NVIDIA Nemotron 3.5 Lightning through Meterless Nightshift; the six series came back from H-MEM, so the brief was ready in 59 s. Real outputs with full traces are in [`examples/`](examples/).*
+
 ---
 
 ## The problem
@@ -23,7 +27,7 @@ Assembling a comparable answer by hand means three APIs, three formats and three
 ## What it does
 
 1. **Understands a messy request** — typos, country nicknames (`deutschland`, `aus`), category slang (`gochujang & snacks`), Korean or English, a proposed change (`+5%`) and a pricing policy (`we pass on ~70% of cost increases`).
-2. **Discovers the matching official series** at each agency, and reports what it had to work around (a discontinued dataset, a coarser category, a different frequency).
+2. **Finds the matching official series** — by catalogue lookup at Eurostat and ABS, from a vetted vector list at Statistics Canada — and reports what it had to work around (a discontinued dataset, a coarser category, a different frequency).
 3. **Onboards each series into Zetaris** as a Lightning REST table plus a decoding view with a common schema — the agency APIs become governed SQL tables.
 4. **Answers with one federated SQL query** across all three agencies in Zetaris.
 5. **Joins the company's own price list.** The exporter's internal price list (SKU, market, current shelf price) is a Zetaris REST table too, and a second federated query joins it with the latest official rate per market, so the brief ends with a suggested new price per SKU.
@@ -53,7 +57,7 @@ messy question
 │            ├─ PSIG_STATCAN   (REST table → psig view)            │
 │            ├─ PSIG_ABS       (REST table → psig view)            │
 │            └─ PSIG_INTERNAL  (company price list → psig view)    │
-│  Guardrails: SELECT-only federated query, number-grounding check │
+│  Guardrails: SQL allowlist, number-grounding check, staleness    │
 └──────────────────────────────────────────────────────────────────┘
      │
      ▼
@@ -63,7 +67,7 @@ verdict on the proposed change, source series id, SQL behind it)
 
 ## Sponsor technology
 
-**Zetaris** is where the fragmented sources become one dataset. The agent registers each agency endpoint with `CREATE LIGHTNING REST TABLE` and a decoding `CREATE SCHEMASTORE VIEW` (JSON-stat, WDS and SDMX are flattened in Lightning SQL), all in a common schema `(country, concept, category_label, frequency, period, yoy_pct, source_id)`. Every official rate the user sees comes from one federated `UNION ALL` query over those views, and its query id is cited in the brief. The company's internal price list is registered the same way (`PSIG_INTERNAL`), and a second federated query joins internal SKUs with the external rates (window function picks the latest period per market). Remembered views are checked before reuse: a view whose data stops more than three months ago is re-onboarded instead.
+**Zetaris** is where the fragmented sources become one dataset. The agent registers each agency endpoint with `CREATE LIGHTNING REST TABLE` and a decoding `CREATE SCHEMASTORE VIEW` (JSON-stat, WDS and SDMX are flattened in Lightning SQL), all in a common schema `(country, concept, category_label, frequency, period, yoy_pct, source_id)`. Every official rate the user sees comes from one federated `UNION ALL` query over those views, and the brief cites the statement id (Q7, Q8, …) next to each rate, with the SQL behind it listed at the end. The company's internal price list is registered the same way (`PSIG_INTERNAL`), and a second federated query joins internal SKUs with the external rates (window function picks the latest period per market). Remembered views are checked before reuse: a view whose data stops more than three months ago (six for quarterly series) is not reused, and the agent goes back to discovery. A small successor map handles known dataset moves, such as Eurostat's `prc_hicp_manr` → `prc_hicp_minr`. Every SQL statement the agent sends passes an allowlist (`SELECT`, plus the `CREATE LIGHTNING …` / `CREATE SCHEMASTORE …` statements used for onboarding); anything else is blocked in code.
 
 **Meterless Nightshift** is the application's primary AI provider. The app implements the Meterless Runtime provider contract: OpenAI-compatible `/v1/chat/completions`, Bearer runtime token, `meterless-app` on every request, `meterless-scope: user` on chat, `GET /v1/models` to decide online / unauthorized / offline, and the `meterless/fast` routing mode (`meterless/deep` is configurable but not used by default). The model that served each step is shown in the agent trace.
 
@@ -71,7 +75,19 @@ verdict on the proposed change, source series id, SQL behind it)
 
 **NVIDIA Nemotron** powers the agent. Nightshift has a pinned lane ("Use tools & agents") serving NVIDIA Nemotron 3.5 Lightning, so every `meterless/fast` call (request parsing, planning, narrative) is answered by Nemotron. In our robustness run on 26 Oct 2026, every model call in all six questions was served by `nvidia/nemotron-3.5-lightning`, as shown in the trace logs.
 
-## Robustness: six messy questions (26 Oct 2026, live, Nemotron via Nightshift)
+## Markets
+
+Germany, Canada and Australia are the demo markets. Because Eurostat publishes HICP for every EU member through the same API, the same discover-and-onboard path also covers France, Italy, Spain, the Netherlands, Belgium, Austria, Ireland, Portugal, Finland, Sweden, Denmark, Poland and Czechia (market names, local names or ISO codes). Markets outside these are reported as not covered rather than silently dropped. The EU path was verified live on 26 Oct 2026 for France, Italy, Spain and the Netherlands (eight views onboarded, one federated query of 120 rows; see `examples/06_eu_markets`). The sample price list only has SKUs for Germany, Canada and Australia.
+
+## Limits (stated, not hidden)
+
+- **Canada:** our adapter maps only StatCan's Food and All-items CPI vectors, so narrower categories (snacks, sauces) are compared at the Food level and the brief says so.
+- **SKU prices** use the category the user asked about in each market, not a per-SKU category.
+- **The range is a market-side check** on consumer prices, not a cost model; it is often narrow, so most proposals land above or below it.
+- **The price list is sample data** for a fictional exporter.
+- **Speed** is dominated by model reasoning time: about one minute with series in memory, about three minutes from a cold start.
+
+## Robustness: six messy questions (26 Oct 2026, live, Nemotron via Nightshift, memory warm)
 
 | Question | Result |
 |---|---|
@@ -82,7 +98,7 @@ verdict on the proposed change, source series id, SQL behind it)
 | "japan + canada food prices, ok to raise 5%?" | Canada answered; "japan: not covered yet" stated in the brief (73 s) |
 | "FOOD PRICES CANADA AUSTRALIA UP 6 PERCENT???" | CA and AU food; +6% above the evidence (14 s) |
 
-An earlier run of the same six questions surfaced four bugs (typo dropped a market, an unsupported market silently ignored, a remembered series not reused before comparison, a verdict with a hidden tolerance contradicting the prose); all four are fixed and covered by the run above.
+An earlier run of the same six questions surfaced four bugs (typo dropped a market, an unsupported market silently ignored, a remembered series not reused before comparison, a verdict with a hidden tolerance contradicting the prose); all four are fixed and covered by the run above. Times are with series already in memory; a cold start that discovers and onboards everything takes about three minutes (`examples/01_cold_start`).
 
 ## Run it
 
@@ -114,6 +130,7 @@ src/brief.ts          facts computed from Zetaris rows, number-grounding check, 
 src/sources/          one adapter per agency: discover() + Lightning SQL onboarding templates;
                       pricelist.ts registers the internal price list and joins it with the rates
 data/price_list.json  sample internal price list (fictional exporter)
+examples/             real runs: brief.md plus trace.json with every model call and SQL statement
 src/zetaris.ts        Zetaris REST client
 src/llm.ts            Meterless Runtime provider (plus dev fallbacks)
 src/memory.ts         agent memory on H-MEM

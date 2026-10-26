@@ -1,7 +1,7 @@
 // Agent memory on Meterless H-MEM. What PriceSignal remembers across sessions:
 //  - series mappings it had to discover ("DE food -> eurostat prc_hicp_minr CP01, view v_de_food_cp01")
 //  - the user's pricing policy ("we pass through 70% of cost inflation")
-//  - outcomes of past briefs
+//  - outcomes of past briefs (per market), so the next brief says what changed since
 // Mappings are also kept as structured JSON tags so a recalled memory can be
 // acted on (skip discovery and onboarding) rather than only quoted.
 import path from "node:path";
@@ -9,6 +9,8 @@ import { ROOT, env } from "./env.ts";
 import { HMEM } from "./hmem_impl.ts";
 
 export interface SeriesMapping { country: string; concept: string; agency: string; dataset: string; code: string; label: string; view: string; frequency: string; note?: string }
+
+export interface Outcome { country: string; concept: string; period: string; yoy: number; low: number; high: number; policy: number; proposed?: number; verdict?: string; at: string }
 
 export interface Recall { id: string; content: string; relevance: number; mapping?: SeriesMapping; policy?: number }
 
@@ -40,6 +42,7 @@ export class AgentMemory {
       confidence: 0.95,
       tags: ["pricing-policy", `passthrough:${passThrough}`],
       layer: "long_term",
+      supersedes: this.latestPolicy()?.id,
     });
     return rec.id;
   }
@@ -64,6 +67,31 @@ export class AgentMemory {
     const rec: any = this.hmem.store.all().find((r: any) => r.id === hit.id);
     const json = (rec?.tags ?? []).find((t: string) => t.startsWith("json:"));
     return json ? { id: hit.id, request: JSON.parse(json.slice(5)) } : undefined;
+  }
+
+  /** What a brief concluded for one market, so the next brief can say what changed since. */
+  rememberOutcome(o: Outcome): string {
+    return this.hmem.add({
+      content: `Brief outcome: ${o.country} ${o.concept} ${o.period} ${o.yoy}% YoY, suggested ${o.low}-${o.high}% at ${Math.round(o.policy * 100)}% pass-through${o.proposed !== undefined ? `, +${o.proposed}% was ${o.verdict}` : ""} (${o.at.slice(0, 10)})`,
+      type: "general",
+      source: "pricesignal:agent",
+      confidence: 0.9,
+      tags: ["brief-outcome", `country:${o.country}`, `concept:${o.concept}`, `json:${JSON.stringify(o)}`],
+      layer: "long_term",
+      supersedes: this.lastOutcome(o.country, o.concept)?.id,
+    }).id;
+  }
+
+  lastOutcome(country: string, concept: string): { id: string; outcome: Outcome } | undefined {
+    const all: any[] = this.hmem.store.all();
+    for (const hit of this.structured("brief-outcome").reverse()) {
+      const rec = all.find((r) => r.id === hit.id);
+      const json = (rec?.tags ?? []).find((t: string) => t.startsWith("json:"));
+      if (!json) continue;
+      const o = JSON.parse(json.slice(5)) as Outcome;
+      if (o.country === country && o.concept === concept) return { id: hit.id, outcome: o };
+    }
+    return undefined;
   }
 
   rememberNote(text: string): string {

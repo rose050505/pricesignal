@@ -7,6 +7,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { ROOT, loadEnv, env } from "./env.ts";
 import { PriceSignalAgent, TraceEvent } from "./agent.ts";
+import type { Brief } from "./brief.ts";
 import { AgentMemory } from "./memory.ts";
 import { ZetarisClient } from "./zetaris.ts";
 import { providerConfig, providerStatus } from "./llm.ts";
@@ -35,7 +36,14 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && url.pathname === "/api/status") {
       const cfg = providerConfig();
       const st = await providerStatus(cfg);
-      return send(res, 200, { provider: cfg.provider, baseUrl: cfg.baseUrl.replace(/\/\/[^/]*@/, "//"), fast: cfg.fast, deep: cfg.deep, state: st.state, models: st.models.slice(0, 20), memoryRecords: memory.hmem.store.all().length });
+      let zetaris = "offline";
+      try {
+        const z = await Promise.race([new ZetarisClient().run("SELECT 1 AS ok"), new Promise<never>((_, rej) => setTimeout(() => rej(new Error("timeout")), 8000))]);
+        zetaris = z.rows.length ? "online" : "offline";
+      } catch {
+        zetaris = "offline";
+      }
+      return send(res, 200, { zetaris, provider: cfg.provider, baseUrl: cfg.baseUrl.replace(/\/\/[^/]*@/, "//"), fast: cfg.fast, deep: cfg.deep, state: st.state, models: st.models.slice(0, 20), memoryRecords: memory.hmem.store.all().length });
     }
     if (req.method === "GET" && url.pathname === "/api/memory") {
       return send(res, 200, memory.hmem.store.all().map((r: any) => ({ id: r.id, layer: r.layer, type: r.type, content: r.content, confidence: r.confidence, accessCount: r.accessCount })));
@@ -53,10 +61,11 @@ const server = http.createServer(async (req, res) => {
         run.events.push(e);
         push(run, e);
       });
+      agent.on("partial", (b: Brief) => push(run, { ...toResult(b), partial: true }, "partial"));
       agent
         .run(question)
         .then((b) => {
-          run.result = { markdown: b.markdown, facts: b.facts, notes: [...new Set(b.notes)], views: b.views, ms: b.ms, passThrough: b.passThrough, policySource: b.policySource, skus: b.skus ?? [], pricing: b.pricingQuery ? { id: b.pricingQuery.id, sql: b.pricingQuery.sql } : null, compared: { id: b.compared.id, sql: b.compared.sql, columns: COMPARE_COLUMNS, rows: b.compared.rows }, sql: b.sqlLog.map((q) => ({ id: q.id, sql: q.sql, rows: q.rows.length, ms: q.ms })) };
+          run.result = toResult(b);
           run.done = true;
           push(run, run.result, "result");
         })
@@ -83,5 +92,10 @@ const server = http.createServer(async (req, res) => {
     send(res, 500, { error: String(e) });
   }
 });
+
+/** What the browser gets for a brief (also sent early, without the prose, as a "partial" event). */
+function toResult(b: Brief) {
+  return { markdown: b.markdown ?? "", facts: b.facts, notes: [...new Set(b.notes)], views: b.views, ms: b.ms, passThrough: b.passThrough, policySource: b.policySource, skus: b.skus ?? [], sinceLast: b.sinceLast ?? [], proposed: b.request.proposedChangePct ?? null, pricing: b.pricingQuery ? { id: b.pricingQuery.id, sql: b.pricingQuery.sql } : null, compared: { id: b.compared.id, sql: b.compared.sql, columns: COMPARE_COLUMNS, rows: b.compared.rows }, sql: b.sqlLog.map((q) => ({ id: q.id, sql: q.sql, rows: q.rows.length, ms: q.ms })) };
+}
 
 server.listen(PORT, () => console.log(`[pricesignal] UI on http://localhost:${PORT}`));

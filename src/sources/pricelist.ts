@@ -9,6 +9,31 @@ export const PRICE_DB = "PSIG_INTERNAL";
 export const PRICE_TABLE = "internal_price_list";
 export const PRICE_VIEW = "v_price_list";
 export const PRICING_COLUMNS = ["sku", "product", "country", "sku_category", "currency", "current_price", "period", "yoy_pct", "source_id"];
+export const SKU_RATE_COLUMNS = ["sku", "product", "country", "sku_category", "currency", "current_price", "rate_concept", "category_label", "frequency", "period", "yoy_pct", "source_id"];
+
+/** Which product categories the company sells in each market (read from the internal price list in Zetaris). */
+export function skuCategoriesSql(countries: string[]): string {
+  return `SELECT DISTINCT country, sku_category FROM psig.${PRICE_VIEW} WHERE country IN (${countries.map((c) => `'${c}'`).join(", ")}) ORDER BY country, sku_category`;
+}
+
+/**
+ * One federated join: every SKU with the official series of ITS OWN category in its market
+ * (gochujang -> condiments, chips -> snacks, ramen -> food), last ~15 periods.
+ * The latest rate, 12-period average and suggested price range are then computed in code,
+ * exactly like the market facts.
+ */
+export function skuRatesSql(views: string[], countries: string[], sincePeriod: string): string {
+  const series = views
+    .map((v) => `SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.${v} WHERE yoy_pct IS NOT NULL AND period >= '${sincePeriod}'`)
+    .join("\n    UNION ALL\n    ");
+  return `SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept AS rate_concept, s.category_label, s.frequency, s.period, s.yoy_pct, s.source_id
+FROM psig.${PRICE_VIEW} p
+JOIN (
+    ${series}
+) s ON p.country = s.country AND p.sku_category = s.concept
+WHERE p.country IN (${countries.map((c) => `'${c}'`).join(", ")})
+ORDER BY p.country, p.sku, s.period`;
+}
 
 export function priceListUrl(): string {
   return process.env.PSIG_PRICE_LIST_URL || "https://raw.githubusercontent.com/rose050505/pricesignal/main/data/price_list.json";

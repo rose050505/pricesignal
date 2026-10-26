@@ -15,3 +15,6 @@ docs/narration.txt
 scripts/voice.py
 scripts/11_voice_setup.sh
 scripts/12_practice.sh
+
+# overnight agent working files
+night/

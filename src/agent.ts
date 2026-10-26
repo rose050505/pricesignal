@@ -8,8 +8,8 @@ import { chat, ChatMessage } from "./llm.ts";
 import { AgentMemory } from "./memory.ts";
 import { SqlResult, SqlRunner, rowsAsObjects, resetCiteIds } from "./zetaris.ts";
 import { AGENCY_FOR, COMPARE_COLUMNS, Candidate, Concept, Country, CONCEPT_WORDS, compareSql, discover, monthsBack, normalizeCountry, onboard } from "./sources/index.ts";
-import { MarketFacts, Brief, SkuLine, buildFacts, renderBrief, allowedNumbers, checkNarrative, Narrative } from "./brief.ts";
-import { PRICING_COLUMNS, ensurePriceList, pricingSql } from "./sources/pricelist.ts";
+import { MarketFacts, Brief, SkuLine, buildFacts, renderBrief, allowedNumbers, checkNarrative, factsForNarrative, seriesFacts, Narrative } from "./brief.ts";
+import { PRICING_COLUMNS, SKU_RATE_COLUMNS, ensurePriceList, pricingSql, skuCategoriesSql, skuRatesSql } from "./sources/pricelist.ts";
 
 export interface Request {
   raw: string;
@@ -27,20 +27,20 @@ export interface TraceEvent { t: number; kind: string; title: string; detail?: u
 export interface AgentDeps { llm?: typeof chat; sql: SqlRunner; memory: AgentMemory; discoverFn?: typeof discover; onboardFn?: typeof onboard; maxSteps?: number }
 
 const SYSTEM_PLANNER = `You are PriceSignal, an agent that helps an exporter's pricing manager decide price changes per market from official inflation statistics.
-Markets and agencies: DE = Eurostat HICP, CA = Statistics Canada CPI, AU = Australian Bureau of Statistics CPI.
+Markets and agencies: EU members (DE, FR, IT, ES, NL, BE, AT, IE, PT, FI, SE, DK, PL, CZ) = Eurostat HICP, CA = Statistics Canada CPI, AU = Australian Bureau of Statistics CPI.
 Reply with a single JSON object and nothing else:
 {"thought": "<one short sentence>", "actions": [{"action": "<name>", "args": {...}}, ...]}
 "actions" holds 1 to 8 actions executed in order. Batch actions that do not depend on each other's results
 (for example one discover_and_onboard or use_memory_mapping per missing pair) so the task needs few turns.
 Actions:
 - recall_memory {"query": str}            : search long-term memory (series mappings, pricing policy) before doing work again.
-- discover_series {"country": "DE|CA|AU", "concept": str} : ask the agency which series matches; reports discontinued datasets and coarser categories.
-- onboard_series {"country": "DE|CA|AU", "concept": str, "candidate": int} : register the chosen candidate as a Zetaris REST table + view and verify it returns rows. Use candidate index from discover_series.
-- discover_and_onboard {"country": "DE|CA|AU", "concept": str} : discover, then onboard the best candidate (falls back to the next candidate if onboarding fails).
-- use_memory_mapping {"country": "DE|CA|AU", "concept": str} : reuse a remembered, already-onboarded Zetaris view instead of discovering again.
+- discover_series {"country": "<market code>", "concept": str} : ask the agency which series matches; reports discontinued datasets and coarser categories.
+- onboard_series {"country": "<market code>", "concept": str, "candidate": int} : register the chosen candidate as a Zetaris REST table + view and verify it returns rows. Use candidate index from discover_series.
+- discover_and_onboard {"country": "<market code>", "concept": str} : discover, then onboard the best candidate (falls back to the next candidate if onboarding fails).
+- use_memory_mapping {"country": "<market code>", "concept": str} : reuse a remembered, already-onboarded Zetaris view instead of discovering again.
 - compare {} : run ONE federated SQL across all onboarded views in Zetaris (needed before finish).
 - finish {} : write the brief. Only valid after compare succeeded.
-Only DE, CA and AU exist; never plan actions for other markets (they are reported to the user as not covered).
+Only the market codes above exist; never plan actions for other markets (they are reported to the user as not covered).
 Rules: every (country, concept) pair in the task needs a view (from memory or onboarding) before compare. If onboarding fails, try the next candidate or another frequency. Never invent numbers.`;
 
 export class PriceSignalAgent extends EventEmitter {
@@ -73,6 +73,10 @@ export class PriceSignalAgent extends EventEmitter {
     this.maxSteps = deps.maxSteps ?? 18;
     const run = deps.sql.run.bind(deps.sql);
     deps.sql.run = async (sql, opts) => {
+      if (!/^\s*(SELECT\b|CREATE\s+(LIGHTNING\s+(DATABASE|REST\s+TABLE)|SCHEMASTORE\s+(CONTAINER|VIEW))\b)/i.test(sql)) {
+        this.log("error", `blocked statement (only SELECT and onboarding DDL are allowed): ${sql.split("\n")[0].slice(0, 80)}`);
+        throw new Error("statement blocked by the SQL allowlist");
+      }
       const res = await run(sql, opts);
       this.sqlLog.push(res);
       this.log("sql", `${res.id}: ${sql.split("\n")[0].slice(0, 90)}`, { id: res.id, sql, rows: res.rows.length, ms: res.ms });
@@ -131,7 +135,7 @@ Reply with JSON only.`;
       policyStatement: j.policy_statement ? String(j.policy_statement) : undefined,
       unknownCountries: unknown,
     };
-    this.log("request", `markets ${countries.join(", ")} | category "${concept}"${req.proposedChangePct !== undefined ? ` | proposed +${req.proposedChangePct}%` : ""}${unknown.length ? ` | not covered: ${unknown.join(", ")}` : ""}`, req);
+    this.log("request", `markets ${countries.join(", ")} | category "${req.concept}"${req.proposedChangePct !== undefined ? ` | proposed +${req.proposedChangePct}%` : ""}${unknown.length ? ` | not covered: ${unknown.join(", ")}` : ""}`, req);
     return req;
   }
 
@@ -141,20 +145,28 @@ Reply with JSON only.`;
     const req = await this.parse(raw);
     const memory = this.deps.memory;
     if (req.passThrough !== undefined) {
-      const id = memory.rememberPolicy(req.passThrough, req.policyStatement ?? `pass through ${Math.round(req.passThrough * 100)}%`);
-      this.log("memory", `stored pricing policy ${id}`);
+      const prev = memory.latestPolicy();
+      if (prev?.policy !== undefined && Math.abs(prev.policy - req.passThrough) > 1e-9) {
+        this.log("memory", `policy changed: ${Math.round(prev.policy * 100)}% (${prev.id}) -> ${Math.round(req.passThrough * 100)}%; the old preference is superseded, not deleted`);
+      }
+      if (prev?.policy !== undefined && Math.abs(prev.policy - req.passThrough) <= 1e-9) {
+        this.log("memory", `policy unchanged at ${Math.round(req.passThrough * 100)}% (${prev.id})`);
+      } else {
+        const id = memory.rememberPolicy(req.passThrough, req.policyStatement ?? `pass through ${Math.round(req.passThrough * 100)}%`);
+        this.log("memory", `stored pricing policy ${id}`);
+      }
     }
     const concepts: Concept[] = req.concept === "all_items" ? ["all_items"] : [req.concept, "all_items"];
     const pairs = req.countries.flatMap((country) => concepts.map((concept) => ({ country, concept })));
     const views = new Map<string, { view: string; label: string; via: "memory" | "onboarded"; note?: string; memoryId?: string }>();
     const candidates = new Map<string, Candidate[]>();
     const notes: string[] = [];
-    for (const u of req.unknownCountries) notes.push(`${u}: not covered yet - PriceSignal currently reads Eurostat (DE), Statistics Canada (CA) and ABS (AU).`);
+    for (const u of req.unknownCountries) notes.push(`${u}: not covered yet - PriceSignal currently reads Eurostat (EU markets), Statistics Canada (CA) and ABS (AU).`);
     const key = (c: string, k: string) => `${c}:${k}`;
 
     const messages: ChatMessage[] = [
       { role: "system", content: SYSTEM_PLANNER },
-      { role: "user", content: `Task: ${JSON.stringify({ request: raw, needed: pairs, concept_words: req.conceptWords })}` },
+      { role: "user", content: `Task: ${JSON.stringify({ request: raw, needed: pairs, concept_words: req.conceptWords, in_memory: pairs.filter((p) => memory.findMapping(p.country, p.concept)?.mapping) })}` },
     ];
     let compared: SqlResult | undefined;
     let comparedViews = -1; // views.size when the last federated query ran
@@ -164,7 +176,11 @@ Reply with JSON only.`;
     for (let step = 0; step < this.maxSteps; step++) {
       const missing = pairs.filter((p) => !views.has(key(p.country, p.concept)));
       let batch: { action: string; args: any }[] = [];
-      if (!autopilot) {
+      if (!missing.length && (!compared || comparedViews !== views.size)) {
+        // Every needed series is ready: the federated comparison is the only sensible next step, no model turn needed.
+        this.log("plan", "all needed series are ready - running the federated comparison");
+        batch = [{ action: "compare", args: {} }];
+      } else if (!autopilot) {
         try {
           const r = await this.llm(messages, { lane: "fast", temperature: 0.1, maxTokens: 6000, attempts: 2, timeoutMs: 75_000 });
           const j = extractJson(r.text);
@@ -183,7 +199,7 @@ Reply with JSON only.`;
           continue;
         }
       }
-      if (autopilot) {
+      if (autopilot && !batch.length) {
         const a = nextAutopilot(missing, candidates, views, compared, memory, key);
         batch = a ? [a] : [];
       }
@@ -191,10 +207,19 @@ Reply with JSON only.`;
 
       const observations: unknown[] = [];
       let finished = false;
-      for (const action of batch) {
-        const obs = await this.execute(action, req, { views, candidates, notes, key, pairs, getCompared: () => compared, setCompared: (c) => { compared = c; comparedViews = views.size; } });
-        observations.push({ action: action.action, args: action.args, result: obs });
-        if (action.action === "finish" && compared) finished = true;
+      const sctx = { views, candidates, notes, key, pairs, getCompared: () => compared, setCompared: (c: SqlResult) => { compared = c; comparedViews = views.size; } };
+      const results = await this.executeBatch(batch, req, sctx);
+      // Pairs the agent has not even tried to discover yet (a pair that was tried and has no series may legitimately stay missing).
+      const untried = pairs.filter((p) => !views.has(key(p.country, p.concept)) && !candidates.has(key(p.country, p.concept)));
+      for (let i = 0; i < batch.length; i++) {
+        observations.push({ action: batch[i].action, args: batch[i].args, result: results[i] });
+        // A finish is accepted only over a comparison of every onboarded series, with nothing left untried.
+        if (batch[i].action === "finish" && compared && comparedViews === views.size && !untried.length) finished = true;
+      }
+      if (!autopilot && batch.some((b) => b.action === "finish") && untried.length) {
+        // The planner wants to stop while series are still missing: complete them deterministically instead of asking again.
+        this.log("plan", `planner tried to finish with ${untried.map((p) => `${p.country} ${p.concept}`).join(", ")} still missing - completing them without another planner turn`);
+        autopilot = true;
       }
       if (!autopilot) messages.push({ role: "user", content: `Observations: ${JSON.stringify(observations).slice(0, 3500)}\nStill missing: ${JSON.stringify(pairs.filter((p) => !views.has(key(p.country, p.concept))))}\nNext: reply with the action JSON only.` });
       if (!finished && compared && comparedViews === views.size && pairs.every((p) => views.has(key(p.country, p.concept)))) {
@@ -218,16 +243,45 @@ Reply with JSON only.`;
     if (remembered) this.log("memory", `using remembered pricing policy ${remembered.id}: ${Math.round(policy * 100)}%`);
     const facts: MarketFacts[] = buildFacts(rowsAsObjects(compared, COMPARE_COLUMNS), req, compared.id, policy);
     for (const p of pairs) if (!views.has(key(p.country, p.concept))) notes.push(`${p.country} ${p.concept}: no usable official series was found.`);
-    const pricing = await this.priceList(req, views, facts);
-    const narrative = await this.narrate(req, facts, notes, policy);
+    const ctx = { views, candidates, notes, key, pairs, getCompared: () => compared, setCompared: (c: SqlResult) => (compared = c) };
+    const ensureView = async (country: Country, concept: Concept) => {
+      if (!views.has(key(country, concept)) && memory.findMapping(country, concept)?.mapping) await this.execute({ action: "use_memory_mapping", args: { country, concept } }, req, ctx);
+      if (!views.has(key(country, concept))) await this.execute({ action: "discover_and_onboard", args: { country, concept } }, req, ctx);
+      return views.get(key(country, concept));
+    };
+    // The narrative only needs the market facts, so the model writes it while Zetaris prices the SKUs.
+    const narrativeP = this.narrate(req, facts, [...notes], policy);
+    const pricing = await this.priceList(req, views, facts, policy, ensureView);
+    const sinceLast = this.compareWithLastBrief(facts, req, policy);
+    // Everything in the brief except the prose is ready: let the UI show it while the model finishes writing.
+    const partial: Brief = { request: req, facts, notes, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, sinceLast, compared, sqlLog: [...this.sqlLog], views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: this.trace };
+    this.emit("partial", partial);
+    const narrative = await narrativeP;
     memory.rememberRequest(req);
-    const brief: Brief = { request: req, facts, notes, narrative, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, compared, sqlLog: this.sqlLog, views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: this.trace };
+    const brief: Brief = { request: req, facts, notes, narrative, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, sinceLast, compared, sqlLog: this.sqlLog, views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: this.trace };
     brief.markdown = renderBrief(brief);
     this.log("done", `brief ready in ${Math.round(brief.ms / 1000)} s (${this.sqlLog.length} SQL statements, ${[...views.values()].filter((v) => v.via === "memory").length} views reused from memory)`);
     return brief;
   }
 
-  private async execute(action: { action: string; args: any }, req: Request, s: { views: Map<string, any>; candidates: Map<string, Candidate[]>; notes: string[]; key: (a: string, b: string) => string; pairs: { country: Country; concept: Concept }[]; getCompared: () => SqlResult | undefined; setCompared: (c: SqlResult) => void }): Promise<unknown> {
+  /**
+   * Series actions (memory reuse, discovery, onboarding) for different agencies run in parallel;
+   * actions for the same agency, and everything else (compare, finish), keep the planner's order.
+   */
+  private async executeBatch(batch: { action: string; args: any }[], req: Request, s: ExecCtx): Promise<unknown[]> {
+    const results: unknown[] = new Array(batch.length);
+    const seriesActions = new Set(["use_memory_mapping", "discover_series", "discover_and_onboard", "onboard_series"]);
+    const series = batch.map((a, i) => ({ a, i })).filter(({ a }) => seriesActions.has(a.action) && normalizeCountry(String(a.args?.country ?? "")));
+    if (series.length > 1) {
+      await byAgency(series.map((x) => ({ ...x, country: normalizeCountry(String(x.a.args.country))! })), async (x) => {
+        results[x.i] = await this.execute(x.a, req, s);
+      });
+    } else for (const x of series) results[x.i] = await this.execute(x.a, req, s);
+    for (let i = 0; i < batch.length; i++) if (results[i] === undefined) results[i] = await this.execute(batch[i], req, s);
+    return results;
+  }
+
+  private async execute(action: { action: string; args: any }, req: Request, s: ExecCtx): Promise<unknown> {
     const a = action.args ?? {};
     const memory = this.deps.memory;
     const country = normalizeCountry(String(a.country ?? "")) ?? undefined;
@@ -240,9 +294,13 @@ Reply with JSON only.`;
           return items.slice(0, 8).map((i) => ({ id: i.id, content: i.content }));
         }
         case "use_memory_mapping": {
-          if (!country) return { error: "country must be DE, CA or AU" };
+          if (!country) return { error: "country must be one of the supported market codes" };
           const hit = memory.findMapping(country, concept);
-          if (!hit?.mapping) return { error: `no remembered mapping for ${country} ${concept}; discover it` };
+          if (!hit?.mapping) {
+            // Nothing in H-MEM for this pair: discover it now instead of spending another planner turn on the error.
+            this.log("memory", `nothing remembered for ${country} ${concept} - discovering it`);
+            return { not_in_memory: true, discovered: await this.execute({ action: "discover_and_onboard", args: { country, concept } }, req, s) };
+          }
           const probe = await this.deps.sql.run(`SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.${hit.mapping.view} WHERE yoy_pct IS NOT NULL`);
           const n = Number(probe.rows[0]?.[0] ?? 0);
           if (!n) return { error: `remembered view psig.${hit.mapping.view} returned no rows; onboard again` };
@@ -260,7 +318,7 @@ Reply with JSON only.`;
           return { ok: true, view: hit.mapping.view, rows: n, latest: probe.rows[0]?.[1] };
         }
         case "discover_series": {
-          if (!country) return { error: "country must be DE, CA or AU" };
+          if (!country) return { error: "country must be one of the supported market codes" };
           const words = concept === req.concept ? req.conceptWords : undefined;
           const d = await this.discoverFn(country, concept, words);
           s.candidates.set(s.key(country, concept), d.candidates);
@@ -270,7 +328,15 @@ Reply with JSON only.`;
           return { candidates: d.candidates.map((c, i) => ({ i, dataset: c.dataset, code: c.code, label: c.label, frequency: c.frequency, lastPeriod: c.lastPeriod })), notes: d.notes };
         }
         case "discover_and_onboard": {
-          if (!country) return { error: "country must be DE, CA or AU" };
+          if (!country) return { error: "country must be one of the supported market codes" };
+          if (memory.findMapping(country, concept)?.mapping) {
+            // Guardrail: H-MEM already knows this pair - reuse it (freshness is checked) before calling the agency again.
+            const reused: any = await this.execute({ action: "use_memory_mapping", args: { country, concept } }, req, s);
+            if (reused?.ok) {
+              this.log("plan", `guardrail: ${country} ${concept} was already in H-MEM - reused it instead of discovering again`);
+              return { reused_from_memory: reused };
+            }
+          }
           const found: any = await this.execute({ action: "discover_series", args: { country, concept } }, req, s);
           const n = s.candidates.get(s.key(country, concept))?.length ?? 0;
           if (!n) return { discovered: found, error: "no candidate series" };
@@ -282,7 +348,7 @@ Reply with JSON only.`;
           return { notes: found?.notes, onboard: last };
         }
         case "onboard_series": {
-          if (!country) return { error: "country must be DE, CA or AU" };
+          if (!country) return { error: "country must be one of the supported market codes" };
           const list = s.candidates.get(s.key(country, concept));
           if (!list?.length) return { error: "run discover_series for this pair first" };
           const c = list[Math.max(0, Math.min(list.length - 1, Number(a.candidate ?? 0)))];
@@ -322,11 +388,19 @@ Reply with JSON only.`;
     }
   }
 
-  /** Join the company's internal price list (a Zetaris REST table) with the compared category series. */
-  private async priceList(req: Request, views: Map<string, { view: string }>, facts: MarketFacts[]): Promise<{ skus: SkuLine[]; query: SqlResult } | undefined> {
-    const cat = req.concept === "all_items" ? "all_items" : req.concept;
-    const catViews = req.countries.map((c) => views.get(`${c}:${cat}`)?.view ?? views.get(`${c}:all_items`)?.view).filter((v): v is string => !!v);
-    if (!catViews.length) return undefined;
+  /**
+   * Join the company's internal price list (a Zetaris REST table) with official inflation.
+   * Each SKU is priced on the series of its OWN category in its market (gochujang -> condiments,
+   * chips -> snacks, ramen -> food); missing series are found in H-MEM or onboarded first.
+   * Falls back to the requested category if the per-category path is not possible.
+   */
+  private async priceList(
+    req: Request,
+    views: Map<string, { view: string; note?: string }>,
+    facts: MarketFacts[],
+    policy: number,
+    ensureView: (country: Country, concept: Concept) => Promise<{ view: string; label?: string; note?: string } | undefined>,
+  ): Promise<{ skus: SkuLine[]; query: SqlResult } | undefined> {
     try {
       const ready = await ensurePriceList(this.deps.sql);
       if (!ready.ok) {
@@ -334,6 +408,67 @@ Reply with JSON only.`;
         return undefined;
       }
       if (ready.created) this.log("onboard", "registered the internal price list as Zetaris REST table psig_internal.internal_price_list + view psig.v_price_list");
+    } catch (e) {
+      this.log("warn", `price list registration failed: ${String(e).slice(0, 160)}`);
+      return undefined;
+    }
+    try {
+      const catRes = await this.deps.sql.run(skuCategoriesSql(req.countries));
+      const cats = catRes.rows
+        .map((r) => ({ country: normalizeCountry(String(r[0])), concept: String(r[1] ?? "").toLowerCase().trim() }))
+        .filter((c): c is { country: Country; concept: string } => !!c.country && !!c.concept);
+      if (!cats.length) return await this.priceListFlat(req, views, facts);
+      this.log("pricing", `the price list sells ${[...new Set(cats.map((c) => c.concept))].join(", ")} in ${[...new Set(cats.map((c) => c.country))].join(", ")} - pricing each SKU on its own category`);
+      const skuViews = new Map<string, { view: string; note?: string }>();
+      await byAgency(cats, async (c) => {
+        const v = await ensureView(c.country, c.concept);
+        if (v) skuViews.set(`${c.country}:${c.concept}`, v);
+        else this.log("warn", `no official ${c.concept} series for ${c.country}; those SKUs are left out`);
+      });
+      if (!skuViews.size) return await this.priceListFlat(req, views, facts);
+      const res = await this.deps.sql.run(skuRatesSql([...new Set([...skuViews.values()].map((v) => v.view))], req.countries, monthsBack(15)));
+      const rows = rowsAsObjects(res, SKU_RATE_COLUMNS);
+      const bySku = new Map<string, Record<string, unknown>[]>();
+      for (const r of rows) {
+        const k = `${r.country}|${r.sku}`;
+        if (!bySku.has(k)) bySku.set(k, []);
+        bySku.get(k)!.push(r);
+      }
+      const skus: SkuLine[] = [];
+      for (const list of bySku.values()) {
+        const r0 = list[0];
+        const sf = seriesFacts(list.map((r) => ({ ...r, concept: r.rate_concept })));
+        if (!sf) continue;
+        const price = Number(r0.current_price);
+        const at = (pct?: number) => (pct === undefined ? undefined : Math.round(price * (1 + pct / 100) * 100) / 100);
+        const r1 = (x: number) => Math.round(x * 10 + 1e-9) / 10;
+        const lo = Math.max(0, r1(policy * Math.min(sf.latestYoy, sf.avg12)));
+        const hi = Math.max(0, r1(policy * Math.max(sf.latestYoy, sf.avg12)));
+        const p = req.proposedChangePct;
+        const note = skuViews.get(`${r0.country}:${String(r0.sku_category).toLowerCase()}`)?.note ?? "";
+        skus.push({
+          sku: String(r0.sku), product: String(r0.product), country: String(r0.country), skuCategory: String(r0.sku_category), currency: String(r0.currency),
+          currentPrice: price, period: sf.latestPeriod, yoy: sf.latestYoy, sourceId: sf.sourceId, avg12: sf.avg12, rangeLow: lo, rangeHigh: hi,
+          low: at(lo), high: at(hi), atProposed: at(p),
+          verdict: p === undefined ? undefined : p > hi ? "above the evidence" : p < lo ? "below the evidence" : "within the evidence",
+          cite: res.id, rateLabel: sf.label, coarser: /coarser|Food level/i.test(note),
+        });
+      }
+      skus.sort((a, b) => a.country.localeCompare(b.country) || a.sku.localeCompare(b.sku));
+      this.log("pricing", `federated query ${res.id} joined ${skus.length} SKUs with the official series of their own category -> ${skus.length} SKUs priced`);
+      return { skus, query: res };
+    } catch (e) {
+      this.log("warn", `per-category pricing failed (${String(e).slice(0, 140)}); pricing on the requested category instead`);
+      return await this.priceListFlat(req, views, facts);
+    }
+  }
+
+  /** Fallback: every SKU priced on the requested category's latest rate. */
+  private async priceListFlat(req: Request, views: Map<string, { view: string }>, facts: MarketFacts[]): Promise<{ skus: SkuLine[]; query: SqlResult } | undefined> {
+    const cat = req.concept === "all_items" ? "all_items" : req.concept;
+    const catViews = req.countries.map((c) => views.get(`${c}:${cat}`)?.view ?? views.get(`${c}:all_items`)?.view).filter((v): v is string => !!v);
+    if (!catViews.length) return undefined;
+    try {
       const res = await this.deps.sql.run(pricingSql([...new Set(catViews)], req.countries));
       const rows = rowsAsObjects(res, PRICING_COLUMNS);
       const skus: SkuLine[] = rows.map((r) => {
@@ -354,25 +489,67 @@ Reply with JSON only.`;
     }
   }
 
+  /**
+   * H-MEM keeps each market's last outcome (period, rate, range, verdict). Compare this brief with it,
+   * say what changed (a new official release, a different proposal, a different verdict), then store the new outcome.
+   */
+  private compareWithLastBrief(facts: MarketFacts[], req: Request, policy: number): string[] {
+    const memory = this.deps.memory;
+    const out: string[] = [];
+    const pct = (x: number) => `${x > 0 ? "+" : ""}${x.toFixed(1)}%`;
+    for (const f of facts) {
+      const s = f.category ?? f.allItems;
+      if (!s || !f.suggested) continue;
+      const prev = memory.lastOutcome(f.country, s.concept);
+      if (prev) {
+        const o = prev.outcome;
+        const when = o.at.slice(0, 10);
+        const parts: string[] = [];
+        if (o.period !== s.latestPeriod) parts.push(`new official release: ${o.period} ${pct(o.yoy)} -> ${s.latestPeriod} ${pct(s.latestYoy)}; suggested range ${o.low.toFixed(1)}–${o.high.toFixed(1)}% -> ${f.suggested.low.toFixed(1)}–${f.suggested.high.toFixed(1)}%`);
+        else parts.push(`no new official release (still ${s.latestPeriod}, ${pct(s.latestYoy)})`);
+        if (Math.abs(o.policy - policy) > 1e-9) parts.push(`pass-through ${Math.round(o.policy * 100)}% -> ${Math.round(policy * 100)}%`);
+        if (o.proposed !== undefined && req.proposedChangePct !== undefined) {
+          if (o.proposed !== req.proposedChangePct) parts.push(`last time +${o.proposed}% was ${o.verdict}; now +${req.proposedChangePct}% is ${f.verdict}`);
+          else if (o.verdict !== f.verdict) parts.push(`verdict on +${req.proposedChangePct}% changed: ${o.verdict} -> ${f.verdict}`);
+          else parts.push(`verdict on +${req.proposedChangePct}% unchanged (${f.verdict})`);
+        }
+        out.push(`${f.country} ${s.label} (last brief ${when}, ${prev.id}): ${parts.join("; ")}.`);
+      }
+      memory.rememberOutcome({ country: f.country, concept: s.concept, period: s.latestPeriod, yoy: s.latestYoy, low: f.suggested.low, high: f.suggested.high, policy, proposed: req.proposedChangePct, verdict: f.verdict, at: new Date().toISOString() });
+    }
+    if (out.length) this.log("memory", `compared with ${out.length} remembered brief outcome(s): ${out.map((x) => x.split(" (")[0]).join(", ")}`, out);
+    return out;
+  }
+
   private async narrate(req: Request, facts: MarketFacts[], notes: string[], policy: number): Promise<Narrative | undefined> {
-    const allowed = allowedNumbers(facts, req, policy);
-    const payload = { request: req.raw, proposed_change_pct: req.proposedChangePct ?? null, pass_through_pct: Math.round(policy * 100), facts, caveats: [...new Set(notes)] };
+    // Caveats are written by code (e.g. "no data after 2025-12 (10 months ago)"), so their numbers may be repeated.
+    const noteNumbers = [...new Set(notes)].join(" ").replace(/\b(19|20)\d{2}(-(Q[1-4]|\d{2}))?\b/g, " ").match(/\d+(?:\.\d+)?/g)?.map(Number) ?? [];
+    const allowed = [...allowedNumbers(facts, req, policy), ...noteNumbers];
+    const payload = { request: req.raw, proposed_change_pct: req.proposedChangePct ?? null, pass_through_pct: Math.round(policy * 100), facts: factsForNarrative(facts), caveats: [...new Set(notes)] };
     const ask: ChatMessage[] = [
-      { role: "system", content: "You write short, plain-English pricing briefs for an exporter's pricing manager. Use ONLY numbers that appear in the facts JSON (same rounding). No new numbers, no forecasts. Each market's verdict field is final: say it as given (above, within or below the evidence) and keep the headline consistent with every market's verdict. Mention only the caveats listed in the facts JSON (for example markets that are not covered); do not add claims about methodology or data sources that are not in it." },
+      { role: "system", content: "You write short, plain-English pricing briefs for an exporter's pricing manager. Use ONLY numbers that appear in the facts JSON, written with the same one-decimal rounding. When you state a suggested range, copy suggested_range_pct low and high exactly (for example 1.0% to 4.3%); never compute a range yourself. No new numbers, no forecasts. Each market's verdict field is final: say it as given (above, within or below the evidence) and keep the headline consistent with every market's verdict. Mention only the caveats listed in the facts JSON (for example markets that are not covered); do not add claims about methodology or data sources that are not in it." },
       { role: "user", content: `Facts: ${JSON.stringify(payload)}\nReply with JSON only: {"headline": str (<= 25 words), "markets": {"<country code>": str (2-3 sentences: what the data says and what it means for the proposed change)}, "watch": str (one sentence on what to re-check next month)}` },
     ];
+    // One time budget for the prose, retries included: the numbers never wait more than this for the words.
+    const deadline = Date.now() + Number(process.env.PSIG_NARRATIVE_BUDGET_MS || 55_000);
     for (let attempt = 0; attempt < 2; attempt++) {
+      const left = deadline - Date.now();
+      if (left < 8_000) {
+        this.log("warn", "narrative time budget used up - the brief uses the computed summary");
+        break;
+      }
       try {
-        const r = await this.llm(ask, { lane: (process.env.PSIG_NARRATIVE_LANE as "fast" | "deep") || "fast", temperature: 0.2, maxTokens: 8000, attempts: 1, timeoutMs: 75_000 });
+        const r = await this.llm(ask, { lane: (process.env.PSIG_NARRATIVE_LANE as "fast" | "deep") || "fast", temperature: 0.2, maxTokens: 8000, attempts: 1, timeoutMs: left });
         const n = extractJson(r.text) as Narrative | null;
-        if (!n?.headline) throw new Error("no headline");
-        const bad = checkNarrative(n, allowed);
+        if (!n?.headline) throw new Error(`no headline in reply: ${r.text.replace(/\s+/g, " ").slice(0, 160)}`);
+        const bad = checkNarrative(n, allowed, facts, req, policy, noteNumbers);
         this.log("llm", `narrative (${r.model}, ${r.ms} ms)${bad.length ? ` - ungrounded numbers ${bad.join(", ")}` : " - all numbers grounded"}`);
         if (!bad.length) return n;
-        ask.push({ role: "assistant", content: r.text }, { role: "user", content: `These numbers are not in the facts: ${bad.join(", ")}. Rewrite using only fact numbers. JSON only.` });
+        ask.push({ role: "assistant", content: r.text }, { role: "user", content: `These numbers or ranges do not match the facts for that market: ${bad.join(", ")}. Rewrite using only that market's numbers; a suggested range must be exactly suggested_range_pct low to high. JSON only.` });
       } catch (e) {
         this.log("warn", `narrative attempt failed: ${String(e).slice(0, 120)}`);
-        if (/Abort|HTTP 5\d\d|fetch failed/i.test(String(e))) break;
+        // An empty reply (the model spent its budget thinking) is worth one more try; outages and timeouts are not.
+        if (/Abort|HTTP 5\d\d|fetch failed/i.test(String(e)) && !/empty_response/i.test(String(e))) break;
       }
     }
     return undefined; // renderBrief falls back to a deterministic summary
@@ -380,6 +557,20 @@ Reply with JSON only.`;
 }
 
 // ---------- helpers ----------
+type ExecCtx = { views: Map<string, any>; candidates: Map<string, Candidate[]>; notes: string[]; key: (a: string, b: string) => string; pairs: { country: Country; concept: Concept }[]; getCompared: () => SqlResult | undefined; setCompared: (c: SqlResult) => void };
+
+/** Run fn for every item: items of different agencies in parallel, items of the same agency one after another. */
+async function byAgency<T extends { country: Country }>(items: T[], fn: (item: T) => Promise<void>): Promise<void> {
+  const groups = new Map<string, T[]>();
+  for (const it of items) {
+    const g = AGENCY_FOR[it.country]?.name ?? it.country;
+    if (!groups.has(g)) groups.set(g, []);
+    groups.get(g)!.push(it);
+  }
+  await Promise.all([...groups.values()].map(async (list) => {
+    for (const it of list) await fn(it);
+  }));
+}
 function monthsBetween(from: string, to: string): number {
   const idx = (p: string) => {
     const m = p.match(/^(\d{4})-(\d{2})$/);

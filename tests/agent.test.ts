@@ -10,7 +10,7 @@ import { PriceSignalAgent, extractJson } from "../src/agent.ts";
 import { AgentMemory } from "../src/memory.ts";
 import type { SqlResult, SqlRunner } from "../src/zetaris.ts";
 import type { Candidate } from "../src/sources/types.ts";
-import { checkNarrative } from "../src/brief.ts";
+import { allowedNumbers, checkNarrative } from "../src/brief.ts";
 
 function fakeRows(): unknown[][] {
   const rows: unknown[][] = [];
@@ -25,6 +25,12 @@ class FakeZ implements SqlRunner {
   async run(sql: string): Promise<SqlResult> {
     this.sqls.push(sql);
     const id = `Q${++this.n}`;
+    if (/SELECT DISTINCT country, sku_category/.test(sql)) return { id, sql, columns: ["country", "sku_category"], rows: [["CA", "condiments"], ["DE", "condiments"]], ms: 1 };
+    if (/p\.sku_category = s\.concept/.test(sql)) {
+      const rows: unknown[][] = [];
+      for (const [c, cur, price, base] of [["DE", "EUR", 4.99, 1.0], ["CA", "CAD", 7.49, 3.0]] as const) for (let m = 1; m <= 9; m++) rows.push(["GCJ-500", "Gochujang 500 g", c, "condiments", cur, price, "condiments", "Salt, condiments and sauces", "M", `2026-0${m}`, base + m * 0.1, `${c}:condiments`]);
+      return { id, sql, columns: [], rows, ms: 2 };
+    }
     if (/FROM psig\.v_price_list/.test(sql)) return { id, sql, columns: [], rows: [["GCJ-500", "Gochujang 500 g", "DE", "condiments", "EUR", 4.99, "2026-09", 2.45, "DE:food"], ["GCJ-500", "Gochujang 500 g", "CA", "condiments", "CAD", 7.49, "2026-09", 3.85, "CA:food"]], ms: 2 };
     if (/^SELECT COUNT/.test(sql)) return { id, sql, columns: ["n", "latest"], rows: [[9, "2026-09"]], ms: 1 };
     if (/UNION ALL|FROM psig\.v_/.test(sql) && /^SELECT country/.test(sql)) return { id, sql, columns: ["country", "concept", "category_label", "frequency", "period", "yoy_pct", "source_id"], rows: fakeRows(), ms: 2 };
@@ -58,6 +64,22 @@ test("narrative grounding rejects invented numbers", () => {
   assert.deepEqual(checkNarrative({ headline: "Food up 2.5% in 2026-09", markets: { DE: "4.7% risk" } }, [2.5]), ["4.7"]);
 });
 
+test("narrative grounding is per market and checks the stated range", () => {
+  const s = (latestYoy: number, avg12: number) => ({ concept: "snacks", label: "x", frequency: "M", sourceId: "x", latestPeriod: "2026-09", latestYoy, avg12, trend: "easing" as const, points: [{ period: "2026-03", yoy: 0.3 }] });
+  const facts: any[] = [
+    { country: "DE", agency: "Eurostat", category: s(1.4, 6.1), suggested: { low: 1.0, high: 4.3, basis: "" }, verdict: "above the evidence", cite: "Q8" },
+    { country: "CA", agency: "StatCan", category: s(2.2, 4.1), suggested: { low: 1.5, high: 2.9, basis: "" }, verdict: "above the evidence", cite: "Q8" },
+  ];
+  const req: any = { raw: "", countries: ["DE", "CA"], concept: "snacks", conceptWords: [], proposedChangePct: 5, unknownCountries: [] };
+  // Run 01 on 26 Oct: the DE paragraph claimed "0.3% to 1%" while the computed range was 1.0-4.3%.
+  const wrong = checkNarrative({ headline: "+5% is above the evidence", markets: { DE: "Snacks 1.4% YoY; a 70% pass-through supports roughly 0.3% to 1%, so +5% is above.", CA: "Food 2.2% YoY, down from 4.1%." } }, [], facts, req, 0.7);
+  assert.ok(wrong.includes("0.3") || wrong.includes("0.3–1%"), JSON.stringify(wrong));
+  // A number from another market is not allowed in this market's paragraph.
+  assert.ok(checkNarrative({ headline: "ok", markets: { DE: "DE is at 2.2%." } }, [], facts, req, 0.7).includes("2.2"));
+  const right = checkNarrative({ headline: "+5% is above the evidence in DE and CA", markets: { DE: "Snacks 1.4% YoY (12-month average 6.1%); 70% pass-through supports 1.0% to 4.3%.", CA: "Food eased from 4.1% to 2.2%; the range is 1.5–2.9%." } }, allowedNumbers(facts, req, 0.7), facts, req, 0.7);
+  assert.deepEqual(right, []);
+});
+
 test("end-to-end offline, then memory reuse", async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "psig-"));
   const memory = new AgentMemory(dir);
@@ -78,7 +100,7 @@ test("end-to-end offline, then memory reuse", async () => {
   assert.ok(b1.facts.every((f) => f.category && f.suggested), "every market has computed facts");
   assert.equal(b1.facts[0].verdict, "above the evidence");
   assert.match(b1.markdown!, /discontinued/);
-  assert.equal(discovers, 6);
+  assert.equal(discovers, 8, "6 market series + condiments for the 2 markets that sell gochujang");
 
   const a2 = new PriceSignalAgent({ ...deps(), llm: async (m: any[]) => {
     const last = m.at(-1).content as string;
@@ -90,10 +112,37 @@ test("end-to-end offline, then memory reuse", async () => {
     return { text: JSON.stringify({ action: "use_memory_mapping", args: missing[0] }), model: "f", provider: "f", ms: 1 };
   } });
   const b2 = await a2.run("same question again, DE CA AU food +5%");
-  assert.equal(discovers, 6, "second run did not discover again");
+  assert.equal(discovers, 8, "second run did not discover again");
   assert.ok(b2.views.every((v) => v.via === "memory"));
   assert.equal(b2.passThrough, 0.7, "policy recalled from H-MEM");
   assert.match(b2.markdown!, /Narrative omitted/);
+});
+
+test("a finish over a stale comparison is not accepted; empty-memory reuse falls through to discovery", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "psig-"));
+  let turn = 0;
+  const z = new FakeZ();
+  const agent = new PriceSignalAgent({
+    llm: async (m: any[]) => {
+      const last = m.at(-1).content as string;
+      if (last.startsWith("Extract")) return { text: '{"countries":["DE","CA"],"concept":"food","proposed_change_pct":5,"pass_through":0.7}', model: "f", provider: "f", ms: 1 };
+      if (m[0].content.startsWith("You write short")) return { text: '{"headline":"ok","markets":{},"watch":"x"}', model: "f", provider: "f", ms: 1 };
+      turn++;
+      // Turn 1 (as seen live on 26 Oct): reuse from an empty memory for food, onboard all-items, and compare too early.
+      if (turn === 1) return { text: JSON.stringify({ actions: [{ action: "use_memory_mapping", args: { country: "DE", concept: "food" } }, { action: "discover_and_onboard", args: { country: "DE", concept: "all_items" } }, { action: "discover_and_onboard", args: { country: "CA", concept: "all_items" } }, { action: "compare", args: {} }] }), model: "f", provider: "f", ms: 1 };
+      return { text: '{"actions":[{"action":"finish","args":{}}]}', model: "f", provider: "f", ms: 1 };
+    },
+    sql: z,
+    memory: new AgentMemory(dir),
+    discoverFn: async (country: any, concept: string) => ({ country, concept, candidates: [cand(country, concept)], notes: [] }),
+    onboardFn: async (_z: any, c: Candidate, concept: string) => ({ view: `v_${c.country.toLowerCase()}_${concept}`, table: "t", ok: true, existed: false, rows: 9, latest: "2026-09", sql: [] }),
+  });
+  agent.on("event", (e: any) => process.env.DBG && console.log("TRACE", e.kind, e.title));
+  const b = await agent.run("food DE CA +5% we pass on 70%");
+  assert.ok(b.views.some((v) => v.key === "DE:food"), "DE food was discovered although the planner asked memory for it");
+  const lastCompare = z.sqls.filter((q) => /^SELECT country, concept/.test(q)).at(-1)!;
+  assert.match(lastCompare, /v_ca_food/, "the comparison the brief uses covers every onboarded series");
+  assert.equal(b.compared.sql, lastCompare);
 });
 
 test("internal price list is joined, and 'same as last time' recalls the last request", async () => {
@@ -110,7 +159,13 @@ test("internal price list is joined, and 'same as last time' recalls the last re
   assert.equal(b1.skus?.length, 2, "SKUs come back from the price-list join");
   const de = b1.skus!.find((s) => s.country === "DE")!;
   const f = b1.facts.find((x) => x.country === "DE")!;
-  assert.equal(de.low, Math.round(4.99 * (1 + f.suggested!.low / 100) * 100) / 100);
+  // Gochujang is priced on the condiments series (its own category), not on the requested food series.
+  assert.equal(de.rateLabel, "Salt, condiments and sauces");
+  assert.equal(de.yoy, 1.9);
+  assert.notEqual(de.yoy, f.category!.latestYoy);
+  assert.equal(de.rangeLow, Math.round(0.7 * Math.min(de.yoy, de.avg12!) * 10 + 1e-9) / 10);
+  assert.equal(de.low, Math.round(4.99 * (1 + de.rangeLow! / 100) * 100) / 100);
+  assert.ok(b1.views.some((v) => v.key === "DE:condiments"), "the condiments series was onboarded for pricing");
   assert.equal(de.atProposed, Math.round(4.99 * 1.05 * 100) / 100);
   assert.match(b1.markdown!, /Your price list/);
   assert.match(b1.policySource!, /stated/);
@@ -118,5 +173,10 @@ test("internal price list is joined, and 'same as last time' recalls the last re
   assert.deepEqual(b2.request.countries, ["DE", "CA", "AU"]);
   assert.equal(b2.request.concept, "food");
   assert.equal(b2.request.proposedChangePct, 3);
+  // H-MEM remembered the first brief's outcome per market, so the second brief says what changed.
+  assert.ok(b2.sinceLast?.length, "since-last-brief section present");
+  assert.match(b2.sinceLast![0], /no new official release/);
+  assert.match(b2.sinceLast![0], /last time \+5% was above the evidence; now \+3% is/);
+  assert.match(b2.markdown!, /Since your last brief/);
   assert.match(b2.policySource!, /remembered/);
 });

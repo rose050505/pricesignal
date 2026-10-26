@@ -2,13 +2,13 @@
 import * as eurostat from "./eurostat.ts";
 import * as abs from "./abs.ts";
 import * as statcan from "./statcan.ts";
-import { Candidate, Concept, Country, DiscoverResult, OnboardPlan } from "./types.ts";
+import { Candidate, Concept, Country, DiscoverResult, EU_CODES, OnboardPlan } from "./types.ts";
 import { SqlRunner, runDdl } from "../zetaris.ts";
 
 export * from "./types.ts";
 
 export const AGENCY_FOR: Record<Country, { agency: Candidate["agency"]; name: string; measure: string }> = {
-  DE: { agency: "eurostat", name: "Eurostat (HICP)", measure: "HICP annual rate of change" },
+  ...(Object.fromEntries(EU_CODES.map((c) => [c, { agency: "eurostat", name: "Eurostat (HICP)", measure: "HICP annual rate of change" }])) as Record<(typeof EU_CODES)[number], { agency: Candidate["agency"]; name: string; measure: string }>),
   CA: { agency: "statcan", name: "Statistics Canada (CPI)", measure: "CPI index, 2002=100" },
   AU: { agency: "abs", name: "Australian Bureau of Statistics (CPI)", measure: "CPI index" },
 };
