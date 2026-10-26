@@ -4,12 +4,12 @@
 // JSON action protocol; code executes actions, enforces guardrails, and computes
 // every number that reaches the user.
 import { EventEmitter } from "node:events";
-import { chat, ChatMessage } from "./llm.ts";
+import { chat, ChatMessage, ChatResult } from "./llm.ts";
 import { AgentMemory } from "./memory.ts";
 import { SqlResult, SqlRunner, rowsAsObjects, resetCiteIds } from "./zetaris.ts";
 import { AGENCY_FOR, COMPARE_COLUMNS, Candidate, Concept, Country, CONCEPT_WORDS, compareSql, discover, monthsBack, normalizeCountry, onboard } from "./sources/index.ts";
-import { MarketFacts, Brief, SkuLine, buildFacts, renderBrief, allowedNumbers, checkNarrative, factsForNarrative, seriesFacts, Narrative } from "./brief.ts";
-import { PRICING_COLUMNS, SKU_RATE_COLUMNS, ensurePriceList, pricingSql, skuCategoriesSql, skuRatesSql } from "./sources/pricelist.ts";
+import { MarketFacts, Brief, SkuLine, buildFacts, renderBrief, allowedNumbers, checkNarrative, factsForNarrative, seriesFacts, Narrative, NarrativeIssue } from "./brief.ts";
+import { PRICE_DB, PRICING_COLUMNS, SKU_RATE_COLUMNS, ensurePriceList, priceTable, priceView, pricingSql, skuCategoriesSql, skuRatesSql } from "./sources/pricelist.ts";
 
 export interface Request {
   raw: string;
@@ -77,7 +77,14 @@ export class PriceSignalAgent extends EventEmitter {
         this.log("error", `blocked statement (only SELECT and onboarding DDL are allowed): ${sql.split("\n")[0].slice(0, 80)}`);
         throw new Error("statement blocked by the SQL allowlist");
       }
-      const res = await run(sql, opts);
+      let res: SqlResult;
+      try {
+        res = await run(sql, opts);
+      } catch (e) {
+        // Onboarding DDL is idempotent; an object Zetaris already has is shown, not hidden.
+        if (/^\s*CREATE\b/i.test(sql) && /already exists|AlreadyExists|duplicate/i.test(String(e))) this.log("sql", `already in Zetaris (not created again): ${sql.split("\n")[0].slice(0, 90)}`, { sql, existed: true });
+        throw e;
+      }
       this.sqlLog.push(res);
       this.log("sql", `${res.id}: ${sql.split("\n")[0].slice(0, 90)}`, { id: res.id, sql, rows: res.rows.length, ms: res.ms });
       return res;
@@ -101,7 +108,7 @@ Reply with JSON only.`;
     try {
       const r = await this.llm([{ role: "user", content: prompt }], { lane: "fast", temperature: 0, attempts: 2, timeoutMs: 60_000 });
       j = extractJson(r.text) ?? {};
-      this.log("llm", `parsed request (${r.model}, ${r.ms} ms)`, j);
+      this.log("llm", `parsed request (${r.model}, ${r.ms} ms${via(r)})`, j);
     } catch (e) {
       this.log("warn", `LLM parse failed, using rules: ${String(e).slice(0, 120)}`);
     }
@@ -114,7 +121,7 @@ Reply with JSON only.`;
       else if (!n && Array.isArray(j.countries)) unknown.push(c);
     }
     if (!countries.length) countries.push("DE", "CA", "AU");
-    const concept = String(j.concept ?? "food").toLowerCase().trim() || "food";
+    const concept = cleanConcept(j.concept) || "food";
     const words = Array.isArray(j.concept_words) && j.concept_words.length ? j.concept_words.map((w: unknown) => String(w).toLowerCase()) : CONCEPT_WORDS[concept] ?? [concept];
     // "same as last time": start from the request H-MEM remembered, keep only what the user changed.
     const sameAsLast = /\b(same as (last|before|previous)|like last time|as last time|as usual|same again)\b|지난번|저번|지난 분기|같은 조건/i.test(raw);
@@ -124,14 +131,19 @@ Reply with JSON only.`;
       if (!explicitCountries.length) countries.splice(0, countries.length, ...(last.request.countries as Country[]));
       this.log("memory", `recalled last request ${last.id}: markets ${last.request.countries.join(", ")}, category "${last.request.concept}"${last.request.proposedChangePct !== undefined ? `, +${last.request.proposedChangePct}%` : ""}`);
     }
-    const explicitPct = numOrUndef(raw.match(/[+＋]?\s?(\d+(?:\.\d+)?)\s?%/)?.[1]);
+    // A percentage stated as the pass-through share ("we pass on 80% now") is not a proposed price change.
+    const passThrough = numOrUndef(j.pass_through);
+    const explicitPct = [...raw.matchAll(/[+＋]?\s?(\d+(?:\.\d+)?)\s?(?:%|pct\b|percent\b|퍼센트|프로)/gi)]
+      .filter((m) => !/(pass|반영)/i.test(raw.slice(Math.max(0, m.index! - 30), m.index)))
+      .map((m) => Number(m[1]))
+      .find((x) => passThrough === undefined || Math.abs(x - passThrough * 100) > 1e-9);
     const req: Request = {
       raw,
       countries,
       concept: last ? last.request.concept : concept,
       conceptWords: last ? last.request.conceptWords : words,
-      proposedChangePct: last ? (explicitPct ?? last.request.proposedChangePct) : numOrUndef(j.proposed_change_pct) ?? explicitPct,
-      passThrough: numOrUndef(j.pass_through),
+      proposedChangePct: last ? (explicitPct ?? numOrUndef(j.proposed_change_pct) ?? last.request.proposedChangePct) : numOrUndef(j.proposed_change_pct) ?? explicitPct,
+      passThrough,
       policyStatement: j.policy_statement ? String(j.policy_statement) : undefined,
       unknownCountries: unknown,
     };
@@ -187,7 +199,7 @@ Reply with JSON only.`;
           batch = Array.isArray(j?.actions) ? j.actions.filter((a: any) => a?.action).slice(0, 8) : j?.action ? [j] : [];
           if (!batch.length) throw new Error(`no action in: ${r.text.slice(0, 120)}`);
           messages.push({ role: "assistant", content: JSON.stringify({ thought: j.thought, actions: batch }) });
-          this.log("plan", `${batch.map((b) => `${b.action} ${JSON.stringify(b.args ?? {})}`).join(" · ")}  [${r.model}]`, { thought: j.thought, model: r.model, ms: r.ms });
+          this.log("plan", `${batch.map((b) => `${b.action} ${JSON.stringify(b.args ?? {})}`).join(" · ")}  [${r.model}${via(r)}]`, { thought: j.thought, model: r.model, ms: r.ms });
         } catch (e) {
           badReplies++;
           this.log("warn", `planner reply unusable (${badReplies}): ${String(e).slice(0, 120)}`);
@@ -256,9 +268,9 @@ Reply with JSON only.`;
     // Everything in the brief except the prose is ready: let the UI show it while the model finishes writing.
     const partial: Brief = { request: req, facts, notes, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, sinceLast, compared, sqlLog: [...this.sqlLog], views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: this.trace };
     this.emit("partial", partial);
-    const narrative = await narrativeP;
+    const { narrative, issue: narrativeIssue } = await narrativeP;
     memory.rememberRequest(req);
-    const brief: Brief = { request: req, facts, notes, narrative, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, sinceLast, compared, sqlLog: this.sqlLog, views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: this.trace };
+    const brief: Brief = { request: req, facts, notes, narrative, narrativeIssue, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, sinceLast, compared, sqlLog: this.sqlLog, views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: this.trace };
     brief.markdown = renderBrief(brief);
     this.log("done", `brief ready in ${Math.round(brief.ms / 1000)} s (${this.sqlLog.length} SQL statements, ${[...views.values()].filter((v) => v.via === "memory").length} views reused from memory)`);
     return brief;
@@ -285,7 +297,7 @@ Reply with JSON only.`;
     const a = action.args ?? {};
     const memory = this.deps.memory;
     const country = normalizeCountry(String(a.country ?? "")) ?? undefined;
-    const concept: Concept = String(a.concept ?? req.concept);
+    const concept: Concept = cleanConcept(a.concept) || req.concept;
     try {
       switch (action.action) {
         case "recall_memory": {
@@ -353,7 +365,8 @@ Reply with JSON only.`;
           if (!list?.length) return { error: "run discover_series for this pair first" };
           const c = list[Math.max(0, Math.min(list.length - 1, Number(a.candidate ?? 0)))];
           const r = await this.onboardFn(this.deps.sql, c, concept);
-          this.log("onboard", `${r.ok ? "onboarded" : "FAILED"} ${c.agency} ${c.code} -> psig.${r.view}${r.ok ? ` (${r.rows} rows, latest ${r.latest})` : `: ${r.error}`}`, { candidate: c, result: { ...r, sql: r.sql } });
+          const how = r.existed ? "Zetaris already had it - reused and verified" : "created REST table + view";
+          this.log("onboard", `${r.ok ? "onboarded" : "FAILED"} ${c.agency} ${c.code} -> psig.${r.view}${r.ok ? ` (${how}: ${r.rows} rows, latest ${r.latest})` : `: ${r.error}`}`, { candidate: c, result: { ...r, sql: r.sql } });
           if (r.ok) {
             const own: string[] = (s.candidates as any).get(s.key(country, concept) + ":notes") ?? [];
             const note = own.join(" ") || undefined;
@@ -407,7 +420,7 @@ Reply with JSON only.`;
         this.log("warn", `internal price list not available in Zetaris: ${String(ready.error).slice(0, 140)}`);
         return undefined;
       }
-      if (ready.created) this.log("onboard", "registered the internal price list as Zetaris REST table psig_internal.internal_price_list + view psig.v_price_list");
+      if (ready.created) this.log("onboard", `registered the internal price list as Zetaris REST table ${PRICE_DB.toLowerCase()}.${priceTable()} + view psig.${priceView()}`);
     } catch (e) {
       this.log("warn", `price list registration failed: ${String(e).slice(0, 160)}`);
       return undefined;
@@ -521,7 +534,7 @@ Reply with JSON only.`;
     return out;
   }
 
-  private async narrate(req: Request, facts: MarketFacts[], notes: string[], policy: number): Promise<Narrative | undefined> {
+  private async narrate(req: Request, facts: MarketFacts[], notes: string[], policy: number): Promise<{ narrative?: Narrative; issue?: NarrativeIssue }> {
     // Caveats are written by code (e.g. "no data after 2025-12 (10 months ago)"), so their numbers may be repeated.
     const noteNumbers = [...new Set(notes)].join(" ").replace(/\b(19|20)\d{2}(-(Q[1-4]|\d{2}))?\b/g, " ").match(/\d+(?:\.\d+)?/g)?.map(Number) ?? [];
     const allowed = [...allowedNumbers(facts, req, policy), ...noteNumbers];
@@ -532,10 +545,12 @@ Reply with JSON only.`;
     ];
     // One time budget for the prose, retries included: the numbers never wait more than this for the words.
     const deadline = Date.now() + Number(process.env.PSIG_NARRATIVE_BUDGET_MS || 55_000);
+    let issue: NarrativeIssue | undefined; // why the last attempt failed, so the brief states the real reason
     for (let attempt = 0; attempt < 2; attempt++) {
       const left = deadline - Date.now();
       if (left < 8_000) {
         this.log("warn", "narrative time budget used up - the brief uses the computed summary");
+        issue ??= "budget";
         break;
       }
       try {
@@ -543,16 +558,18 @@ Reply with JSON only.`;
         const n = extractJson(r.text) as Narrative | null;
         if (!n?.headline) throw new Error(`no headline in reply: ${r.text.replace(/\s+/g, " ").slice(0, 160)}`);
         const bad = checkNarrative(n, allowed, facts, req, policy, noteNumbers);
-        this.log("llm", `narrative (${r.model}, ${r.ms} ms)${bad.length ? ` - ungrounded numbers ${bad.join(", ")}` : " - all numbers grounded"}`);
-        if (!bad.length) return n;
+        this.log("llm", `narrative (${r.model}, ${r.ms} ms${via(r)})${bad.length ? ` - ungrounded numbers ${bad.join(", ")}` : " - all numbers grounded"}`);
+        if (!bad.length) return { narrative: n };
+        issue = "grounding";
         ask.push({ role: "assistant", content: r.text }, { role: "user", content: `These numbers or ranges do not match the facts for that market: ${bad.join(", ")}. Rewrite using only that market's numbers; a suggested range must be exactly suggested_range_pct low to high. JSON only.` });
       } catch (e) {
         this.log("warn", `narrative attempt failed: ${String(e).slice(0, 120)}`);
+        issue = /no headline in reply/.test(String(e)) ? "unusable" : "provider";
         // An empty reply (the model spent its budget thinking) is worth one more try; outages and timeouts are not.
         if (/Abort|HTTP 5\d\d|fetch failed/i.test(String(e)) && !/empty_response/i.test(String(e))) break;
       }
     }
-    return undefined; // renderBrief falls back to a deterministic summary
+    return { issue }; // renderBrief falls back to a deterministic summary
   }
 }
 
@@ -611,6 +628,16 @@ export function extractJson(text: string): any | null {
     }
   }
   return null;
+}
+
+/** Which runtime answered a model call, shown next to the model name in the trace. */
+function via(r: ChatResult): string {
+  return r.provider === "meterless" ? " via Meterless Nightshift" : ` via ${r.provider}`;
+}
+
+/** A concept name from the model ends up in view names and SQL string literals: keep it to plain words. */
+function cleanConcept(v: unknown): string {
+  return v === null || v === undefined ? "" : String(v).toLowerCase().replace(/['"`\\;]/g, "").trim();
 }
 
 function numOrUndef(v: unknown): number | undefined {

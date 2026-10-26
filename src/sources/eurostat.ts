@@ -1,7 +1,7 @@
 // Eurostat HICP (JSON-stat 2.0). Real-world fragmentation handled here:
 // the long-used dataset prc_hicp_manr was discontinued after 2025-12 and
 // replaced by prc_hicp_minr (ECOICOP v2, dimension `coicop18`).
-import { Candidate, Concept, Country, CONCEPT_WORDS, DiscoverResult, OnboardPlan, getJson, labelScore, monthsBack, safeIdent } from "./types.ts";
+import { Candidate, Concept, Country, CONCEPT_WORDS, DiscoverResult, OnboardPlan, getJson, labelScore, monthsBack, zetarisName } from "./types.ts";
 
 const BASE = "https://ec.europa.eu/eurostat/api/dissemination/statistics/1.0/data";
 const LEGACY = "prc_hicp_manr";
@@ -92,8 +92,8 @@ export async function discover(country: Country, concept: Concept, words = CONCE
 }
 
 export function onboardSql(c: Candidate, concept: Concept): OnboardPlan {
-  const table = safeIdent("eurostat", c.country, c.dataset, c.code);
-  const view = safeIdent("v", c.country, concept, c.dataset, c.code);
+  const table = zetarisName("eurostat", c.country, c.dataset, c.code);
+  const view = zetarisName("v", c.country, concept, c.dataset, c.code);
   const label = c.label.replace(/'/g, "''");
   return {
     table,

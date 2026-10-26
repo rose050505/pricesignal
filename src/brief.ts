@@ -4,6 +4,7 @@
 import type { Request, TraceEvent } from "./agent.ts";
 import type { SqlResult } from "./zetaris.ts";
 import { AGENCY_FOR, Country } from "./sources/index.ts";
+import { priceView } from "./sources/pricelist.ts";
 
 export interface SeriesFacts {
   concept: string;
@@ -38,11 +39,21 @@ export interface SkuLine {
 
 export interface Narrative { headline: string; markets: Record<string, string>; watch?: string }
 
+/** Why a brief has no model-written prose. */
+export type NarrativeIssue = "grounding" | "unusable" | "provider" | "budget";
+const NARRATIVE_ISSUE: Record<NarrativeIssue, string> = {
+  grounding: "the model's text did not pass the number-grounding check",
+  unusable: "the model's reply was not usable JSON",
+  provider: "the model provider returned an error or timed out",
+  budget: "the narrative time budget ran out",
+};
+
 export interface Brief {
   request: Request;
   facts: MarketFacts[];
   notes: string[];
   narrative?: Narrative;
+  narrativeIssue?: NarrativeIssue;
   passThrough: number;
   policySource?: string;
   skus?: SkuLine[];
@@ -266,11 +277,11 @@ export function renderBrief(b: Brief): string {
     L.push(`## Your price list`);
     const perSku = b.skus.some((s) => s.rateLabel);
     L.push(perSku
-      ? `Internal SKUs (Zetaris view \`psig.v_price_list\`) joined in query **${b.pricingQuery?.id}** with the official series of each product's own category in its market (sauces, snacks, food); each SKU's range uses that series, computed in code.`
-      : `Internal SKUs (Zetaris view \`psig.v_price_list\`) joined with the latest official category rate in query **${b.pricingQuery?.id}**.`, "");
+      ? `Internal SKUs (Zetaris view \`psig.${priceView()}\`) joined in query **${b.pricingQuery?.id}** with the official series of each product's own category in its market (sauces, snacks, food); each SKU's range uses that series, computed in code.`
+      : `Internal SKUs (Zetaris view \`psig.${priceView()}\`) joined with the latest official category rate in query **${b.pricingQuery?.id}**.`, "");
     L.push(`| SKU | Product | Market | Current price | Suggested new price | At +${req.proposedChangePct ?? "-"}% | Rate used |`);
     L.push(`|---|---|---|---|---|---|---|`);
-    for (const s of b.skus) L.push(`| ${s.sku} | ${s.product} | ${s.country} | ${money(s.currentPrice, s.currency)} | ${s.low !== undefined ? `${s.low.toFixed(2)}–${money(s.high, s.currency)}` : "-"} | ${money(s.atProposed, s.currency)}${s.verdict ? ` (${s.verdict})` : ""} | ${fmt(s.yoy)} ${s.period}${s.rateLabel ? ` · ${s.rateLabel}${s.coarser ? " (coarser)" : ""}` : ""} |`);
+    for (const s of b.skus) L.push(`| ${s.sku} | ${s.product} | ${s.country} | ${money(s.currentPrice, s.currency)} | ${s.low !== undefined ? `${s.low.toFixed(2)}–${money(s.high, s.currency)}${s.rangeLow !== undefined ? ` (+${s.rangeLow.toFixed(1)}–${s.rangeHigh!.toFixed(1)}%)` : ""}` : "-"} | ${money(s.atProposed, s.currency)}${s.verdict ? ` (${s.verdict})` : ""} | ${fmt(s.yoy)} ${s.period}${s.rateLabel ? ` · ${s.rateLabel}${s.coarser ? " (coarser)" : ""}` : ""} |`);
     L.push("");
   }
   L.push(`## By market`);
@@ -298,6 +309,6 @@ export function renderBrief(b: Brief): string {
   for (const q of b.sqlLog.filter((q) => q.id === b.compared.id || q.id === b.pricingQuery?.id || /^SELECT COUNT/.test(q.sql))) {
     L.push(`<details><summary>${q.id} · ${q.rows.length} rows · ${q.ms} ms</summary>\n\n\`\`\`sql\n${q.sql}\n\`\`\`\n</details>`);
   }
-  if (!b.narrative) L.push("", `_Narrative omitted: the model's text did not pass the number-grounding check, so only computed facts are shown._`);
+  if (!b.narrative) L.push("", `_Narrative omitted: ${b.narrativeIssue ? NARRATIVE_ISSUE[b.narrativeIssue] : "the model's text was not available"}, so only computed facts are shown._`);
   return L.join("\n");
 }

@@ -180,3 +180,84 @@ test("internal price list is joined, and 'same as last time' recalls the last re
   assert.match(b2.markdown!, /Since your last brief/);
   assert.match(b2.policySource!, /remembered/);
 });
+
+test("onboarding says whether Zetaris objects were created or already there, and PSIG_ZETARIS_NS gives fresh names", async () => {
+  const { onboardPlan } = await import("../src/sources/index.ts");
+  const { priceView } = await import("../src/sources/pricelist.ts");
+  const c: Candidate = { ...cand("DE", "food"), dataset: "prc_hicp_minr", code: "CP01" };
+  assert.equal(onboardPlan(c, "food").view, "v_de_food_prc_hicp_minr_cp01");
+  process.env.PSIG_ZETARIS_NS = "n1027";
+  try {
+    assert.equal(onboardPlan(c, "food").view, "v_de_food_prc_hicp_minr_cp01_n1027");
+    assert.equal(priceView(), "v_price_list_n1027");
+  } finally {
+    delete process.env.PSIG_ZETARIS_NS;
+  }
+  // A Zetaris that already has every object (as in the 26 Oct example runs): the trace must say so.
+  class ExistingZ extends FakeZ {
+    async run(sql: string): Promise<SqlResult> {
+      if (/^CREATE/.test(sql)) throw new Error("Zetaris error: table already exists");
+      return super.run(sql);
+    }
+  }
+  const agent = new PriceSignalAgent({
+    llm: async (m: any[]) => {
+      const last = m.at(-1).content as string;
+      if (last.startsWith("Extract")) return { text: '{"countries":["DE"],"concept":"food","proposed_change_pct":5}', model: "f", provider: "f", ms: 1 };
+      if (m[0].content.startsWith("You write short")) return { text: '{"headline":"ok","markets":{},"watch":"x"}', model: "f", provider: "f", ms: 1 };
+      return { text: '{"actions":[{"action":"discover_and_onboard","args":{"country":"DE","concept":"food"}},{"action":"discover_and_onboard","args":{"country":"DE","concept":"all_items"}}]}', model: "f", provider: "f", ms: 1 };
+    },
+    sql: new ExistingZ(),
+    memory: new AgentMemory(fs.mkdtempSync(path.join(os.tmpdir(), "psig-"))),
+    discoverFn: async (country: any, concept: string) => ({ country, concept, candidates: [{ ...cand(country, concept), dataset: "prc_hicp_minr", code: concept === "food" ? "CP01" : "TOTAL" }], notes: [] }),
+  });
+  const b = await agent.run("DE food +5%");
+  const titles = b.trace.map((e) => e.title);
+  assert.ok(titles.some((t) => /^already in Zetaris \(not created again\): CREATE LIGHTNING REST TABLE/.test(t)), titles.join("\n"));
+  assert.ok(titles.some((t) => /onboarded eurostat CP01 .*Zetaris already had it - reused and verified/.test(t)), titles.join("\n"));
+  assert.ok(!titles.some((t) => /created REST table/.test(t)));
+});
+
+test("a narrative lost to a provider error is not reported as a grounding failure", async () => {
+  // examples/02 on 26 Oct: HTTP 502 empty_response, then a timeout - the brief said "did not pass the number-grounding check".
+  const agent = new PriceSignalAgent({
+    llm: async (m: any[]) => {
+      const last = m.at(-1).content as string;
+      if (last.startsWith("Extract")) return { text: '{"countries":["DE"],"concept":"food","proposed_change_pct":5}', model: "f", provider: "f", ms: 1 };
+      if (m[0].content.startsWith("You write short")) throw new Error('HTTP 502: {"error":{"message":"/nvidia/nemotron-3.5-lightning_empty_response"}}');
+      return { text: '{"actions":[{"action":"discover_and_onboard","args":{"country":"DE","concept":"food"}},{"action":"discover_and_onboard","args":{"country":"DE","concept":"all_items"}}]}', model: "f", provider: "f", ms: 1 };
+    },
+    sql: new FakeZ(),
+    memory: new AgentMemory(fs.mkdtempSync(path.join(os.tmpdir(), "psig-"))),
+    discoverFn: async (country: any, concept: string) => ({ country, concept, candidates: [cand(country, concept)], notes: [] }),
+    onboardFn: async (_z: any, c: Candidate, concept: string) => ({ view: `v_${c.country.toLowerCase()}_${concept}`, table: "t", ok: true, existed: false, rows: 9, latest: "2026-09", sql: [] }),
+  });
+  const b = await agent.run("DE food +5%");
+  assert.equal(b.narrative, undefined);
+  assert.doesNotMatch(b.markdown!, /number-grounding/);
+  assert.match(b.markdown!, /Narrative omitted: the model provider returned an error or timed out/);
+});
+
+test("'same as last time' keeps the remembered proposal when the only new percentage is the pass-through", async () => {
+  const memory = new AgentMemory(fs.mkdtempSync(path.join(os.tmpdir(), "psig-")));
+  memory.rememberRequest({ countries: ["DE", "CA", "AU"], concept: "food", conceptWords: ["food"], proposedChangePct: 5, raw: "first" });
+  const parseWith = (reply: string | Error) => new PriceSignalAgent({ llm: async () => { if (reply instanceof Error) throw reply; return { text: reply, model: "f", provider: "f", ms: 1 }; }, sql: new FakeZ(), memory });
+  const a = await parseWith('{"countries":[],"concept":null,"proposed_change_pct":null,"pass_through":0.8}').parse("same as last time, but we pass on 80% now");
+  assert.equal(a.proposedChangePct, 5, "80% is the pass-through, not a +80% price change");
+  assert.equal(a.passThrough, 0.8);
+  // Model unavailable: the rules still tell a pass-through share from a proposed change.
+  const b = await parseWith(new Error("HTTP 502")).parse("same as last time but we pass thru like 60pct");
+  assert.equal(b.proposedChangePct, 5);
+  const c = await parseWith(new Error("HTTP 502")).parse("지난번이랑 같은 조건인데 3프로만 올리면?");
+  assert.equal(c.proposedChangePct, 3);
+  assert.deepEqual(c.countries, ["DE", "CA", "AU"]);
+  const d = await parseWith('{"countries":[],"proposed_change_pct":3}').parse("same as last time, but what if we only go +3%?");
+  assert.equal(d.proposedChangePct, 3);
+});
+
+test("a concept from the model cannot break the SQL literal it lands in; the trace names the runtime", async () => {
+  const agent = new PriceSignalAgent({ llm: async () => ({ text: `{"countries":["DE"],"concept":"Children's Snacks'; --","proposed_change_pct":4}`, model: "openrouter/nvidia/nemotron-3.5-lightning", provider: "meterless", ms: 1 }), sql: new FakeZ(), memory: new AgentMemory(fs.mkdtempSync(path.join(os.tmpdir(), "psig-"))) });
+  const r = await agent.parse("children's snacks in germany +4%");
+  assert.equal(r.concept, "childrens snacks --");
+  assert.ok(agent.trace.some((e) => e.title === "parsed request (openrouter/nvidia/nemotron-3.5-lightning, 1 ms via Meterless Nightshift)"), agent.trace.map((e) => e.title).join("\n"));
+});

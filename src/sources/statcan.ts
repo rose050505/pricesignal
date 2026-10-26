@@ -2,7 +2,7 @@
 // Zetaris's recipes tried are POST-only, so we use the GET method
 // getDataFromVectorByReferencePeriodRange; vectors are index numbers (2002=100)
 // and this adapter maps Canada to the Food and All-items vectors only.
-import { Candidate, Concept, Country, DiscoverResult, OnboardPlan, getJson, monthsBack, safeIdent } from "./types.ts";
+import { Candidate, Concept, Country, DiscoverResult, OnboardPlan, getJson, monthsBack, zetarisName } from "./types.ts";
 
 const BASE = "https://www150.statcan.gc.ca/t1/wds/rest";
 export const STATCAN_DB = "PSIG_STATCAN";
@@ -52,8 +52,8 @@ export async function discover(country: Country, concept: Concept): Promise<Disc
 }
 
 export function onboardSql(c: Candidate, concept: Concept): OnboardPlan {
-  const table = safeIdent("statcan", c.country, c.code, "live");
-  const view = safeIdent("v", c.country, concept, c.code, "live");
+  const table = zetarisName("statcan", c.country, c.code, "live");
+  const view = zetarisName("v", c.country, concept, c.code, "live");
   const label = c.label.replace(/'/g, "''");
   return {
     table,

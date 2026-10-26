@@ -83,6 +83,11 @@ export function safeIdent(...parts: string[]): string {
   return parts.join("_").toLowerCase().replace(/[^a-z0-9_]/g, "_").replace(/_+/g, "_").replace(/^_|_$/g, "");
 }
 
+/** Name of a Zetaris table or view. PSIG_ZETARIS_NS (optional) suffixes every name, so a run can register a fresh set of objects (a true cold start). */
+export function zetarisName(...parts: string[]): string {
+  return safeIdent(...parts, process.env.PSIG_ZETARIS_NS ?? "");
+}
+
 export function monthsBack(n: number, from = new Date()): string {
   const d = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth() - n, 1));
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;

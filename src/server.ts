@@ -95,7 +95,7 @@ const server = http.createServer(async (req, res) => {
 
 /** What the browser gets for a brief (also sent early, without the prose, as a "partial" event). */
 function toResult(b: Brief) {
-  return { markdown: b.markdown ?? "", facts: b.facts, notes: [...new Set(b.notes)], views: b.views, ms: b.ms, passThrough: b.passThrough, policySource: b.policySource, skus: b.skus ?? [], sinceLast: b.sinceLast ?? [], proposed: b.request.proposedChangePct ?? null, pricing: b.pricingQuery ? { id: b.pricingQuery.id, sql: b.pricingQuery.sql } : null, compared: { id: b.compared.id, sql: b.compared.sql, columns: COMPARE_COLUMNS, rows: b.compared.rows }, sql: b.sqlLog.map((q) => ({ id: q.id, sql: q.sql, rows: q.rows.length, ms: q.ms })) };
+  return { markdown: b.markdown ?? "", narrative: b.narrative ?? null, narrativeIssue: b.narrativeIssue ?? null, facts: b.facts, notes: [...new Set(b.notes)], views: b.views, ms: b.ms, passThrough: b.passThrough, policySource: b.policySource, skus: b.skus ?? [], sinceLast: b.sinceLast ?? [], proposed: b.request.proposedChangePct ?? null, pricing: b.pricingQuery ? { id: b.pricingQuery.id, sql: b.pricingQuery.sql } : null, compared: { id: b.compared.id, sql: b.compared.sql, columns: COMPARE_COLUMNS, rows: b.compared.rows }, sql: b.sqlLog.map((q) => ({ id: q.id, sql: q.sql, rows: q.rows.length, ms: q.ms })) };
 }
 
 server.listen(PORT, () => console.log(`[pricesignal] UI on http://localhost:${PORT}`));

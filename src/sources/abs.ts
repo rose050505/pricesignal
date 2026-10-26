@@ -1,7 +1,7 @@
 // Australian Bureau of Statistics CPI (SDMX-JSON). Fragmentation handled here:
 // index numbers rather than rates, a new monthly series alongside the
 // quarterly one, and finer categories (e.g. "Snacks and confectionery").
-import { Candidate, Concept, Country, CONCEPT_WORDS, DiscoverResult, OnboardPlan, getJson, labelScore, monthsBack, safeIdent } from "./types.ts";
+import { Candidate, Concept, Country, CONCEPT_WORDS, DiscoverResult, OnboardPlan, getJson, labelScore, monthsBack, zetarisName } from "./types.ts";
 
 const BASE = "https://data.api.abs.gov.au/rest";
 export const ABS_DB = "PSIG_ABS";
@@ -67,8 +67,8 @@ export async function discover(country: Country, concept: Concept, words = CONCE
 }
 
 export function onboardSql(c: Candidate, concept: Concept): OnboardPlan {
-  const table = safeIdent("abs", c.country, "cpi", c.code, c.frequency);
-  const view = safeIdent("v", c.country, concept, c.code);
+  const table = zetarisName("abs", c.country, "cpi", c.code, c.frequency);
+  const view = zetarisName("v", c.country, concept, c.code);
   const label = c.label.replace(/'/g, "''");
   const lag = c.frequency === "M" ? 12 : 4;
   return {
