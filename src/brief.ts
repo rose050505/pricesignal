@@ -51,7 +51,14 @@ export interface SkuLine {
   selectionFit?: "specific" | "broader";
 }
 
-export interface Narrative { headline: string; markets: Record<string, string>; watch?: string }
+export interface Narrative {
+  headline: string; markets: Record<string, string>; watch?: string;
+  /** Sentences the fact check removed from the model's draft, with the reasons. */
+  removed?: RemovedSentence[];
+  /** The draft's headline was removed, so the brief shows the headline computed in code. */
+  headlineByCode?: boolean;
+}
+export interface RemovedSentence { field: string; sentence: string; problems: string[] }
 
 /** Why a brief has no model-written prose. */
 export type NarrativeIssue = "grounding" | "unusable" | "provider" | "budget";
@@ -335,6 +342,20 @@ function unavailableCategoryErrors(text: string, f: MarketFacts, req: Request): 
   return bad;
 }
 
+/** "Canadian data absent" for a market whose requested series is in the facts is false; product-level SKU omissions are not market data. */
+function availableDataDenialErrors(text: string, f: MarketFacts, req: Request): string[] {
+  const bad: string[] = [];
+  for (const sentence of text.split(/(?<=[.!?;])\s+/)) {
+    if (/\b(?:SKUs?|products?|price list)\b/i.test(sentence)) continue;
+    if (!/\b(?:data|CPI|HICP|inflation|series|benchmark|verdict|figures?|statistics|release)\b/i.test(sentence)) continue;
+    const series = /all[ -]items|headline inflation/i.test(sentence) ? f.allItems : requestedSeries(f, req);
+    if (!series) continue;
+    const m = sentence.match(/\b(?:unavailable|not available|absent|missing|failed to respond|did not respond|no\s+(?:\w+\s+){0,2}(?:data|figures?|series|benchmark|verdict|release))\b/i);
+    if (m) bad.push(`data claimed missing although it is in the facts: ${m[0]}`);
+  }
+  return bad;
+}
+
 function checkCoverage(text: string, facts: MarketFacts[]): { text: string; errors: string[] } {
   const series = facts.flatMap((f) => [f.category, f.allItems]).filter((s): s is SeriesFacts => !!s);
   const errors: string[] = [];
@@ -455,6 +476,49 @@ function universalClaim(text: string, at: number): boolean {
   return /\b(?:all(?![ -](?:items|groups))|both|every(?:where)?|each|across)\b/i.test(sentence);
 }
 
+/** A bare number from the check ("3.4", "CA: 3.0") reads as a reason. */
+function plainProblem(p: string): string {
+  const m = p.match(/^(?:([A-Z]{2}): )?([+−-]?\d+(?:\.\d+)?)$/);
+  return m ? `${m[1] ? `${m[1]}: ` : ""}${m[2]} is not among the computed figures${m[1] ? ` for ${m[1]}` : ""}` : p;
+}
+
+/**
+ * Keep the sentences of a failed draft that pass the same checks on their own, when the remainder also passes
+ * as a whole. A failed headline is dropped whole (the brief then shows the code headline). Returns undefined
+ * when no market paragraph survives, so the brief falls back to the computed summary.
+ */
+export function salvageNarrative(n: Narrative, allowed: number[], facts: MarketFacts[], req: Request, policy?: number, extra: number[] = []): Narrative | undefined {
+  const placeholder = "Historical market comparison";
+  const check = (part: Partial<Narrative>) => checkNarrative({ headline: placeholder, markets: {}, ...part }, allowed, facts, req, policy, extra);
+  const removed: RemovedSentence[] = [];
+  const keep = (field: string, text: string, wrap: (t: string) => Partial<Narrative>) =>
+    text.split(/(?<=[.!?])\s+/).filter((sentence) => {
+      if (!sentence.trim()) return false;
+      const problems = check(wrap(sentence));
+      if (problems.length) removed.push({ field, sentence, problems: problems.map(plainProblem) });
+      return !problems.length;
+    }).join(" ");
+  let headline = typeof n.headline === "string" && n.headline.trim() ? n.headline : undefined;
+  if (headline !== undefined) {
+    const problems = check({ headline });
+    if (problems.length) {
+      removed.push({ field: "headline", sentence: headline, problems: problems.map(plainProblem) });
+      headline = undefined;
+    }
+  }
+  const markets: Record<string, string> = {};
+  for (const [code, text] of Object.entries(n.markets ?? {})) {
+    if (typeof text !== "string") continue;
+    const kept = keep(code, text, (t) => ({ markets: { [code]: t } }));
+    if (kept) markets[code] = kept;
+  }
+  const watch = typeof n.watch === "string" ? keep("watch", n.watch, (t) => ({ watch: t })) : "";
+  if (!Object.keys(markets).length) return undefined;
+  const out: Narrative = { headline: headline ?? placeholder, markets, ...(watch ? { watch } : {}) };
+  if (checkNarrative(out, allowed, facts, req, policy, extra).length) return undefined;
+  return { ...out, headline: headline ?? "", ...(headline === undefined ? { headlineByCode: true } : {}), removed };
+}
+
 /** The market a prose key refers to ("DE", "de", "Germany"). */
 export function marketKey(code: string): string {
   return normalizeCountry(code) ?? code.toUpperCase();
@@ -477,7 +541,7 @@ function unsupportedClaims(text: string): string[] {
 
 // Narrative adjectives supplement the request parser's names and ISO codes.
 const NARRATIVE_COUNTRY_ADJECTIVES: Record<string, Country> = {
-  german: "DE", australian: "AU", french: "FR", italian: "IT", spanish: "ES", belgian: "BE",
+  german: "DE", australian: "AU", aussie: "AU", canadian: "CA", french: "FR", italian: "IT", spanish: "ES", belgian: "BE",
   austrian: "AT", irish: "IE", portuguese: "PT", finnish: "FI", swedish: "SE", danish: "DK", polish: "PL",
 };
 
@@ -500,7 +564,9 @@ function namedCountryErrors(text: string, facts: MarketFacts[], req: Request, po
       const between = sentence.slice(previous.end, next.at);
       // "Germany and Canada: 2.2%" is one shared claim; "Germany: 1.4%, Canada: 2.2%"
       // and "1.4% in Germany and 2.2% in Canada" contain separate numeric clauses.
-      const separate = hasNumber(between) || (hasNumber(sentence.slice(cuts.at(-1), previous.at)) && hasNumber(sentence.slice(next.end)));
+      // "Re-check Canada's release, and re-check Australia's 3.0% pace": a comma or semicolon followed by a
+      // new clause also separates the claims, so the later rate is not charged to the earlier country.
+      const separate = hasNumber(between) || /(?:,\s*(?:and|but|while|whereas)\b|;)/i.test(between) || (hasNumber(sentence.slice(cuts.at(-1), previous.at)) && hasNumber(sentence.slice(next.end)));
       if (!separate) continue;
       const boundary = [...between.matchAll(/[,;]|\b(?:and|but|while|whereas|compared\s+with)\b/gi)].at(-1);
       cuts.push(boundary ? previous.end + boundary.index! + boundary[0].length : next.at);
@@ -518,6 +584,7 @@ function namedCountryErrors(text: string, facts: MarketFacts[], req: Request, po
           ...explicitSignErrors(clause, [...marketNumbers(f, req, policy, true), ...extra]),
           ...observedRateErrors(clause, f, req),
           ...unavailableCategoryErrors(clause, f, req),
+          ...availableDataDenialErrors(clause, f, req),
           ...rangeErrors(clause, f),
         ];
         bad.push(...errors.map((error) => `${country}: ${error}`));
@@ -529,7 +596,7 @@ function namedCountryErrors(text: string, facts: MarketFacts[], req: Request, po
 
 function internalPayloadErrors(text: string): string[] {
   // Markdown underscores are formatting boundaries even though JavaScript's \b treats them as word characters.
-  const keys = /(?<![\p{L}\p{N}])(?:benchmark_range_pct|suggested_range_pct|benchmark_basis|proposed_change_pct|pass_through_pct|pass_through_needed_pct|cost_need_pct|cost_vs_market|cost_share_pct|cost_share_basis|cost_increase_pct|cost_pass_through_pct|cost_input_needed|requested_category_available|requested_category|all_items_context_only|coverage_note|latestPeriod|latestYoy|avg12|yoy6Back|monthsStale|averageCount|averageExpected|averageLabel|allItems)(?![\p{L}\p{N}])/giu;
+  const keys = /(?<![\p{L}\p{N}])(?:benchmark_range_pct|suggested_range_pct|benchmark_basis|proposed_change_pct|pass_through_pct|pass_through_needed_pct|cost_need_pct|cost_vs_market|cost_share_pct|cost_share_basis|cost_increase_pct|cost_pass_through_pct|cost_input_needed|cost_scenario|sku_price_notes|requested_category_available|requested_category|all_items_context_only|coverage_note|latestPeriod|latestYoy|avg12|yoy6Back|monthsStale|averageCount|averageExpected|averageLabel|allItems)(?![\p{L}\p{N}])/giu;
   return [...text.matchAll(keys)].map((m) => `internal payload key in prose: ${m[0]}`);
 }
 
@@ -556,7 +623,7 @@ export function checkNarrative(n: Narrative, allowed: number[], facts?: MarketFa
       bad.push(...costPolicyErrors(text, f?.costNeed !== undefined));
       bad.push(...costTargetErrors(text, f?.costNeed !== undefined ? [f.costNeed] : []));
       bad.push(...namedCountryErrors(text, facts, req, policy, extra));
-      if (f) bad.push(...rangeErrors(text, f), ...verdictErrors(text, f), ...observedRateErrors(text, f, req), ...unavailableCategoryErrors(text, f, req));
+      if (f) bad.push(...rangeErrors(text, f), ...verdictErrors(text, f), ...observedRateErrors(text, f, req), ...unavailableCategoryErrors(text, f, req), ...availableDataDenialErrors(text, f, req));
     }
     if (typeof n.headline !== "string" || (n.watch !== undefined && typeof n.watch !== "string")) bad.push("headline or watch: not text");
     const general = [n.headline, n.watch ?? ""].join(" ");
@@ -650,7 +717,7 @@ export function renderBrief(b: Brief): string {
     L.push(`**None of the markets in this question is covered yet.**`, "", `## Fragmentation the agent found`, ...mergeNotes(b.notes).map((n) => `- ${n}`));
     return L.join("\n");
   }
-  const headline = b.narrative?.headline ?? fallbackHeadline(b);
+  const headline = (b.narrative?.headlineByCode ? undefined : b.narrative?.headline) ?? fallbackHeadline(b);
   if (headline) L.push(`**${headline}**`, "");
   L.push(`${req.invalidPassThrough ? "Cost policy unavailable: provide a valid pass-through percentage from 0% to 100%" : `Cost policy: recover ${Math.round(b.passThrough * 100)}% of incremental unit cost${b.policySource ? ` (${b.policySource})` : ""}`}${req.proposedChangePct !== undefined ? ` · proposed change: ${signedPct(req.proposedChangePct)}` : ""}. This policy does not scale the market benchmark.`, "");
   if (req.costIncreasePct !== undefined) {
@@ -729,6 +796,12 @@ export function renderBrief(b: Brief): string {
     L.push("");
   }
   if (b.narrative?.watch) L.push(`**Watch:** ${b.narrative.watch}`, "");
+  const removed = b.narrative?.removed ?? [];
+  if (removed.length) {
+    L.push(`## Fact check`, `Fact check removed ${removed.length} sentence${removed.length === 1 ? "" : "s"} from Nemotron's draft because ${removed.length === 1 ? "it" : "they"} contradicted the computed facts${b.narrative?.headlineByCode ? "; the headline above is computed in code" : ""}. The remaining sentences passed the same checks.`, "");
+    for (const r of removed) L.push(`- ${r.field}: ~~${r.sentence.replace(/~/g, "")}~~ — ${r.problems.slice(0, 2).join("; ")}`);
+    L.push("");
+  }
   L.push(`## Evidence`);
   L.push(`Views: ${b.views.map((v) => `\`psig.${v.view}\` (${v.via})`).join(", ")}`, "");
   for (const q of b.sqlLog.filter((q) => q.id === b.compared.id || q.id === b.pricingQuery?.id || /^SELECT COUNT/.test(q.sql))) {

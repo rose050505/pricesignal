@@ -1,0 +1,520 @@
+{
+ "source": "Live UI run 27 Oct 2026 09:03 KST (demo question 1) and real Nemotron narrative drafts replayed on its facts",
+ "question": "our gochujang & snacks: is food inflation in deutschland, canada & aus still running hot?? thinking +5% for Q1, too much? we usually pass on ~70% of cost increases",
+ "requestedCountries": [
+  "DE",
+  "CA",
+  "AU"
+ ],
+ "concept": "food",
+ "proposed": 5,
+ "passThrough": 0.7,
+ "facts": [
+  {
+   "country": "DE",
+   "agency": "Eurostat (HICP)",
+   "category": {
+    "concept": "food",
+    "label": "Food and non-alcoholic beverages",
+    "frequency": "M",
+    "sourceId": "eurostat:prc_hicp_minr:CP01:RCH_A",
+    "latestPeriod": "2026-09",
+    "latestYoy": 0.4,
+    "avg12": 1.4,
+    "averageCount": 12,
+    "averageExpected": 12,
+    "averageLabel": "12 of 12 monthly observations",
+    "yoy6Back": 1.5,
+    "trend": "easing",
+    "points": [
+     {
+      "period": "2025-07",
+      "yoy": 2.6
+     },
+     {
+      "period": "2025-08",
+      "yoy": 3.1
+     },
+     {
+      "period": "2025-09",
+      "yoy": 2.8
+     },
+     {
+      "period": "2025-10",
+      "yoy": 2
+     },
+     {
+      "period": "2025-11",
+      "yoy": 1.9
+     },
+     {
+      "period": "2025-12",
+      "yoy": 1.7
+     },
+     {
+      "period": "2026-01",
+      "yoy": 2.9
+     },
+     {
+      "period": "2026-02",
+      "yoy": 1.9
+     },
+     {
+      "period": "2026-03",
+      "yoy": 1.5
+     },
+     {
+      "period": "2026-04",
+      "yoy": 1.7
+     },
+     {
+      "period": "2026-05",
+      "yoy": 1
+     },
+     {
+      "period": "2026-06",
+      "yoy": 0.8
+     },
+     {
+      "period": "2026-07",
+      "yoy": 0.6
+     },
+     {
+      "period": "2026-08",
+      "yoy": 0.2
+     },
+     {
+      "period": "2026-09",
+      "yoy": 0.4
+     }
+    ]
+   },
+   "allItems": {
+    "concept": "all_items",
+    "label": "Total",
+    "frequency": "M",
+    "sourceId": "eurostat:prc_hicp_minr:TOTAL:RCH_A",
+    "latestPeriod": "2026-09",
+    "latestYoy": 3.3,
+    "avg12": 2.6,
+    "averageCount": 12,
+    "averageExpected": 12,
+    "averageLabel": "12 of 12 monthly observations",
+    "yoy6Back": 2.8,
+    "trend": "rising",
+    "points": [
+     {
+      "period": "2025-07",
+      "yoy": 1.9
+     },
+     {
+      "period": "2025-08",
+      "yoy": 2
+     },
+     {
+      "period": "2025-09",
+      "yoy": 2.3
+     },
+     {
+      "period": "2025-10",
+      "yoy": 2.3
+     },
+     {
+      "period": "2025-11",
+      "yoy": 2.5
+     },
+     {
+      "period": "2025-12",
+      "yoy": 2
+     },
+     {
+      "period": "2026-01",
+      "yoy": 2.1
+     },
+     {
+      "period": "2026-02",
+      "yoy": 2
+     },
+     {
+      "period": "2026-03",
+      "yoy": 2.8
+     },
+     {
+      "period": "2026-04",
+      "yoy": 2.9
+     },
+     {
+      "period": "2026-05",
+      "yoy": 2.7
+     },
+     {
+      "period": "2026-06",
+      "yoy": 2.4
+     },
+     {
+      "period": "2026-07",
+      "yoy": 2.8
+     },
+     {
+      "period": "2026-08",
+      "yoy": 2.9
+     },
+     {
+      "period": "2026-09",
+      "yoy": 3.3
+     }
+    ]
+   },
+   "cite": "Q19",
+   "monthsStale": 1,
+   "suggested": {
+    "low": 0.4,
+    "high": 1.4,
+    "basis": "Food and non-alcoholic beverages historical market benchmark: latest 0.4% and average 1.4% (12 of 12 monthly observations)"
+   },
+   "verdict": "above the market benchmark"
+  },
+  {
+   "country": "CA",
+   "agency": "Statistics Canada (CPI)",
+   "category": {
+    "concept": "food",
+    "label": "Food",
+    "frequency": "M",
+    "sourceId": "statcan:18100004:v41690974",
+    "latestPeriod": "2026-09",
+    "latestYoy": 2.2,
+    "avg12": 4.1,
+    "averageCount": 12,
+    "averageExpected": 12,
+    "averageLabel": "12 of 12 monthly observations",
+    "yoy6Back": 4,
+    "trend": "easing",
+    "points": [
+     {
+      "period": "2025-08",
+      "yoy": 3.4
+     },
+     {
+      "period": "2025-09",
+      "yoy": 3.8
+     },
+     {
+      "period": "2025-10",
+      "yoy": 3.4
+     },
+     {
+      "period": "2025-11",
+      "yoy": 4.2
+     },
+     {
+      "period": "2025-12",
+      "yoy": 6.2
+     },
+     {
+      "period": "2026-01",
+      "yoy": 7.3
+     },
+     {
+      "period": "2026-02",
+      "yoy": 5.4
+     },
+     {
+      "period": "2026-03",
+      "yoy": 4
+     },
+     {
+      "period": "2026-04",
+      "yoy": 3.5
+     },
+     {
+      "period": "2026-05",
+      "yoy": 3.8
+     },
+     {
+      "period": "2026-06",
+      "yoy": 3.5
+     },
+     {
+      "period": "2026-07",
+      "yoy": 3.1
+     },
+     {
+      "period": "2026-08",
+      "yoy": 2.9
+     },
+     {
+      "period": "2026-09",
+      "yoy": 2.2
+     }
+    ]
+   },
+   "allItems": {
+    "concept": "all_items",
+    "label": "All-items",
+    "frequency": "M",
+    "sourceId": "statcan:18100004:v41690973",
+    "latestPeriod": "2026-09",
+    "latestYoy": 3.1,
+    "avg12": 2.6,
+    "averageCount": 12,
+    "averageExpected": 12,
+    "averageLabel": "12 of 12 monthly observations",
+    "yoy6Back": 2.4,
+    "trend": "rising",
+    "points": [
+     {
+      "period": "2025-08",
+      "yoy": 1.9
+     },
+     {
+      "period": "2025-09",
+      "yoy": 2.4
+     },
+     {
+      "period": "2025-10",
+      "yoy": 2.2
+     },
+     {
+      "period": "2025-11",
+      "yoy": 2.2
+     },
+     {
+      "period": "2025-12",
+      "yoy": 2.4
+     },
+     {
+      "period": "2026-01",
+      "yoy": 2.3
+     },
+     {
+      "period": "2026-02",
+      "yoy": 1.8
+     },
+     {
+      "period": "2026-03",
+      "yoy": 2.4
+     },
+     {
+      "period": "2026-04",
+      "yoy": 2.8
+     },
+     {
+      "period": "2026-05",
+      "yoy": 3.2
+     },
+     {
+      "period": "2026-06",
+      "yoy": 2.8
+     },
+     {
+      "period": "2026-07",
+      "yoy": 3
+     },
+     {
+      "period": "2026-08",
+      "yoy": 3
+     },
+     {
+      "period": "2026-09",
+      "yoy": 3.1
+     }
+    ]
+   },
+   "cite": "Q19",
+   "monthsStale": 1,
+   "suggested": {
+    "low": 2.2,
+    "high": 4.1,
+    "basis": "Food historical market benchmark: latest 2.2% and average 4.1% (12 of 12 monthly observations)"
+   },
+   "verdict": "above the market benchmark"
+  },
+  {
+   "country": "AU",
+   "agency": "Australian Bureau of Statistics (CPI)",
+   "category": {
+    "concept": "food",
+    "label": "Food and non-alcoholic beverages",
+    "frequency": "M",
+    "sourceId": "abs:CPI:1.20001.10.50.M",
+    "latestPeriod": "2026-08",
+    "latestYoy": 3,
+    "avg12": 3.2,
+    "averageCount": 12,
+    "averageExpected": 12,
+    "averageLabel": "12 of 12 monthly observations",
+    "yoy6Back": 3.1,
+    "trend": "flat",
+    "points": [
+     {
+      "period": "2025-08",
+      "yoy": 3
+     },
+     {
+      "period": "2025-09",
+      "yoy": 3.2
+     },
+     {
+      "period": "2025-10",
+      "yoy": 3.2
+     },
+     {
+      "period": "2025-11",
+      "yoy": 3.3
+     },
+     {
+      "period": "2025-12",
+      "yoy": 3.4
+     },
+     {
+      "period": "2026-01",
+      "yoy": 3.1
+     },
+     {
+      "period": "2026-02",
+      "yoy": 3.1
+     },
+     {
+      "period": "2026-03",
+      "yoy": 3.1
+     },
+     {
+      "period": "2026-04",
+      "yoy": 2.8
+     },
+     {
+      "period": "2026-05",
+      "yoy": 3.3
+     },
+     {
+      "period": "2026-06",
+      "yoy": 3.3
+     },
+     {
+      "period": "2026-07",
+      "yoy": 3.2
+     },
+     {
+      "period": "2026-08",
+      "yoy": 3
+     }
+    ]
+   },
+   "allItems": {
+    "concept": "all_items",
+    "label": "All groups CPI",
+    "frequency": "M",
+    "sourceId": "abs:CPI:1.10001.10.50.M",
+    "latestPeriod": "2026-08",
+    "latestYoy": 4,
+    "avg12": 3.8,
+    "averageCount": 12,
+    "averageExpected": 12,
+    "averageLabel": "12 of 12 monthly observations",
+    "yoy6Back": 3.7,
+    "trend": "flat",
+    "points": [
+     {
+      "period": "2025-08",
+      "yoy": 3.2
+     },
+     {
+      "period": "2025-09",
+      "yoy": 3.6
+     },
+     {
+      "period": "2025-10",
+      "yoy": 3.8
+     },
+     {
+      "period": "2025-11",
+      "yoy": 3.4
+     },
+     {
+      "period": "2025-12",
+      "yoy": 3.8
+     },
+     {
+      "period": "2026-01",
+      "yoy": 3.8
+     },
+     {
+      "period": "2026-02",
+      "yoy": 3.7
+     },
+     {
+      "period": "2026-03",
+      "yoy": 4.6
+     },
+     {
+      "period": "2026-04",
+      "yoy": 4.2
+     },
+     {
+      "period": "2026-05",
+      "yoy": 4
+     },
+     {
+      "period": "2026-06",
+      "yoy": 3.8
+     },
+     {
+      "period": "2026-07",
+      "yoy": 3.5
+     },
+     {
+      "period": "2026-08",
+      "yoy": 4
+     }
+    ]
+   },
+   "cite": "Q19",
+   "monthsStale": 2,
+   "suggested": {
+    "low": 3,
+    "high": 3.2,
+    "basis": "Food and non-alcoholic beverages historical market benchmark: latest 3% and average 3.2% (12 of 12 monthly observations)"
+   },
+   "verdict": "above the market benchmark"
+  }
+ ],
+ "notes": [
+  "DE: Eurostat prc_hicp_manr looks discontinued (no data after 2025-12 (10 months ago); last period 2025-12); switched to its successor prc_hicp_minr.",
+  "AU condiments: Food and non-alcoholic beverages is used as a broader category proxy (coarser) for these products; a product-specific selection was unavailable or unusable.",
+  "CA condiments: For Canada this agent maps only StatCan's \"Food\" and \"All-items\" CPI vectors, so \"condiments\" is compared at the Food level (coarser than the other markets). Food is used as a broader category proxy (coarser) for these products; a product-specific selection was unavailable or unusable.",
+  "DE condiments: Eurostat prc_hicp_manr looks discontinued (no data after 2025-12 (10 months ago); last period 2025-12); switched to its successor prc_hicp_minr. Food and non-alcoholic beverages is used as a broader category proxy (coarser) for these products; a product-specific selection was unavailable or unusable.",
+  "AU snacks: Food and non-alcoholic beverages is used as a broader category proxy (coarser) for these products; a product-specific selection was unavailable or unusable.",
+  "DE snacks: Eurostat prc_hicp_manr looks discontinued (no data after 2025-12 (10 months ago); last period 2025-12); switched to its successor prc_hicp_minr. Food and non-alcoholic beverages is used as a broader category proxy (coarser) for these products; a product-specific selection was unavailable or unusable.",
+  "CA snacks: the selected series and Food fallback are unavailable; these SKU prices are omitted."
+ ],
+ "drafts": {
+  "costInvented": {
+   "headline": "Euro food CPI cools; Canadian data absent; Aussie flat at 3.0%",
+   "markets": {
+    "DE": "German food CPI was 0.4% YoY in September 2026, with a 12-month average of 1.4% and an easing trend. The proposed +5% price change sits above the market benchmark range 0.4–1.4%. A cost need of 3.4% with 70% pass-through also exceeds the benchmark, making +5% clearly above the evidence.",
+    "CA": "Canadian food CPI rose 2.2% YoY in September 2026, with a 12-month average of 4.1% and an easing trend. The proposed +5% price change sits above the market benchmark range 2.2–4.1%. A cost need of 3.4% with 70% pass-through also exceeds the benchmark, confirming +5% is above the market benchmark.",
+    "AU": "Australian food and non-alcoholic beverages CPI was 3.0% YoY in August 2026, with a 12-month average of 3.2% and a flat trend. The proposed +5% price change sits above the market benchmark range 3–3.2%. A cost need of 3.4% with 70% pass-through also exceeds the benchmark, confirming +5% is above the market benchmark."
+   },
+   "watch": "Re-check Canada's October 2026 food CPI print to confirm series availability, and re-check Australia's September 2026 food CPI to verify the 3.0% YoY pace persists."
+  },
+  "canadaDenied": {
+   "headline": "Euro food CPI cools; Canadian data absent; Aussie flat at 3.0%",
+   "markets": {
+    "DE": "German food CPI was 0.4% YoY in September 2026, with a 12-month average of 1.4% and an easing trend. The proposed +5% price change sits above the market benchmark range 0.4–1.4%. The cost policy does not scale the market benchmark; it applies only to a separate cost-recovery scenario.",
+    "CA": "Canadian food CPI data is unavailable; Statistics Canada failed to respond for both food and all-items series. No benchmark or verdict can be assigned.",
+    "AU": "Australian food and non-alcoholic beverages CPI was 3.0% YoY in August 2026, with a 12-month average of 3.2% and a flat trend. The proposed +5% price change sits above the market benchmark range 3–3.2%. A cost need of 3.4% with 70% pass-through also exceeds the benchmark, confirming +5% is above the market benchmark."
+   },
+   "watch": "Re-check Canada's October 2026 food CPI print to confirm series availability, and re-check Australia's September 2026 food CPI to verify the 3.0% YoY pace persists."
+  },
+  "headlineOnly": {
+   "headline": "Euro food CPI cools; Canadian data absent; Aussie flat at 3.0%, all above +5% benchmark",
+   "markets": {
+    "DE": "German food CPI was 0.4% YoY in September 2026, with a 12-month average of 1.4% and an easing trend. The proposed +5% price change sits above the market benchmark range 0.4–1.4%, making +5% clearly above the evidence.",
+    "CA": "Canadian food CPI rose 2.2% YoY in September 2026, with a 12-month average of 4.1% and an easing trend. The proposed +5% price change sits above the market benchmark range 2.2–4.1%, confirming +5% is above the market benchmark.",
+    "AU": "Australian food and non-alcoholic beverages CPI was 3.0% YoY in August 2026, with a 12-month average of 3.2% and a flat trend. The proposed +5% price change sits above the market benchmark range 3–3.2%, confirming +5% is above the market benchmark."
+   },
+   "watch": "Re-check Canada's October 2026 food CPI print to confirm series availability, and re-check Australia's September 2026 food CPI to verify the 3.0% YoY pace persists."
+  }
+ }
+}
