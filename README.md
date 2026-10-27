@@ -6,9 +6,11 @@
 
 Open Agent Hackathon 2026 · Track 01 — Solving Fragmented Intelligence · built with **Zetaris**, **Meterless** (Nightshift runtime + H-MEM engine) and **NVIDIA Nemotron** (via Nightshift).
 
-**Video:** (link added after upload) · **Recorded runs you can replay without any keys:** [rose050505.github.io/pricesignal](https://rose050505.github.io/pricesignal/) · [examples/](examples/) · [How each sponsor is used](#sponsor-technology)
+**Video:** [YouTube demo, 3 min](https://youtu.be/XjbFIqRgQWk) · **Recorded runs you can replay without any keys:** [rose050505.github.io/pricesignal](https://rose050505.github.io/pricesignal/) · [examples/](examples/) · [How each sponsor is used](#sponsor-technology)
 
 **17 markets:** 14 EU members through Eurostat, Canada through Statistics Canada, Australia through the ABS, and the United States through the Bureau of Labor Statistics (BLS). The demo uses Germany, Canada and Australia.
+
+Eurostat's usual dataset `prc_hicp_manr` stopped at 2025-12; the agent's successor map registers `prc_hicp_minr` instead (trace: `psig.v_de_food_prc_hicp_minr_cp01`).
 
 | Sponsor | What it does here | Where you see it |
 |---|---|---|
@@ -20,6 +22,7 @@ Open Agent Hackathon 2026 · Track 01 — Solving Fragmented Intelligence · bui
 **See it without Zetaris, Nightshift or keys:** open the [replay of the recorded runs](https://rose050505.github.io/pricesignal/) (the real UI, fed by eight recorded traces and results; no keys needed, no live calls), or run it locally:
 
 ```bash
+# Node 20+; replay and verify need no services or keys
 npm install
 npm run demo                                              # http://localhost:5179: the same replay
 npm run verify -- examples/01_cold_start/evidence.json    # re-derives the benchmarks, verdicts and SKU prices from the saved SQL rows
