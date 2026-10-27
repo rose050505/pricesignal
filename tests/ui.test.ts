@@ -176,7 +176,7 @@ test('SKU choices distinguish a model match, remembered match and an unconfirmed
 });
 
 test("Nemotron's product-category choice and its reason are visible in the SKU table, not folded away", () => {
-  // Independent judge review, 27 Oct 18:15: the most agentic Nemotron step was hidden in a collapsed row.
+  // Until 27 Oct 18:30 the most agentic Nemotron step was hidden in a collapsed row.
   const b=browser();
   const sku={sku:'GCJ-500',product:'Gochujang 500 g',country:'AU',currentPrice:8.5,currency:'AUD',yoy:1.3,period:'2026-08',rateLabel:'Food additives and condiments',selectionFit:'specific',selectionReason:'Covers condiment and sauce products.'};
   b.context.sample={...result(),skus:[{...sku,selectionSource:'model'}]};

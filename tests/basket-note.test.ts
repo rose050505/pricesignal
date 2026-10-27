@@ -1,4 +1,4 @@
-// "Food" is not the same basket everywhere (judge Impact review, 27 Oct 13:18, -2): StatCan's Food index includes
+// "Food" is not the same basket everywhere: StatCan's Food index includes
 // food purchased from restaurants (v41691046 sits under v41690974) and ABS's Food and non-alcoholic beverages group
 // includes Meals out and take away foods, while Eurostat's COICOP 01 excludes restaurants (they are in division 11).
 // The brief and the result card say so when one comparison mixes the two kinds.
@@ -6,6 +6,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { basketNote, renderBrief } from "../src/brief.ts";
+import { toResult } from "../src/result.ts";
 import type { Request } from "../src/agent.ts";
 
 const series = (sourceId: string, label: string) => ({ concept: "food", label, frequency: "M", sourceId, latestPeriod: "2026-09", latestYoy: 1, avg12: 1, averageCount: 12, averageExpected: 12 as const, averageLabel: "12 of 12 monthly observations", trend: "flat" as const, points: [] });
@@ -31,8 +32,7 @@ test("no note when every series has the same scope, for other categories, or for
 test("the brief and the result card carry the note", () => {
   const b: any = { request: req, facts: [DE, CA, AU], notes: [], passThrough: 0.7, compared: { id: "Q1", sql: "", columns: [], rows: [], ms: 0 }, sqlLog: [], views: [], ms: 1, trace: [] };
   assert.match(renderBrief(b), /^Basket note: the CA \(StatCan Food\) and AU/m);
-  const server = fs.readFileSync(new URL("../src/result.ts", import.meta.url), "utf8");
-  assert.match(server, /basket: b\.facts\.length \? basketNote\(b\.facts, b\.request\) \?\? null : null/);
+  assert.equal(toResult(b).basket, basketNote(b.facts, req));
   const html = fs.readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
   // At the decision point, beside the interpreted category - not folded into the method details.
   assert.match(html, /not a forecast or a recommended price\.\$\{r\.basket\?` \$\{esc\(r\.basket\)\}`:""\}<\/div><details class="method">/);

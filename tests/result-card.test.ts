@@ -1,5 +1,5 @@
-// What the judge sees in the 4-minute video (independent demo review, 27 Oct 12:30): the answer as soon as the
-// numbers arrive, accurate on-screen wording, the cost-recovery conclusion, and a readable live trace.
+// The result card: the answer as soon as the numbers arrive, accurate on-screen wording, the cost-recovery
+// conclusion, and a readable live trace.
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";

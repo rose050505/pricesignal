@@ -1,4 +1,4 @@
-// What a judge sees while the run is in progress and in the first seconds of the answer.
+// What a user sees while the run is in progress and in the first seconds of the answer.
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";

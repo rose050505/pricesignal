@@ -1,10 +1,11 @@
-// "Too much?" also needs the other side: which change would sit inside every market benchmark (independent judge
-// review, 27 Oct 18:15: the answer stops at "above" and never says how much fits). Benchmark tops restated, not advice.
+// "Too much?" also needs the other side: which change would sit inside every market benchmark (before 27 Oct 18:30
+// the answer stopped at "above" and never said how much fits). Benchmark tops restated, not advice.
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
 import { buildFacts, fitSummary, renderBrief } from "../src/brief.ts";
+import { toResult } from "../src/result.ts";
 import type { Request } from "../src/agent.ts";
 
 const rows = [["DE", 2.4, 0.4], ["CA", 4.0, 2.2], ["AU", 3.4, 3.0]].flatMap(([country, prior, latest]) => [
@@ -47,7 +48,9 @@ test("the brief and the result card show the line under How far", () => {
   assert.match(node("#out").innerHTML, /<p class="gap">How far: x<\/p><p class="gap">No single change is within every market benchmark: the DE top \(1\.4%\) is below the AU bottom \(3\.0%\)\./);
 });
 
-test("the server sends the line with the result", () => {
-  const server = fs.readFileSync(new URL("../src/result.ts", import.meta.url), "utf8");
-  assert.match(server, /fit: b\.facts\.length \? fitSummary\(b\) \?\? null : null/);
+test("the result the UI receives carries the line", () => {
+  const b = { ...brief(base), compared: { id: "Q1", sql: "", columns: [], rows: [], ms: 0 }, sqlLog: [], views: [], notes: [], ms: 1 };
+  assert.equal(toResult(b).fit, fitSummary(b));
+  assert.match(String(toResult(b).fit), /^No single change is within every market benchmark/);
+  assert.equal(toResult({ ...b, facts: [] }).fit, null);
 });

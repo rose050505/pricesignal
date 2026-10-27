@@ -1,5 +1,5 @@
 // A proposal written as a range ("3-4%") or in words ("four percent") used to vanish without a word
-// (independent judge review, 27 Oct 14:00). A range is reported, like several proposals; a number word is used
+// (until 27 Oct 14:00). A range is reported, like several proposals; a number word is used
 // only when Nemotron read the same number from the request.
 import { test } from "node:test";
 import assert from "node:assert/strict";
