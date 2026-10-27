@@ -252,7 +252,9 @@ Verification replays market means and observation counts, benchmarks, proposal a
 ## Repository layout
 
 ```
-src/agent.ts          request parsing, planner actions, guardrails
+src/agent.ts          the agent loop: planner actions, guardrails, onboarding, comparison, pricing, narrative
+src/request.ts        rules that read the request: markets, category, every percentage and what it means
+src/json-reply.ts     JSON out of model replies (fenced, cut off at the token limit, common slips)
 src/prompts.ts        every instruction sent to Nemotron (planner, request reading, narrative, headline rewrite)
 src/cli.ts            npm run ask; writes out/<time>/brief.md, trace.json, evidence.json, result.json
 src/result.ts         the result payload the UI renders (live and replayed)
