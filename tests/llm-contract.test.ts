@@ -9,13 +9,14 @@ import { chat, providerStatus } from "../src/llm.ts";
 
 process.env.PSIG_VERBOSE = "0";
 
-type Seen = { method: string; url: string; headers: http.IncomingHttpHeaders };
+type Seen = { method: string; url: string; headers: http.IncomingHttpHeaders; body: string };
 async function fakeNightshift(handler: (req: Seen, n: number) => { status: number; body: unknown }) {
   const seen: Seen[] = [];
   const server = http.createServer((req, res) => {
-    req.resume();
+    let raw = "";
+    req.on("data", (c) => (raw += c));
     req.on("end", () => {
-      const s = { method: req.method!, url: req.url!, headers: req.headers };
+      const s = { method: req.method!, url: req.url!, headers: req.headers, body: raw };
       seen.push(s);
       const { status, body } = handler(s, seen.length);
       res.writeHead(status, { "content-type": "application/json" });
@@ -72,6 +73,33 @@ test("chat carries the token, the app header and the user scope, and returns the
     assert.equal(h["meterless-scope"], "user");
     assert.equal(r.model, "openrouter/nvidia/nemotron-3.5-lightning");
     assert.equal(r.provider, "meterless");
+  } finally {
+    await ns.close();
+  }
+});
+
+test("chat asks Nemotron to skip its hidden reasoning pass (chat template switch), unless PSIG_NO_THINK=0", async () => {
+  // Measured 27 Oct 18:20 through Nightshift: the same parse request took 4-7 s and 1.2-1.8k output tokens with
+  // only /no_think and reasoning-effort hints, and 0.7-1.3 s and 49-60 tokens with enable_thinking=false.
+  const ns = await fakeNightshift(() => ({ status: 200, body: completion }));
+  try {
+    await chat([{ role: "user", content: "hi" }], { attempts: 1, timeoutMs: 5_000 });
+    assert.deepEqual(JSON.parse(ns.seen[0].body).chat_template_kwargs, { enable_thinking: false });
+    process.env.PSIG_NO_THINK = "0";
+    await chat([{ role: "user", content: "hi" }], { attempts: 1, timeoutMs: 5_000 });
+    assert.equal(JSON.parse(ns.seen[1].body).chat_template_kwargs, undefined);
+  } finally {
+    delete process.env.PSIG_NO_THINK;
+    await ns.close();
+  }
+});
+
+test("a runtime that rejects the chat template switch gets the request again without it", async () => {
+  const ns = await fakeNightshift((s) => (JSON.parse(s.body).chat_template_kwargs ? { status: 400, body: { error: "unrecognized field: chat_template_kwargs" } } : { status: 200, body: completion }));
+  try {
+    const r = await chat([{ role: "user", content: "hi" }], { attempts: 1, timeoutMs: 5_000 });
+    assert.equal(r.text, '{"ok":true}');
+    assert.equal(ns.seen.length, 2);
   } finally {
     await ns.close();
   }

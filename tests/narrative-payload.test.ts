@@ -68,6 +68,9 @@ test("a comma-and clause boundary keeps a later country's rate out of an earlier
   // Seen in 10/10 real replays on 27 Oct: AU's 3.0% was charged to Canada.
   assert.deepEqual(check("Re-check Canada's October 2026 food CPI print to confirm series availability, and re-check Australia's September 2026 food CPI to verify the 3.0% YoY pace persists."), []);
   assert.deepEqual(check("Watch Canada's next release; Australia's food inflation is 3% YoY."), []);
+  // Nemotron with thinking off, 27 Oct 18:30 (5 of 5 replays): "and whether" starts a new clause too.
+  assert.deepEqual(check("Re-check the October/November food prints next month, especially whether Canada's food easing continues and whether Australia's flat 3% trend breaks either way."), []);
+  assert.deepEqual(check("Watch if Canada's food prices keep easing or if Australia's 3% pace holds."), []);
   // Still one shared claim, so each named country must fit it.
   assert.ok(check("Canada and Australia food inflation is 3% YoY.").length);
   assert.ok(check("Re-check Canada's next release, and Canada's food inflation of 3% YoY.").length);

@@ -32,6 +32,11 @@ test("a false headline is replaced by the code headline and the market paragraph
   assert.deepEqual(check({ ...s, headline: "Historical market comparison" }), []);
 });
 
+test("a salvaged draft keeps the model that wrote it, so the UI names the Nemotron endpoint", () => {
+  const s = salvage({ ...fx.drafts.headlineOnly, model: "nvidia/nemotron-3.5-lightning-30b-a3b" })!;
+  assert.equal(s.model, "nvidia/nemotron-3.5-lightning-30b-a3b");
+});
+
 test("invented cost sentences are removed one by one and the rest of each paragraph stays", () => {
   const s = salvage(fx.drafts.costInvented)!;
   assert.ok(s, "salvaged");

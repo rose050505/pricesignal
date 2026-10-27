@@ -2,7 +2,7 @@
 // Meterless provider contract: OpenAI-compatible /v1, Bearer runtime token,
 // `meterless-app` on every request, `meterless-scope: user` on chat,
 // GET /v1/models decides online/unauthorized/offline (15 s). Chat calls default to a
-// 90 s limit; the agent sets 20-75 s per call. Optional reasoning-effort and
+// 90 s limit; the agent sets 20-75 s per call. Optional thinking-off, reasoning-effort and
 // throughput hints are sent and dropped automatically if the runtime rejects them.
 // `nvidia` (build.nvidia.com) and `openrouter` exist only as development fallbacks.
 import { env } from "./env.ts";
@@ -17,6 +17,10 @@ const TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS || 90_000);
 // Ask for low effort on every provider (OpenAI-style and OpenRouter-style fields). If a runtime
 // rejects the extra fields, drop them once and keep going.
 let sendReasoningHint = (process.env.PSIG_REASONING_EFFORT ?? "low") !== "off";
+// Nemotron's chat template switch. Through Nightshift it is the field that takes effect: measured 27 Oct, the
+// parse request fell from 4-7 s and 1.2-1.8k output tokens (with /no_think and effort hints only) to 0.7-1.3 s
+// and about 50 tokens. Dropped once if a runtime rejects the field.
+let sendThinkingSwitch = true;
 
 /** Whether a rejected request blamed the optional reasoning fields (only then is it worth resending without them). */
 export function rejectsReasoningHint(status: number, body: string): boolean {
@@ -102,7 +106,8 @@ export async function chat(messages: ChatMessage[], opts: { lane?: "fast" | "dee
   let lastErr: unknown;
   // Nemotron models accept "/no_think" in the system prompt to skip the hidden reasoning pass,
   // which otherwise costs 1-4k tokens (30-60 s on slower upstreams) per call.
-  if ((process.env.PSIG_NO_THINK ?? "1") !== "0") {
+  const noThink = (process.env.PSIG_NO_THINK ?? "1") !== "0";
+  if (noThink) {
     messages = messages[0]?.role === "system"
       ? [{ ...messages[0], content: `/no_think\n${messages[0].content}` }, ...messages.slice(1)]
       : [{ role: "system", content: "/no_think" }, ...messages];
@@ -121,11 +126,18 @@ export async function chat(messages: ChatMessage[], opts: { lane?: "fast" | "dee
           temperature: opts.temperature ?? 0.2,
           max_tokens: Math.max(opts.maxTokens ?? 2048, Number(process.env.PSIG_MIN_MAX_TOKENS || 6000)),
           ...(sendReasoningHint ? { reasoning: { effort: process.env.PSIG_REASONING_EFFORT || "low", exclude: true }, reasoning_effort: process.env.PSIG_REASONING_EFFORT || "low", provider: { sort: "throughput" } } : {}),
+          ...(noThink && sendThinkingSwitch ? { chat_template_kwargs: { enable_thinking: false } } : {}),
         }),
       }, opts.timeoutMs, opts.signal);
       if (r.status === 429 || r.status >= 500) {
         lastErr = new Error(`HTTP ${r.status}: ${r.text.slice(0, 200)}`);
         if (attempt + 1 < attempts) await new Promise((res) => setTimeout(res, 2000 * (attempt + 1)));
+        continue;
+      }
+      if (noThink && sendThinkingSwitch && (r.status === 400 || r.status === 422) && /chat_template_kwargs|enable_thinking/i.test(r.text)) {
+        sendThinkingSwitch = false;
+        process.stderr.write(`    … runtime rejected the thinking switch (HTTP ${r.status}); retrying without it\n`);
+        attempt--;
         continue;
       }
       if (sendReasoningHint && rejectsReasoningHint(r.status, r.text)) {

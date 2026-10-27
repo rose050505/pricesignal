@@ -579,7 +579,7 @@ export function salvageNarrative(n: Narrative, allowed: number[], facts: MarketF
   if (!Object.keys(markets).length) return undefined;
   const out: Narrative = { headline: headline ?? placeholder, markets, ...(watch ? { watch } : {}) };
   if (checkNarrative(out, allowed, facts, req, policy, extra).length) return undefined;
-  return { ...out, headline: headline ?? "", ...(headline === undefined ? { headlineByCode: true } : {}), removed };
+  return { ...out, headline: headline ?? "", ...(headline === undefined ? { headlineByCode: true } : {}), removed, ...(n.model ? { model: n.model } : {}) };
 }
 
 /** The market a prose key refers to ("DE", "de", "Germany"). */
@@ -629,9 +629,10 @@ function namedCountryErrors(text: string, facts: MarketFacts[], req: Request, po
       // and "1.4% in Germany and 2.2% in Canada" contain separate numeric clauses.
       // "Re-check Canada's release, and re-check Australia's 3.0% pace": a comma or semicolon followed by a
       // new clause also separates the claims, so the later rate is not charged to the earlier country.
-      const separate = hasNumber(between) || /(?:,\s*(?:and|but|while|whereas)\b|;)/i.test(between) || (hasNumber(sentence.slice(cuts.at(-1), previous.at)) && hasNumber(sentence.slice(next.end)));
+      // "whether Germany's easing continues and whether Australia's 3% trend breaks" is two clauses as well.
+      const separate = hasNumber(between) || /(?:,\s*(?:and|but|while|whereas)\b|;|\b(?:and|or)\s+(?:whether|if)\b)/i.test(between) || (hasNumber(sentence.slice(cuts.at(-1), previous.at)) && hasNumber(sentence.slice(next.end)));
       if (!separate) continue;
-      const boundary = [...between.matchAll(/[,;]|\b(?:and|but|while|whereas|compared\s+with)\b/gi)].at(-1);
+      const boundary = [...between.matchAll(/[,;]|\b(?:and|or)\s+(?:whether|if)\b|\b(?:and|but|while|whereas|compared\s+with)\b/gi)].at(-1);
       cuts.push(boundary ? previous.end + boundary.index! + boundary[0].length : next.at);
     }
     cuts.push(sentence.length);
