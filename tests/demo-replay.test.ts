@@ -98,3 +98,16 @@ test("the CLI saves the UI result payloads (partials and final) that the replay 
   const script = fs.readFileSync(new URL("../scripts/15_examples.sh", import.meta.url), "utf8");
   assert.match(script, /\[ ! -s "\$OUT\/result\.json" \]/);
 });
+
+test("the site builder never replaces a folder that is not an earlier demo site (review, 28 Oct 00:00)", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "psig-keep-"));
+  fs.writeFileSync(path.join(dir, "important.txt"), "keep");
+  assert.throws(() => buildDemoSite(dir, recordedExamples()), /not empty and is not an earlier demo site/);
+  assert.equal(fs.readFileSync(path.join(dir, "important.txt"), "utf8"), "keep");
+  const examples = recordedExamples();
+  assert.throws(() => buildDemoSite(path.dirname(examples), examples), /contains the repository or the examples|not empty/);
+  assert.ok(fs.existsSync(examples));
+  const site = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "psig-site-")), "site");
+  buildDemoSite(site, recordedExamples());
+  assert.doesNotThrow(() => buildDemoSite(site, recordedExamples()), "an earlier demo site is rebuilt");
+});

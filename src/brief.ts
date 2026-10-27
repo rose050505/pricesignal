@@ -496,13 +496,17 @@ function universalTrendErrors(text: string, facts: MarketFacts[], req: Request, 
   return out;
 }
 
-/** "Food inflation is above the market benchmark": a verdict is about the proposed change, never about inflation itself. */
+/**
+ * "Food inflation is above the market benchmark": a verdict is about the proposed change, never about inflation itself.
+ * Only verbs, adverbs and market names may stand between "inflation" and the verdict ("Inflation in DE, CA and AU is
+ * now above …"); "inflation leaves the proposed move above …" or "inflation of 2.2% is within …" are not this slip.
+ */
+const INFLATION_VERDICT = /\b[Ii]nflation\b((?:,?\s+(?:rates?|levels?|is|are|has|have|been|remains?|stays?|sits?|sitting|runs?|running|looks?|now|still|all|also|in|and|[A-Z]{2}|[A-Z][a-z]+))*)\s+(?:(above|within|inside|below)|(exceeds?|exceeding|tops))\s+(?:its\s+|the\s+|their\s+)?(?:market\s+)?benchmarks?\b/;
 function verdictSubjectErrors(text: string, field: string): string[] {
   const out: string[] = [];
-  for (const clause of text.split(/(?<=[.!?;])\s+|\n+|[,;:—]|\b(?:but|while|whereas|so)\b/i)) {
-    const m = clause.match(/\binflation\b(.*?)\b(?:(?:is|are|sits?|sitting|stays?|remains?|runs?|running|looks?)\s+)?(?:all\s+|still\s+|now\s+)?(above|within|inside|below)\s+(?:its\s+|the\s+|their\s+)?(?:market\s+)?benchmarks?\b/i);
-    // "inflation of 2.2% is within…" or "the +3% increase … above" name a number or the proposal: not this slip.
-    if (m && !/%|\b(?:increases?|rises?|hikes?|changes?|proposals?|prices?)\b/i.test(m[1])) out.push(`${field}: says inflation itself is ${m[2].toLowerCase()} the market benchmark; the verdict is about the proposed change`);
+  for (const part of text.split(/(?<=[.!?;])\s+|\n+|[;:—]/)) {
+    const m = part.match(INFLATION_VERDICT);
+    if (m) out.push(`${field}: says inflation itself is ${(m[2] ?? m[3]).toLowerCase()} the market benchmark; the verdict is about the proposed change`);
   }
   return out;
 }
@@ -564,13 +568,19 @@ function headlineVerdictErrors(headline: string, facts: MarketFacts[], field = "
   const clauseOf = (at: number) => { let i = 0; while (i < cuts.length - 2 && cuts[i + 1] <= at) i++; return [cuts[i], cuts[i + 1]] as const; };
   const verdictOf = (country: Country, c: (typeof claims)[number]) => { const f = vf.find((x) => x.country === country)!; return c.subject === "cost" ? f.costVsMarket : f.verdict; };
   const excepted = new Map<(typeof claims)[number], Set<Country>>();
+  const bound = new Set<(typeof claims)[number]>();
   for (const m of mentions) {
     const [cs, ce] = clauseOf(m.at);
     const clause = text.slice(cs, ce);
     const inClause = claims.filter((c) => c.at >= cs && c.at < ce);
     // "Inflation easing in DE and CA; flat in AU; +3% above in DE …": a country in a trend clause with no verdict of
     // its own is described by that trend (checked separately), not by a verdict in a later clause.
-    if (!inClause.length && !/:\s*$/.test(clause) && (TREND_CLAIMS.some(([, re]) => re.test(clause)) || /\b(?:flat|stable|steady)\b/i.test(clause))) continue;
+    // The trend part runs to the next ";" or sentence end, so "easing in DE, CA and AU" covers all three.
+    const segStart = Math.max(-1, ...[...text.slice(0, m.at).matchAll(/[;.!?](?=\s|$)/g)].map((x) => x.index!)) + 1;
+    const segEnd = text.slice(m.at).search(/[;.!?](?=\s|$)/);
+    const seg = text.slice(segStart, segEnd < 0 ? text.length : m.at + segEnd);
+    const segHasClaim = claims.some((c) => c.at >= segStart && c.at < segStart + seg.length);
+    if (!segHasClaim && !/:\s*$/.test(clause) && (TREND_CLAIMS.some(([, re]) => re.test(seg)) || /\b(?:flat|stable|steady)\b/i.test(seg))) continue;
     // "Canada and Australia: within" takes the verdict after the colon; "fits Canada and Australia but exceeds
     // Germany's" says these countries do NOT have the verdict after the contrast word.
     const next = claims.find((c) => c.at >= ce);
@@ -584,9 +594,23 @@ function headlineVerdictErrors(headline: string, facts: MarketFacts[], field = "
       negated = true;
       excepted.set(owner, (excepted.get(owner) ?? new Set()).add(m.country));
     }
+    bound.add(owner);
     const verdict = verdictOf(m.country, owner);
     const ok = negated ? !!verdict && !owner.verdicts.has(verdict) : !!verdict && owner.verdicts.has(verdict);
     if (!ok) bad.push(`${field} "${owner.words.join(" or ")}"${negated ? " excludes" : " for"} ${m.country} (computed: ${verdict})`);
+  }
+  // A verdict in a part of the headline that names no market ("…; flat in AU; +5% is within the market benchmark")
+  // speaks for every market.
+  const segmentOf = (at: number) => {
+    const start = Math.max(-1, ...[...text.slice(0, at).matchAll(/[;.!?](?=\s|$)/g)].map((x) => x.index!)) + 1;
+    const end = text.slice(at).search(/[;.!?](?=\s|$)/);
+    return [start, end < 0 ? text.length : at + end] as const;
+  };
+  for (const c of claims.filter((x) => !bound.has(x))) {
+    const [ss, se] = segmentOf(c.at);
+    if (mentions.some((m) => m.at >= ss && m.at < se)) continue;
+    const off = vf.filter((f) => { const v = verdictOf(f.country, c); return v && !c.verdicts.has(v); });
+    if (off.length) bad.push(`${field} "${c.words.join(" or ")}" for every market (computed: ${off.map((f) => `${f.country} ${verdictOf(f.country, c)}`).join(", ")})`);
   }
   // "... in all markets except Germany": every other market must have that verdict.
   for (const [c, out] of excepted) {

@@ -15,6 +15,10 @@ const readJson = (file: string) => JSON.parse(fs.readFileSync(file, "utf-8"));
 export function buildDemoSite(outDir: string, examplesDir = path.join(ROOT, "examples")): { examples: string[] } {
   const names = fs.readdirSync(examplesDir).filter((n) => fs.existsSync(path.join(examplesDir, n, "result.json"))).sort();
   if (!names.length) throw new Error(`no recorded run with result.json in ${examplesDir} (record them with bash scripts/15_examples.sh)`);
+  // Only an earlier demo site is replaced: never the repository, the examples or any other non-empty folder.
+  const out = path.resolve(outDir);
+  if (path.resolve(examplesDir).startsWith(out + path.sep) || out === path.resolve(examplesDir) || ROOT.startsWith(out + path.sep) || out === ROOT) throw new Error(`refusing to build the demo site into ${out}: it contains the repository or the examples`);
+  if (fs.existsSync(out) && fs.readdirSync(out).length && !fs.existsSync(path.join(out, "replay", "catalog.js"))) throw new Error(`refusing to replace ${out}: it is not empty and is not an earlier demo site`);
   fs.rmSync(outDir, { recursive: true, force: true });
   fs.mkdirSync(path.join(outDir, "replay"), { recursive: true });
   const examples: { name: string; question: string; elapsedSeconds: number | null }[] = [];
@@ -64,7 +68,13 @@ const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".j
 function serve(dir: string, port: number): void {
   http
     .createServer((req, res) => {
-      const rel = decodeURIComponent(new URL(req.url ?? "/", "http://x").pathname).replace(/^\/+/, "") || "index.html";
+      let rel: string;
+      try {
+        rel = decodeURIComponent(new URL(req.url ?? "/", "http://x").pathname).replace(/^\/+/, "") || "index.html";
+      } catch {
+        res.writeHead(400, { "Content-Type": "text/plain" });
+        return res.end("bad request");
+      }
       const file = path.resolve(dir, rel);
       if (!file.startsWith(dir + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
         res.writeHead(404, { "Content-Type": "text/plain" });
