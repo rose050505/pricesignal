@@ -511,6 +511,49 @@ function verdictSubjectErrors(text: string, field: string): string[] {
   return out;
 }
 
+/**
+ * "German food inflation is rising" when code computed it as easing: a trend claimed for a named market (or, in a
+ * market's own paragraph, for that market) must be its computed trend vs six months ago. Claims about the all-items
+ * series, comparisons with the average, and negated or conditional sentences are not judged by this rule.
+ */
+function marketTrendErrors(text: string, facts: MarketFacts[], req: Request, field: string): string[] {
+  const own = marketKey(field);
+  const paragraphMarket = facts.find((f) => f.country === own);
+  // "a flat 5% rise" or "a flat-rate increase" describes the proposal, not the trend.
+  const flat = /\b(?:flat|stable|steady)\b(?![\s-]*(?:[+\-−]?\d|rate|fee|price|increase|rise|hike))/i;
+  const out: string[] = [];
+  for (const sentence of text.split(/(?<=[.!?;])\s+|\n+/)) {
+    if (/\b(?:not|never|whether|if|could|may|might|would|unless)\b|n't\b/i.test(sentence)) continue;
+    for (const clause of sentence.split(/[,;:—]|\b(?:but|while|whereas|although)\b/i)) {
+      if (/\ball[- ]items\b|\boverall\b|\bheadline inflation\b|\bcore\b|\baverage\b|\bmean\b|\bbenchmark\b/i.test(clause)) continue;
+      // Every trend word in the clause, so "easing in Germany and Canada and flat in Australia" gives each its own.
+      const hits = [...TREND_CLAIMS.map(([trend, re]) => [trend, new RegExp(re.source, "gi")] as const), ["flat", new RegExp(flat.source, "gi")] as const]
+        .flatMap(([trend, re]) => [...clause.matchAll(re)].map((m) => ({ trend, at: m.index!, end: m.index! + m[0].length })))
+        .filter((h) => !(h.trend === "rising" && /\b(?:costs?|prices?)\b/i.test(clause) && !/\binflation\b/i.test(clause)))
+        .sort((a, b) => a.at - b.at);
+      if (!hits.length) continue;
+      const named = countryMentions(clause, facts);
+      const claims: { country: string; trend: string }[] = named.length
+        ? named.flatMap((m) => {
+          // "<trend> in A, B and C" binds the list to that trend; otherwise "A is <trend>" binds to the next one.
+          const before = hits.filter((h) => h.end <= m.at).at(-1);
+          const between = before ? clause.slice(before.end, m.at) : "";
+          if (before && /\b(?:except|other than|apart from|besides|excluding)\b/i.test(between)) return [];
+          const trend = before && /^\s+in\s+[\p{L}\s,.&]*$/u.test(between) ? before.trend : (hits.find((h) => h.at >= m.end) ?? before)?.trend;
+          return trend ? [{ country: m.country, trend }] : [];
+        })
+        : paragraphMarket ? [{ country: paragraphMarket.country, trend: hits[0].trend }] : [];
+      for (const { country: c, trend: claimed } of claims) {
+        const f = facts.find((x) => x.country === c);
+        const series = f && requestedSeries(f, req);
+        if (!series || series.trend === "insufficient history" || series.trend === claimed) continue;
+        out.push(`${field}: says ${c} is ${claimed}, but the computed trend is ${series.trend}`);
+      }
+    }
+  }
+  return out;
+}
+
 /** "… and 1 observation" about a series with 12: a stated observation count must be one of the market's series counts. */
 function observationCountErrors(text: string, f: MarketFacts): string[] {
   const counts = [f.category?.averageCount, f.allItems?.averageCount].filter((n): n is number => n !== undefined);
@@ -807,7 +850,7 @@ export function checkNarrative(n: Narrative, allowed: number[], facts?: MarketFa
     bad.push(...headlineVerdictErrors(String(n.headline ?? ""), facts));
     if (typeof n.watch === "string") bad.push(...headlineVerdictErrors(n.watch, facts, "watch"));
     for (const [field, text] of [["headline", n.headline], ["watch", n.watch], ...Object.entries(n.markets ?? {})] as [string, unknown][]) {
-      if (typeof text === "string") bad.push(...universalTrendErrors(text, facts, req, field), ...quarterErrors(text, facts, req, field), ...verdictSubjectErrors(text, field));
+      if (typeof text === "string") bad.push(...universalTrendErrors(text, facts, req, field), ...marketTrendErrors(text, facts, req, field), ...quarterErrors(text, facts, req, field), ...verdictSubjectErrors(text, field));
     }
   } else {
     bad.push(...unknownNumbers([n.headline, ...Object.values(n.markets ?? {}), n.watch ?? ""].join(" "), allowed));

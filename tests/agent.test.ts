@@ -277,7 +277,7 @@ test("a slow model call is hedged: a second identical request is sent and the fi
           await new Promise((r) => setTimeout(r, 300));
           throw new Error("AbortError: This operation was aborted"); // the time budget ran out waiting for this one reply
         }
-        return { text: '{"headline":"+5% is above the market benchmark in DE.","markets":{"DE":"Food is easing."},"watch":"Re-check next month."}', model: "f", provider: "f", ms: 1 };
+        return { text: '{"headline":"+5% is above the market benchmark in DE.","markets":{"DE":"Food is rising."},"watch":"Re-check next month."}', model: "f", provider: "f", ms: 1 };
       }
       return { text: '{"actions":[{"action":"discover_and_onboard","args":{"country":"DE","concept":"food"}},{"action":"discover_and_onboard","args":{"country":"DE","concept":"all_items"}}]}', model: "f", provider: "f", ms: 1 };
     },
