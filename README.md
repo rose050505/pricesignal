@@ -45,6 +45,18 @@ Assembling the evidence by hand means reconciling three APIs, three formats, dif
 
 ## What it does
 
+1. **Reads a messy request**: typos, nicknames (`deutschland`, `aus`), Korean or English, a proposed change, a cost change with its share of the selling price, and a pass-through policy.
+2. **Finds the official series** at Eurostat, Statistics Canada and the ABS, and says what it had to work around (a discontinued dataset, a coarser category, another frequency).
+3. **Onboards each series into Zetaris** as a Lightning REST table, a decoding view and a `CACHE TABLE` copy, then compares the markets with **one federated query** over a schemastore view.
+4. **Joins the company's price list** in Zetaris; for snack and condiment products Nemotron picks the official category from a shortlist, and code validates the pick.
+5. **Computes the facts in code**: latest year-on-year rate, one-year mean, the historical benchmark between them, how far the proposal sits from it, which change fits every market, and a separate cost-recovery target.
+6. **Explains with Nemotron, checked sentence by sentence**: numbers, verdicts and trend claims must match the computed facts; a wrong headline is rewritten, wrong sentences are removed and listed.
+7. **Remembers with Meterless H-MEM**: policies, verified mappings and each market's last result, so "same as last time, but +3%?" skips planning and discovery and says what changed.
+8. **Lets you try another proposal** in the browser, and **keeps an evidence packet** that `npm run verify` re-checks offline.
+
+<details>
+<summary><b>Each step in detail</b>: inputs, fallbacks, edge cases, and what the benchmark, the same-period table and the cost target mean</summary>
+
 1. **Understands a messy request** — typos, country nicknames (`deutschland`, `aus`), Korean or English, a proposed change (`+5%`, `-.5%` or `+0,5%`; a range such as `3-4%` is reported and needs one value; a number in words such as `four percent` is used only when Nemotron read the same number), a cost recovery policy (`we pass on ~70% of cost increases`), a stated cost change and an optional cost share with its timing (`before the cost change, unit costs were 60% of the selling price`). An explicit comparison such as “food inflation” takes priority over product names in the introduction. The UI shows the interpreted market category; “same as last time” keeps only assumptions the user did not change. Explicit changes such as “pass-through from 70% to 50%” update that field without turning the new policy into a price proposal. One market category is compared per brief.
 2. **Looks up official series** — by catalogue lookup at Eurostat and ABS, from a vetted vector list at Statistics Canada — and reports what it had to work around (a discontinued dataset, a coarser category, a different frequency).
 3. **Onboards each series into Zetaris** as a Lightning REST table plus a decoding view with a common schema, then caches the raw REST table in Zetaris (`CACHE TABLE`). Later queries read the cached response instead of calling the agency again, so a series that was cached before its agency went down stays available while Zetaris keeps running. A series that could not be cached, and discovery of a new series, still depend on the agency answering.
@@ -71,6 +83,8 @@ The result header distinguishes complete, partial and missing coverage of the re
 **What the cost target means.** Both timing options use the same selling price, before applying the proposed change. A before-change cost share multiplies the stated cost change and recovery policy directly; an after-change cost share first divides by `1 + cost change / 100` to recover the baseline. Cost share and timing are remembered together. A new share without timing uses the stated before-change assumption. The calculation requires consistent units, currency and selling-price basis, and holds sales volume and cost mix fixed. A 100% cost reduction cannot be inverted from an after-change share; a target that would imply a negative selling price is omitted, not clamped. The supported cost-share input is 0–100% of selling price. This does not estimate a target profit margin, taxes, exchange-rate changes or demand response.
 
 The sample price list in `data/price_list.json` is illustrative data for a fictional K-food exporter. To use your own prices, set `PSIG_PRICE_LIST_URL` to an endpoint reachable from Zetaris with the same JSON schema, then start a new app process with a **fresh `PSIG_ZETARIS_NS` and memory directory**. Existing Zetaris REST tables keep their originally registered endpoint: changing the URL alone does not update them.
+
+</details>
 
 ## Architecture
 
@@ -162,6 +176,7 @@ npm run setup               # vendors the Meterless H-MEM reference engine into 
 npm run setup:conformance   # vendors the H-MEM conformance suite
 npm run conformance         # 13/13 checks pass against src/hmem_impl.ts
 npm test                    # offline agent tests (fake model, fake Zetaris); run npm run setup first
+npm run coverage            # the same tests with line coverage (95% of src/ lines; server.ts and cli.ts are not loaded)
 npm run typecheck           # strict TypeScript check of src/ and tests/ (after npm run setup)
 # Verify a recorded calculation without starting Zetaris or Nightshift:
 npm run verify -- examples/01_cold_start/evidence.json
