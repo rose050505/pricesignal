@@ -1,0 +1,24 @@
+# Zetaris CACHE TABLE check, 27 Oct 2026, 23:55 KST (scripts/17_cache_check.mts)
+# Zetaris in Docker on the development laptop; part 2 used the tables registered by the recorded examples (suffix ex20261027_234114_2269488).
+
+$ npx tsx scripts/17_cache_check.mts
+Part 1 - source calls per statement (test endpoint behind psig_internal.zz_cachecheck_20261027145504):
+  CREATE LIGHTNING REST TABLE       1 call(s)    176 ms
+  SELECT, not cached                1 call(s)    278 ms
+  SELECT, not cached (again)        1 call(s)    210 ms
+  CACHE TABLE                       1 call(s)    249 ms
+  SELECT, cached                    0 call(s)    124 ms
+  SELECT, cached (other columns)    0 call(s)    144 ms
+  CACHE TABLE again                 0 call(s)    123 ms
+  REFRESH TABLE                     0 call(s)     58 ms
+  SELECT after REFRESH              0 call(s)    132 ms
+  UNCACHE TABLE                     0 call(s)    114 ms
+  SELECT, uncached                  1 call(s)    190 ms
+  CACHE TABLE (refresh path)        1 call(s)    226 ms
+  SELECT, cached                    0 call(s)    114 ms
+PASS: a cached table answers without calling its source; UNCACHE then CACHE reloads it.
+
+$ PSIG_ZETARIS_NS=ex20261027_234114_2269488 npx tsx scripts/17_cache_check.mts timing
+Part 2 - federated queries over the DE/CA/AU tables with suffix ex20261027_234114_2269488 (two runs each):
+  uncached: comparison 8780 / 5716 ms (84 rows), price-list join 3152 / 2820 ms (42 rows)
+  cached:   comparison 1708 / 1405 ms (84 rows), price-list join 1142 / 863 ms (42 rows)
