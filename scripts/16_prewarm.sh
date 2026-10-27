@@ -29,4 +29,10 @@ if [ -n "$failed" ]; then
   printf '%s\n' "$failed" | sed -E 's/^.*FAILED (SKU )?/  - /; s/ -> .*$//' >&2
   [ "$status" = 0 ] && status=4
 fi
+uncached=$(grep -E "\[onboard\] onboarded " "$log" | grep -v "source cached in Zetaris")
+if [ -n "$uncached" ]; then
+  echo "[prewarm] $(printf '%s\n' "$uncached" | wc -l | tr -d ' ') source(s) registered without a Zetaris cache; later queries will call the agency again:" >&2
+  printf '%s\n' "$uncached" | sed -E 's/^.*onboarded (SKU )?/  - /; s/ -> .*$//' >&2
+  [ "$status" = 0 ] && status=4
+fi
 exit "$status"

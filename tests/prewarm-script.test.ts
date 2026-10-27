@@ -56,3 +56,10 @@ test("a source that failed to register or cache makes the prewarm fail even when
   assert.match(r.stderr, /1 source\(s\) failed to register or cache/);
   assert.match(r.stderr, /statcan v41690974/);
 });
+
+test("a source registered without a cache is reported too", () => {
+  const r = run({ PSIG_ZETARIS_NS: "video1027" }, 0, 'echo "  · [onboard] onboarded abs 20001 -> psig.v_au_food (created 2 SQL objects; 0 already existed; verified: 13 rows, latest 2026-08)"');
+  assert.equal(r.status, 4);
+  assert.match(r.stderr, /registered without a Zetaris cache/);
+  assert.match(r.stderr, /abs 20001/);
+});

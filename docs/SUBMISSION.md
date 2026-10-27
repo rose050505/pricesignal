@@ -9,16 +9,16 @@ The form has five fields: Track, Description (150–2000 characters), Video, Git
 
 ## Description (paste as is)
 
-PriceSignal helps a small exporter compare proposed price changes with official inflation and a separate cost recovery target.
+PriceSignal helps a small exporter check a proposed price change against official inflation and a separate cost recovery target.
 
-Food inflation in Germany, Canada and Australia is fragmented across Eurostat, Statistics Canada and ABS: three APIs, three formats and three category schemes. An older Eurostat dataset stopped in December 2025.
+Food inflation in Germany, Canada and Australia is fragmented across Eurostat, Statistics Canada and ABS: three APIs, three formats, three category schemes. An older Eurostat dataset stopped in December 2025.
 
-Ask in plain words, typos and Korean included. The agent searches Eurostat and ABS catalogues and a vetted Canadian vector list, then registers sources in Zetaris as Lightning REST tables and decoding views in one schema. One federated SQL query compares markets; another joins the company's price list. Each rate has a local query reference and the SQL that returned it.
+Ask in plain words, typos and Korean included. The agent finds the official series (Eurostat and ABS category lookups, a vetted Canadian vector list) and registers each in Zetaris: a Lightning REST table, a decoding view in one schema, and CACHE TABLE so repeat queries read Zetaris instead of the agency. One federated query over a schemastore view compares markets; a second joins the company's price list. Each rate cites its query and SQL.
 
-NVIDIA Nemotron, through Meterless Nightshift, parses requests, plans discovery, selects official categories using actual product names, and explains computed facts. Product choices are bounded to the supplied shortlist. Invalid or timed-out choices use a visibly marked broader Food proxy or omit affected SKU prices.
+NVIDIA Nemotron, through Meterless Nightshift (the app's primary AI provider), reads the request, proposes the discovery steps that code checks and completes, picks official categories from a bounded shortlist using product names, and explains the computed facts. Numeric and verdict checks run per sentence: after one rewrite, contradicting sentences are dropped, or a computed summary is used.
 
-Code calculates a historical benchmark from the latest YoY rate and recent annual mean, with actual observation coverage. It compares the proposal without claiming to forecast demand. A separate cost target needs unit-cost share, its before/after-change basis, cost change and pass-through policy. Narrative checks reject numeric and comparison mismatches, with a computed summary on failure. Local price previews reuse this evidence without more AI or SQL calls.
+Code calculates a historical benchmark (latest YoY and recent annual mean, with observation coverage), how far the proposal sits from it, and a cost target from cost change, unit-cost share and its timing, and pass-through. It does not forecast demand.
 
-Meterless H-MEM remembers policies, requests and verified mappings. "Same as last time, but +3%?" reuses fresh evidence, skips unnecessary planning and recalls product-specific choices. Changed products or stale mappings trigger rechecking; past outcomes distinguish source and method changes.
+Meterless H-MEM (reference engine, conformance 13/13) remembers policies, requests and verified mappings, so "same as last time, but +3%?" skips planning and discovery; stale mappings or changed products are rechecked.
 
-Built with Claude Code and Codex; Cursor was not used. README documents integrations and limits; examples/ includes SQL-row snapshots for offline calculation replay.
+Built with Claude Code and Codex; Cursor was not used. Integrations, limits and six recorded runs with traces and offline-verifiable SQL rows: github.com/rose050505/pricesignal
