@@ -1006,6 +1006,7 @@ Reply with JSON only.`;
     let issue: NarrativeIssue | undefined; // why the last attempt failed, so the brief states the real reason
     const drafts: Narrative[] = []; // drafts that failed the fact check, for sentence-level salvage
     let maxTokens = 8000; // Nemotron's hidden reasoning counts against it; raised once if a reply is cut off
+    let lastReply: { reply: string; finishReason?: string } | undefined; // the raw reply of an unusable attempt, kept in the trace
     const withMarketKeys = (n: Narrative): Narrative => ({ ...n, markets: Object.fromEntries(Object.entries(n.markets ?? {}).map(([k, v]) => [marketKey(k), v])) });
     for (let attempt = 0; attempt < 2; attempt++) {
       const left = deadline - Date.now();
@@ -1016,12 +1017,20 @@ Reply with JSON only.`;
       }
       try {
         const r = await this.hedged("narrative", (signal) => this.llm(ask, { lane: (process.env.PSIG_NARRATIVE_LANE as "fast" | "deep") || "fast", temperature: 0.2, maxTokens, attempts: 1, timeoutMs: Math.max(1_000, deadline - Date.now()), signal }));
-        const n = extractJson(r.text) as Narrative | null;
+        let n = extractJson(r.text) as Narrative | null;
+        if (!n?.headline) {
+          // A reply cut off mid-JSON keeps its finished fields; they go through the same fact check below.
+          const kept = completedFields(r.text) as Narrative | null;
+          if (kept?.headline && Object.keys(kept.markets ?? {}).length) {
+            n = kept;
+            this.log("warn", `narrative reply was cut off - keeping its complete fields (${Object.keys(kept.markets).length} market paragraph(s)) for the fact check`, { reply: r.text.slice(0, 4000) });
+          }
+        }
         if (!n?.headline && r.finishReason === "length") {
           maxTokens = 16_000;
           throw new Error(`reply cut off at the token limit (finish_reason=length; ${JSON.stringify(r.usage ?? {}).slice(0, 120)}) - the next attempt allows ${maxTokens} tokens: ${r.text.replace(/\s+/g, " ").slice(0, 100)}`);
         }
-        if (!n?.headline) throw new Error(`no headline in reply: ${r.text.replace(/\s+/g, " ").slice(0, 160)}`);
+        if (!n?.headline) { lastReply = { reply: r.text.slice(0, 4000), finishReason: r.finishReason }; throw new Error(`no headline in reply: ${r.text.replace(/\s+/g, " ").slice(0, 160)}`); }
         const bad = checkNarrative(n, allowed, facts, req, policy, noteNumbers);
         this.log("llm", `narrative (${r.model}, ${r.ms} ms${via(r)})${bad.length ? ` - does not match the facts: ${bad.join(", ")}` : " - numbers and verdicts match the facts"}`, bad.length ? { model: r.model, ms: r.ms, draft: n, problems: bad } : undefined);
         if (!bad.length) return { narrative: withMarketKeys(n) };
@@ -1029,7 +1038,8 @@ Reply with JSON only.`;
         issue = "grounding";
         ask.push({ role: "assistant", content: r.text }, { role: "user", content: `These numbers, ranges or verdicts do not match the facts for that market: ${bad.join(", ")}. Rewrite using only that market's numbers; the benchmark range must be exactly benchmark_range_pct low to high, and each market's verdict must be exactly its verdict field. JSON only.` });
       } catch (e) {
-        this.log("warn", `narrative attempt failed: ${String(e).slice(0, 120)}`);
+        this.log("warn", `narrative attempt failed: ${String(e).slice(0, 120)}`, lastReply);
+        lastReply = undefined;
         issue = /no headline in reply|cut off at the token limit/.test(String(e)) ? "unusable" : "provider";
         // Failures through Nightshift come and go from one request to the next, so the next attempt runs while the budget lasts.
       }
@@ -1102,6 +1112,45 @@ export function extractJson(text: string): any | null {
       } catch {
         // try the lenient form, then the next brace
       }
+    }
+  }
+  return null;
+}
+
+/**
+ * The complete fields of a JSON object reply that was cut off: everything up to the last finished value, closed.
+ * Returns the object only when it has a string headline; an unfinished value is dropped, never completed.
+ */
+export function completedFields(text: string): any | null {
+  const closed = text.lastIndexOf("</think>");
+  const t = (closed >= 0 ? text.slice(closed + "</think>".length) : text).replace(/```(?:json)?/g, "").trim();
+  const start = t.indexOf("{");
+  if (start < 0) return null;
+  const cuts: { at: number; depth: number }[] = [];
+  let depth = 0, inStr = false, esc = false, value = false;
+  for (let i = start; i < t.length; i++) {
+    const ch = t[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === "\\") esc = true;
+      else if (ch === '"') { inStr = false; if (value) cuts.push({ at: i + 1, depth }); value = false; }
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === ":") value = true;
+    else if (ch === ",") value = false;
+    else if (ch === "{") { depth++; value = false; }
+    else if (ch === "}") {
+      if (--depth === 0) { try { return JSON.parse(t.slice(start, i + 1)); } catch { return null; } }
+      cuts.push({ at: i + 1, depth });
+    }
+  }
+  for (const c of cuts.reverse()) {
+    try {
+      const j = JSON.parse(t.slice(start, c.at) + "}".repeat(c.depth));
+      if (j && typeof j.headline === "string") return j;
+    } catch {
+      // an earlier cut may still close cleanly
     }
   }
   return null;
