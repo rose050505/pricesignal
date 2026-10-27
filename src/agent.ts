@@ -39,7 +39,7 @@ export interface Request {
 
 export interface TraceEvent { t: number; kind: string; title: string; detail?: unknown }
 
-export interface AgentDeps { llm?: typeof chat; sql: SqlRunner; memory: AgentMemory; discoverFn?: typeof discover; onboardFn?: typeof onboard; maxSteps?: number; hedgeMs?: number; compareRetryMs?: number }
+export interface AgentDeps { llm?: typeof chat; sql: SqlRunner; memory: AgentMemory; discoverFn?: typeof discover; onboardFn?: typeof onboard; maxSteps?: number; hedgeMs?: number; planBudgetMs?: number; compareRetryMs?: number }
 
 /** A federated query that fails this many times ends the run with its error instead of retrying every step. */
 const MAX_COMPARE_FAILURES = 3;
@@ -52,6 +52,7 @@ Reply with a single JSON object and nothing else:
 {"thought": "<one short sentence>", "actions": [{"action": "<name>", "args": {...}}, ...]}
 "actions" holds 1 to 8 actions executed in order. Batch actions that do not depend on each other's results
 (for example one discover_and_onboard or use_memory_mapping per missing pair) so the task needs few turns.
+Prefer discover_and_onboard; use discover_series and onboard_series only to choose a candidate other than the best one.
 Actions:
 - recall_memory {"query": str}            : search long-term memory (series mappings, pricing policy) before doing work again.
 - discover_series {"country": "<market code>", "concept": str} : ask the agency which series matches; reports discontinued datasets and coarser categories.
@@ -73,6 +74,8 @@ export class PriceSignalAgent extends EventEmitter {
   private requestReadByRules = false;
   private providerSlow = false;
   private hedgeMs: number;
+  /** Total planner reply time after which the remaining series are completed without the planner. */
+  private planBudgetMs: number;
   /** the Zetaris runner as this agent uses it: allowlist, trace, and this run's own statement numbers (Q1, Q2, ...) */
   private sql: SqlRunner;
   private cite = 0;
@@ -105,6 +108,7 @@ export class PriceSignalAgent extends EventEmitter {
     this.maxSteps = deps.maxSteps ?? 18;
     this.compareRetryMs = deps.compareRetryMs ?? 2000;
     this.hedgeMs = deps.hedgeMs ?? (process.env.PSIG_HEDGE_MS === "off" ? Infinity : Number(process.env.PSIG_HEDGE_MS || 10_000));
+    this.planBudgetMs = deps.planBudgetMs ?? Number(process.env.PSIG_PLAN_BUDGET_MS || 25_000);
     const run = deps.sql.run.bind(deps.sql);
     this.sql = { run: async (sql, opts) => {
       // One statement per call, and only SELECT, onboarding DDL or caching a source table (quoted text may contain anything).
@@ -311,6 +315,7 @@ Reply with JSON only.`;
     let compareFailures = 0;
     let compareError = "";
     let autopilot = rememberedPairs.length === pairs.length;
+    let plannerMs = 0; // time spent waiting for planner replies in this run
     if (autopilot) this.log("plan", "all needed series have remembered mappings - skipping the planner; verifying the live Zetaris views");
 
     // A pair is settled when it has a view, or when its agency was asked and has no usable series (":gaveup").
@@ -327,7 +332,9 @@ Reply with JSON only.`;
         batch = [{ action: "compare", args: {} }];
       } else if (!autopilot) {
         try {
+          const asked = Date.now();
           const r = await this.hedged("planner", (signal, o) => this.llm(messages, { lane: "fast", temperature: 0.1, maxTokens: thinkingOff() ? 1500 : 6000, attempts: 1, timeoutMs: 75_000, signal, ...o }));
+          plannerMs += Date.now() - asked;
           const j = extractJson(r.text);
           batch = Array.isArray(j?.actions) ? j.actions.filter((a: any) => a?.action).slice(0, 8) : j?.action ? [j] : [];
           if (!batch.length) throw new Error(`no action in: ${r.text.slice(0, 120)}`);
@@ -365,6 +372,11 @@ Reply with JSON only.`;
       }
       if (compareFailures >= MAX_COMPARE_FAILURES && !compared) break;
       if (compareFailures && !compared && batch.some((b) => b.action === "compare")) await new Promise((r) => setTimeout(r, this.compareRetryMs * compareFailures));
+      if (plannerTurn && !autopilot && plannerMs > this.planBudgetMs && unsettled().length) {
+        // A slow provider that still makes progress could otherwise take minutes: the remaining pairs need no judgement.
+        autopilot = true;
+        this.log("warn", `planner replies took ${Math.round(plannerMs / 1000)} s in total - completing the remaining series deterministically`);
+      }
       if (plannerTurn) {
         stalledTurns = progress() === before ? stalledTurns + 1 : 0;
         if (stalledTurns >= 2) {
@@ -590,7 +602,11 @@ Reply with JSON only.`;
         case "onboard_series": {
           if (!country) return { error: "country must be one of the supported market codes" };
           const list = s.candidates.get(s.key(country, concept));
-          if (!list?.length) return { error: "run discover_series for this pair first" };
+          if (!list?.length) {
+            // Planned before its discovery (seen live on 27 Oct: one wasted planner turn per pair): discover it now.
+            this.log("plan", `${country} ${concept}: onboarding was planned before discovery - discovering and onboarding it now`);
+            return { discovered_first: true, result: await this.execute({ action: "discover_and_onboard", args: { country, concept } }, req, s) };
+          }
           const c = list[Math.max(0, Math.min(list.length - 1, Number(a.candidate ?? 0)))];
           if (!c || !marketCategoryUsable(concept, c)) {
             this.log("warn", `refused ${c?.label ?? "invalid candidate"} for ${country} ${concept}: market coverage guard failed`);
