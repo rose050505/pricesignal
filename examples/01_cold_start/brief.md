@@ -38,15 +38,15 @@ Latest common observation: **2026-08** (monthly; 2 months before this brief). On
 The latest-period market benchmarks and SKU price scenarios remain unchanged. This table aligns observation dates only.
 
 ## Your price list
-Internal SKUs (Zetaris view `psig.v_price_list_ex20261027_234114_2269488`) joined in query **Q52** with official category series for the products in each market; broader proxies are marked. Each SKU's benchmark price scenario applies its selected series' historical rates to its current price, computed in code.
+Internal SKUs (Zetaris view `psig.v_price_list_ex20261027_235644_2343121`) joined in query **Q52** with official category series for the products in each market; broader proxies are marked. Each SKU's benchmark price scenario applies its selected series' historical rates to its current price, computed in code.
 
 | SKU | Product | Market | Current price | Benchmark price scenario | At +5% | Rate used |
 |---|---|---|---|---|---|---|
 | GCJ-500 | Gochujang 500 g | AU | 8.50 AUD | 8.61–8.62 AUD (+1.3–1.4%) | 8.93 AUD (above the market benchmark) | +1.3% 2026-08 · Food additives and condiments (product match; model-selected) |
 | HBC-60 | Honey butter chips 60 g | AU | 3.99 AUD | 4.01–4.19 AUD (+0.6–4.9%) | 4.19 AUD (above the market benchmark) | +0.6% 2026-08 · Snacks and confectionery (product match; model-selected) |
 | KRM-5P | Kimchi ramen 5-pack | AU | 10.50 AUD | 10.82–10.84 AUD (+3.0–3.2%) | 11.03 AUD (above the market benchmark) | +3.0% 2026-08 · Food and non-alcoholic beverages |
-| GCJ-500 | Gochujang 500 g | CA | 7.49 CAD | 7.65–7.80 CAD (+2.2–4.1%) | 7.86 CAD (above the market benchmark) | +2.2% 2026-09 · Food (broader proxy; unconfirmed match) |
-| HBC-60 | Honey butter chips 60 g | CA | 3.79 CAD | 3.87–3.95 CAD (+2.2–4.1%) | 3.98 CAD (above the market benchmark) | +2.2% 2026-09 · Food (broader proxy; unconfirmed match) |
+| GCJ-500 | Gochujang 500 g | CA | 7.49 CAD | 7.65–7.80 CAD (+2.2–4.1%) | 7.86 CAD (above the market benchmark) | +2.2% 2026-09 · Food (broader proxy; only official option) |
+| HBC-60 | Honey butter chips 60 g | CA | 3.79 CAD | 3.87–3.95 CAD (+2.2–4.1%) | 3.98 CAD (above the market benchmark) | +2.2% 2026-09 · Food (broader proxy; only official option) |
 | KRM-5P | Kimchi ramen 5-pack | CA | 9.99 CAD | 10.21–10.40 CAD (+2.2–4.1%) | 10.49 CAD (above the market benchmark) | +2.2% 2026-09 · Food |
 | GCJ-500 | Gochujang 500 g | DE | 4.99 EUR | 4.98–5.06 EUR (-0.2–1.4%) | 5.24 EUR (above the market benchmark) | +1.4% 2026-09 · Salt, condiments and sauces (ND) (product match; model-selected) |
 | HBC-60 | Honey butter chips 60 g | DE | 2.49 EUR | 2.50–2.52 EUR (+0.4–1.4%) | 2.61 EUR (above the market benchmark) | +0.4% 2026-09 · Food and non-alcoholic beverages (broader proxy; unconfirmed match) |
@@ -78,113 +78,113 @@ Compare the cost-recovery price scenario with the historical movement of consume
 - CA snacks: For Canada this agent maps only StatCan's "Food" and "All-items" CPI vectors, so "snacks" is compared at the Food level (coarser than the other markets). Food is used as a broader category proxy (coarser) for these products; no product-specific official series was found.
 - DE snacks: Food and non-alcoholic beverages is used as a broader category proxy (coarser) for these products; a product-specific selection was unavailable or unusable.
 
-**Watch:** Re-check Germany's food prints next month for any change in trend.
+**Watch:** Re-check Germany's successor CPI and Australia's next monthly print next month.
 
 ## Evidence
-Views: `psig.v_ca_food_v41690974_live_yoyv2_ex20261027_234114_2269488` (onboarded), `psig.v_au_food_20001_m_yoyv2_ex20261027_234114_2269488` (onboarded), `psig.v_ca_all_items_v41690973_live_yoyv2_ex20261027_234114_2269488` (onboarded), `psig.v_de_food_prc_hicp_minr_cp01_ex20261027_234114_2269488` (onboarded), `psig.v_de_all_items_prc_hicp_minr_total_ex20261027_234114_2269488` (onboarded), `psig.v_au_all_items_10001_m_yoyv2_ex20261027_234114_2269488` (onboarded), `psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_234114_2269488` (onboarded), `psig.v_au_condiments_97549_m_yoyv2_ex20261027_234114_2269488` (onboarded), `psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_234114_2269488` (onboarded), `psig.v_de_condiments_prc_hicp_minr_cp01193_ex20261027_234114_2269488` (onboarded), `psig.v_de_snacks_prc_hicp_minr_cp01_ex20261027_234114_2269488` (onboarded), `psig.v_au_snacks_115501_m_yoyv2_ex20261027_234114_2269488` (onboarded)
+Views: `psig.v_au_food_20001_m_yoyv2_ex20261027_235644_2343121` (onboarded), `psig.v_ca_food_v41690974_live_yoyv2_ex20261027_235644_2343121` (onboarded), `psig.v_de_food_prc_hicp_minr_cp01_ex20261027_235644_2343121` (onboarded), `psig.v_au_all_items_10001_m_yoyv2_ex20261027_235644_2343121` (onboarded), `psig.v_ca_all_items_v41690973_live_yoyv2_ex20261027_235644_2343121` (onboarded), `psig.v_de_all_items_prc_hicp_minr_total_ex20261027_235644_2343121` (onboarded), `psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_235644_2343121` (onboarded), `psig.v_au_condiments_97549_m_yoyv2_ex20261027_235644_2343121` (onboarded), `psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_235644_2343121` (onboarded), `psig.v_de_condiments_prc_hicp_minr_cp01193_ex20261027_235644_2343121` (onboarded), `psig.v_de_snacks_prc_hicp_minr_cp01_ex20261027_235644_2343121` (onboarded), `psig.v_au_snacks_115501_m_yoyv2_ex20261027_235644_2343121` (onboarded)
 
-<details><summary>Q7 · 1 row · 256 ms</summary>
+<details><summary>Q7 · 1 row · 690 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_food_20001_m_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q8 · 1 row · 515 ms</summary>
+<details><summary>Q8 · 1 row · 304 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_food_20001_m_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q15 · 1 row · 310 ms</summary>
+<details><summary>Q17 · 1 row · 302 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_all_items_v41690973_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_food_prc_hicp_minr_cp01_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q16 · 1 row · 328 ms</summary>
+<details><summary>Q19 · 1 row · 489 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_food_prc_hicp_minr_cp01_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_all_items_10001_m_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q20 · 1 row · 257 ms</summary>
+<details><summary>Q20 · 1 row · 265 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_all_items_prc_hicp_minr_total_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_all_items_v41690973_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q24 · 1 row · 464 ms</summary>
+<details><summary>Q24 · 1 row · 304 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_all_items_10001_m_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_all_items_prc_hicp_minr_total_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q26 · 84 rows · 3654 ms</summary>
+<details><summary>Q26 · 84 rows · 3655 ms</summary>
 
 ```sql
-SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_market_inflation_496299cc_ex20261027_234114_2269488 WHERE period >= '2025-07'
+SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_market_inflation_32d3117a_ex20261027_235644_2343121 WHERE period >= '2025-07'
 ORDER BY country, concept, period
 ```
 </details>
-<details><summary>Q36 · 1 row · 391 ms</summary>
+<details><summary>Q36 · 1 row · 344 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q41 · 1 row · 596 ms</summary>
+<details><summary>Q41 · 1 row · 570 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_condiments_97549_m_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_condiments_97549_m_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q43 · 1 row · 328 ms</summary>
+<details><summary>Q43 · 1 row · 335 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q44 · 1 row · 276 ms</summary>
+<details><summary>Q46 · 1 row · 306 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_condiments_prc_hicp_minr_cp01193_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_condiments_prc_hicp_minr_cp01193_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q50 · 1 row · 300 ms</summary>
+<details><summary>Q50 · 1 row · 210 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_snacks_prc_hicp_minr_cp01_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_de_snacks_prc_hicp_minr_cp01_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q51 · 1 row · 520 ms</summary>
+<details><summary>Q51 · 1 row · 555 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_snacks_115501_m_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_snacks_115501_m_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q52 · 126 rows · 2583 ms</summary>
+<details><summary>Q52 · 126 rows · 2685 ms</summary>
 
 ```sql
 SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept AS rate_concept, s.category_label, s.frequency, s.period, s.yoy_pct, s.source_id
-FROM psig.v_price_list_ex20261027_234114_2269488 p
+FROM psig.v_price_list_ex20261027_235644_2343121 p
 JOIN (
-    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
+    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
     UNION ALL
-    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_condiments_97549_m_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
+    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_condiments_97549_m_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
     UNION ALL
-    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
+    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
     UNION ALL
-    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_de_condiments_prc_hicp_minr_cp01193_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
+    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_de_condiments_prc_hicp_minr_cp01193_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
     UNION ALL
-    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_de_snacks_prc_hicp_minr_cp01_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
+    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_de_snacks_prc_hicp_minr_cp01_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
     UNION ALL
-    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_snacks_115501_m_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
+    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_snacks_115501_m_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
     UNION ALL
-    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_food_20001_m_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
+    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_food_20001_m_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
     UNION ALL
-    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
+    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
     UNION ALL
-    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_de_food_prc_hicp_minr_cp01_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
+    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_de_food_prc_hicp_minr_cp01_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
 ) s ON p.country = s.country AND p.sku_category = s.concept
 WHERE p.country IN ('DE', 'CA', 'AU')
 ORDER BY p.country, p.sku, s.period

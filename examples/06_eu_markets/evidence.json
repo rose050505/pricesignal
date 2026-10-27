@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "methodVersion": 3,
-  "calculatedAt": "2026-10-27T14:43:19.200Z",
-  "startedAt": "2026-10-27T14:42:52.839Z",
+  "calculatedAt": "2026-10-27T14:58:33.623Z",
+  "startedAt": "2026-10-27T14:58:11.798Z",
   "request": {
     "raw": "france, italy and spain food prices: can we raise prices +3%? we pass on about 70%",
     "countries": [
@@ -22,8 +22,8 @@
   "passThrough": 0.7,
   "queries": {
     "market": {
-      "id": "Q28",
-      "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_market_inflation_bfecf282_ex20261027_234114_2269488 WHERE period >= '2025-07'\nORDER BY country, concept, period",
+      "id": "Q26",
+      "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_market_inflation_ab27fe5f_ex20261027_235644_2343121 WHERE period >= '2025-07'\nORDER BY country, concept, period",
       "columns": [
         "country",
         "concept",
@@ -1020,7 +1020,7 @@
           "basis": "Food and non-alcoholic beverages historical market benchmark: latest 1.5% and average 1.5% (12 of 12 monthly observations)"
         },
         "verdict": "above the market benchmark",
-        "cite": "Q28"
+        "cite": "Q26"
       },
       {
         "country": "IT",
@@ -1184,7 +1184,7 @@
           "basis": "Food and non-alcoholic beverages historical market benchmark: latest 1.7% and average 2.1% (12 of 12 monthly observations)"
         },
         "verdict": "above the market benchmark",
-        "cite": "Q28"
+        "cite": "Q26"
       },
       {
         "country": "ES",
@@ -1348,7 +1348,7 @@
           "basis": "Food and non-alcoholic beverages historical market benchmark: latest 2.7% and average 2.5% (12 of 12 monthly observations)"
         },
         "verdict": "above the market benchmark",
-        "cite": "Q28"
+        "cite": "Q26"
       }
     ],
     "alignment": {
@@ -1388,7 +1388,7 @@
           "latestYoy": 2.7
         }
       ],
-      "cite": "Q28",
+      "cite": "Q26",
       "note": "Only observation dates are aligned. National baskets and category coverage can still differ, so equal dates do not make these series identical measures."
     },
     "skus": []
