@@ -49,6 +49,13 @@ Assembling the evidence by hand means reconciling three APIs, three formats, dif
 
 A pricing or sales manager at a small exporter who has to justify a price change in several countries at once: the annual price review, or a price-increase request to a foreign distributor or retailer that asks "what is inflation doing in our market?". Today that means opening each agency's site, finding the right category table, converting an index to a year-on-year rate and noticing when a dataset moves (Eurostat's widely linked `prc_hicp_manr` stopped in December 2025). PriceSignal does that work for every market in one question and keeps the receipts: the series ids, the SQL and an evidence packet anyone can re-check. It covers 17 markets today (14 EU members through Eurostat, Canada, Australia and the United States), reads a company's own price list from any endpoint Zetaris can reach (`PSIG_PRICE_LIST_URL`), and keeps the data in the company's Zetaris. We have not measured time savings with real users; the work per question is visible in each trace (see [Recorded runs](#recorded-runs)).
 
+## What is different here
+
+- **Sources are onboarded when the question needs them.** There is no fixed pipeline: the agent finds each official series, registers it in Zetaris as a REST table with a decoding view, caches it, and queries all markets in one federated statement. When an agency moves a dataset (Eurostat's `prc_hicp_manr` → `prc_hicp_minr`) or skips a month (BLS has no October 2025 CPI), the brief says so.
+- **The model never supplies a number.** Rates, benchmarks, verdicts and prices are computed in code from the SQL rows; Nemotron reads the request, plans, picks product categories and explains, and every sentence it writes is checked against the computed facts before it is shown.
+- **Every answer can be re-checked later.** Each run saves an evidence packet with the SQL, the rows and the results; `npm run verify` re-derives them offline, and the replay site shows the recorded runs in the real UI.
+- **Memory changes the next answer.** H-MEM recalls verified mappings, the pricing policy and the last result, so a follow-up skips planning and market discovery and reports what changed since the last brief.
+
 ## What it does
 
 1. **Reads a messy request**: typos, nicknames (`deutschland`, `aus`), Korean or English (the brief itself is written in English), a proposed change, a cost change with its share of the selling price, and a pass-through policy.
