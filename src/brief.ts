@@ -721,6 +721,27 @@ export function fallbackHeadline(b: Brief): string | undefined {
   return [parts.length ? `Latest year-on-year rates: ${parts.join(", ")}.` : "", unavailable].filter(Boolean).join(" ") || undefined;
 }
 
+/** How far the proposal sits from each market's benchmark, and from the cost-recovery scenario: computed from the same facts. */
+export function gapSummary(b: Brief): string | undefined {
+  const p = b.request.proposedChangePct;
+  if (p === undefined) return undefined;
+  const pp = (x: number) => (Math.abs(x) < 0.05 ? "<0.1" : Math.abs(r1(x)).toFixed(1));
+  const parts: string[] = [];
+  for (const f of b.facts) {
+    if (!f.suggested || !f.verdict || !requestedSeries(f, b.request)) continue;
+    const { low, high } = f.suggested;
+    const first = !parts.length;
+    const name = first ? `the ${f.country} benchmark` : f.country;
+    if (f.verdict === "above the market benchmark") parts.push(`${pp(p - high)} pp above ${name}${first ? " top" : ""} (${high.toFixed(1)}%)`);
+    else if (f.verdict === "below the market benchmark") parts.push(`${pp(low - p)} pp below ${name}${first ? " bottom" : ""} (${low.toFixed(1)}%)`);
+    else parts.push(`within ${name} (${low.toFixed(1)}–${high.toFixed(1)}%)`);
+  }
+  if (!parts.length) return undefined;
+  const need = b.facts.find((f) => f.costNeed !== undefined)?.costNeed;
+  const cost = need === undefined ? "" : ` Your cost-recovery scenario is ${signedPct(need)}: ${signedPct(p)} ${Math.abs(p - need) < 0.05 ? "matches it" : `is ${pp(p - need)} pp ${p > need ? "more" : "less"}`}.`;
+  return `How far: ${signedPct(p)} is ${parts.join(", ")}.${cost}`;
+}
+
 export function renderBrief(b: Brief): string {
   const L: string[] = [];
   const req = b.request;
@@ -735,13 +756,15 @@ export function renderBrief(b: Brief): string {
   const modelHeadline = b.narrative?.headlineByCode ? undefined : b.narrative?.headline;
   const headline = fallbackHeadline(b) ?? modelHeadline;
   if (headline) L.push(`**${headline}**`, "");
+  const gap = gapSummary(b);
+  if (gap) L.push(gap, "");
   if (modelHeadline && modelHeadline !== headline) L.push(`> Nemotron: ${modelHeadline}`, "");
-  L.push(`${req.invalidPassThrough ? "Cost policy unavailable: provide a valid pass-through percentage from 0% to 100%" : `Cost policy: recover ${Math.round(b.passThrough * 100)}% of incremental unit cost${b.policySource ? ` (${b.policySource})` : ""}`}${req.proposedChangePct !== undefined ? ` · proposed change: ${signedPct(req.proposedChangePct)}` : ""}. This policy does not scale the market benchmark.`, "");
+  L.push(`${req.invalidPassThrough ? "Cost policy unavailable: provide a valid pass-through percentage from 0% to 100%" : `Cost policy: recover ${Math.round(b.passThrough * 100)}% of incremental unit cost${b.policySource ? ` (${b.policySource})` : ""}`}${req.proposedChangePct !== undefined ? ` · proposed change: ${signedPct(req.proposedChangePct)}` : ""}. ${req.costIncreasePct === undefined && !req.invalidPassThrough ? "Add your cost change and unit-cost share (for example “costs rose 8%, unit costs are 60% of our selling price”) to turn this policy into a cost-recovery target." : "This policy does not scale the market benchmark."}`, "");
   if (req.costIncreasePct !== undefined) {
     const need = costScenario(req, b.passThrough);
     L.push(`Your unit costs: ${signedPct(req.costIncreasePct)} (${req.costRemembered ? "remembered from your last request" : "stated in this request"}). ${need === undefined ? `Cost-recovery price scenario unavailable. ${costInputNeeded(req, b.passThrough)}` : `Cost share is ${req.costSharePct}%: ${costShareBasisDescription(req)}${req.costShareRemembered ? " (remembered)" : ""}; recovering ${Math.round(b.passThrough * 100)}% of the incremental cost gives a ${signedPct(need)} selling-price scenario.`}`, "");
   }
-  L.push(`The historical market benchmark spans the latest YoY rate and the mean of available observations in the year ending at the latest observation. It is not a forecast, a confidence interval or evidence that customers will accept a price change. A single value is a reference point, not a recommended price.`, "");
+  L.push(`The historical market benchmark spans the latest YoY rate and the mean of available observations in the year ending at the latest observation. It is not a forecast, a confidence interval or evidence that customers will accept a price change. A single value is a reference point, not a recommended price. It compares a one-off price change with about a year of consumer-price growth; if your last increase was longer ago, the comparable growth is larger. Exchange-rate moves are not included.`, "");
   L.push(`| Market | Official category | Latest period | YoY | Available-year average | Trend vs. 6 months ago | All-items YoY | Market benchmark | Proposed change |`);
   L.push(`|---|---|---|---|---|---|---|---|---|`);
   for (const f of b.facts) {
