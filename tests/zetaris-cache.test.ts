@@ -96,3 +96,19 @@ test("when StatCan's API is down during discovery, its catalogued vector is stil
   const r = await onboard(z, { ...statcanFood, status: "unknown" }, "food", new Date("2026-10-27"));
   assert.equal(r.ok, false);
 });
+
+test("a transient failure while caching or verifying a new source is retried once", async () => {
+  process.env.PSIG_ONBOARD_RETRY_MS = "0";
+  resetCacheRegistry();
+  let failures = 2; // the first CACHE TABLE and the first verification fail, as StatCan did on 27 Oct 10:15
+  const { z, sqls } = recorder((sql) => /^CACHE TABLE|^SELECT COUNT/.test(sql) && failures-- > 0);
+  const r = await onboard(z, statcanFood, "food", new Date("2026-10-27"));
+  assert.equal(r.ok, true, r.error);
+  assert.equal(r.cached, true);
+  assert.equal(sqls.filter((s) => /^SELECT COUNT/.test(s)).length, 2);
+  // A source that keeps failing still fails after the one retry.
+  resetCacheRegistry();
+  const down = recorder((sql) => /^CACHE TABLE|^SELECT COUNT/.test(sql));
+  assert.equal((await onboard(down.z, statcanFood, "food", new Date("2026-10-27"))).ok, false);
+  assert.equal(down.sqls.filter((s) => /^SELECT COUNT/.test(s)).length, 2);
+});

@@ -135,20 +135,26 @@ export async function onboard(z: SqlRunner, c: Candidate, concept: Concept, now 
     else createdObjects++;
   }
   const rawTable = rawTableRef(c, concept);
-  const cache = await ensureCached(z, rawTable, { reachable: () => sourceAnswers(c.sourceUrl) });
-  const cached = cache.ok;
-  try {
-    const check = await z.run(`SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.${plan.view} WHERE yoy_pct IS NOT NULL`);
-    const count = check.rows[0]?.[0];
-    const observedPeriod = check.rows[0]?.[1];
-    const hasRows = isUsableObservationCount(count);
-    const fresh = hasFreshPeriod(observedPeriod, c.frequency, now);
-    const latest = typeof observedPeriod === "string" ? observedPeriod : undefined;
-    const error = !hasRows ? "view returned no rows or an invalid observation count" : !fresh ? `view has no fresh ${c.frequency} observation period (latest ${String(observedPeriod ?? "missing")})` : undefined;
-    return { view: plan.view, table: plan.table, ok: hasRows && fresh, existed, createdObjects, existingObjects, rows: hasRows ? Number(count) : 0, latest, error, sql: plan.statements, cached, rawTable };
-  } catch (e) {
-    return { view: plan.view, table: plan.table, ok: false, existed, createdObjects, existingObjects, rows: 0, error: String(e).slice(0, 300), sql: plan.statements, cached, rawTable };
+  let cached = false;
+  let lastError = "";
+  // One retry after a short pause: an agency read through Zetaris can fail for a single request (StatCan did on 27 Oct).
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt) await new Promise((res) => setTimeout(res, Number(process.env.PSIG_ONBOARD_RETRY_MS ?? 1500)));
+    cached = (await ensureCached(z, rawTable, { reachable: () => sourceAnswers(c.sourceUrl) })).ok;
+    try {
+      const check = await z.run(`SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.${plan.view} WHERE yoy_pct IS NOT NULL`);
+      const count = check.rows[0]?.[0];
+      const observedPeriod = check.rows[0]?.[1];
+      const hasRows = isUsableObservationCount(count);
+      const fresh = hasFreshPeriod(observedPeriod, c.frequency, now);
+      const latest = typeof observedPeriod === "string" ? observedPeriod : undefined;
+      const error = !hasRows ? "view returned no rows or an invalid observation count" : !fresh ? `view has no fresh ${c.frequency} observation period (latest ${String(observedPeriod ?? "missing")})` : undefined;
+      return { view: plan.view, table: plan.table, ok: hasRows && fresh, existed, createdObjects, existingObjects, rows: hasRows ? Number(count) : 0, latest, error, sql: plan.statements, cached, rawTable };
+    } catch (e) {
+      lastError = String(e).slice(0, 300);
+    }
   }
+  return { view: plan.view, table: plan.table, ok: false, existed, createdObjects, existingObjects, rows: 0, error: lastError, sql: plan.statements, cached, rawTable };
 }
 
 export const COMPARE_COLUMNS = ["country", "concept", "category_label", "frequency", "period", "yoy_pct", "source_id"];

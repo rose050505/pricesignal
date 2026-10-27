@@ -345,10 +345,12 @@ function unavailableCategoryErrors(text: string, f: MarketFacts, req: Request): 
 }
 
 /** "Canadian data absent" for a market whose requested series is in the facts is false; product-level SKU omissions are not market data. */
-function availableDataDenialErrors(text: string, f: MarketFacts, req: Request): string[] {
+function availableDataDenialErrors(text: string, f: MarketFacts, req: Request, facts: MarketFacts[] = [f]): string[] {
   const bad: string[] = [];
   for (const sentence of text.split(/(?<=[.!?;])\s+/)) {
     if (/\b(?:SKUs?|products?|price list)\b/i.test(sentence)) continue;
+    // "CA data unavailable" next to DE and AU is about CA: a sentence naming another market is not this market's claim.
+    if (countryMentions(sentence, facts).some((m) => m.country !== f.country)) continue;
     if (!/\b(?:data|CPI|HICP|inflation|series|benchmark|verdict|figures?|statistics|release)\b/i.test(sentence)) continue;
     const series = /all[ -]items|headline inflation/i.test(sentence) ? f.allItems : requestedSeries(f, req);
     if (!series) continue;
@@ -586,7 +588,7 @@ function namedCountryErrors(text: string, facts: MarketFacts[], req: Request, po
           ...explicitSignErrors(clause, [...marketNumbers(f, req, policy, true), ...extra]),
           ...observedRateErrors(clause, f, req),
           ...unavailableCategoryErrors(clause, f, req),
-          ...availableDataDenialErrors(clause, f, req),
+          ...availableDataDenialErrors(clause, f, req, facts),
           ...rangeErrors(clause, f),
         ];
         bad.push(...errors.map((error) => `${country}: ${error}`));
@@ -625,7 +627,7 @@ export function checkNarrative(n: Narrative, allowed: number[], facts?: MarketFa
       bad.push(...costPolicyErrors(text, f?.costNeed !== undefined));
       bad.push(...costTargetErrors(text, f?.costNeed !== undefined ? [f.costNeed] : []));
       bad.push(...namedCountryErrors(text, facts, req, policy, extra));
-      if (f) bad.push(...rangeErrors(text, f), ...verdictErrors(text, f), ...observedRateErrors(text, f, req), ...unavailableCategoryErrors(text, f, req), ...availableDataDenialErrors(text, f, req));
+      if (f) bad.push(...rangeErrors(text, f), ...verdictErrors(text, f), ...observedRateErrors(text, f, req), ...unavailableCategoryErrors(text, f, req), ...availableDataDenialErrors(text, f, req, facts));
     }
     if (typeof n.headline !== "string" || (n.watch !== undefined && typeof n.watch !== "string")) bad.push("headline or watch: not text");
     const general = [n.headline, n.watch ?? ""].join(" ");

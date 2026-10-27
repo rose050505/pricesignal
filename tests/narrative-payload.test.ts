@@ -86,3 +86,14 @@ test("prose cannot say a market's data is missing when its requested series is i
   const caMissing = facts.map((f) => f.country === "CA" ? { ...f, category: undefined, suggested: undefined, verdict: undefined } : f);
   assert.deepEqual(checkNarrative({ headline: "Historical market comparison", markets: { CA: "Canadian food data is unavailable this run." } }, allowedNumbers(caMissing as any, base, 0.7), caMissing as any, base, 0.7), []);
 });
+
+test("a data-missing phrase is checked only against the market it is about", () => {
+  // Real headline on 27 Oct 10:16 when StatCan's food series really was missing; it was wrongly charged to DE and AU.
+  const facts = buildFacts(rows, base, "Q1", 0.7, new Date("2026-10-27"));
+  const caMissing = facts.map((f) => f.country === "CA" ? { ...f, category: undefined, suggested: undefined, verdict: undefined } : f) as any;
+  const check = (n: any) => checkNarrative({ headline: "Historical market comparison", markets: {}, ...n }, allowedNumbers(caMissing, base, 0.7), caMissing, base, 0.7);
+  assert.deepEqual(check({ headline: "Proposed +5% Q1 change: above DE & AU food benchmarks, CA data unavailable" }).filter((p) => /missing/.test(p)), []);
+  assert.deepEqual(check({ markets: { DE: "German food CPI was 0.4% YoY in September 2026. Canadian food data is unavailable this run." } }).filter((p) => /missing/.test(p)), []);
+  // Still caught when the market named is the one whose data is present.
+  assert.ok(check({ headline: "German data absent; Aussie flat." }).some((p) => /DE: data claimed missing/.test(p)));
+});

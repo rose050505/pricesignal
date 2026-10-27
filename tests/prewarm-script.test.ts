@@ -7,7 +7,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 
 /** Copy only the wrapper; a fake npx records its arguments and environment and never loads the application. */
-function run(env: Record<string, string>, code = 0) {
+function run(env: Record<string, string>, code = 0, extra = "") {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "psig-prewarm-"));
   try {
     fs.mkdirSync(path.join(root, "scripts"));
@@ -17,6 +17,7 @@ function run(env: Record<string, string>, code = 0) {
 printf 'args=%s\\nmemory=%s\\nns=%s\\n' "$*" "$PSIG_MEMORY_DIR" "$PSIG_ZETARIS_NS" > "$FAKE_OUT"
 echo "  · [onboard] onboarded eurostat CP01 -> psig.v_de_food (created 2 SQL objects; 0 already existed; source cached in Zetaris; verified: 26 rows, latest 2026-09)"
 echo "  · [sql] Q3: CACHE TABLE psig_eurostat.eurostat_de_prc_hicp_minr_cp01_x"
+${extra}
 exit ${code}
 `, { mode: 0o755 });
     const out = path.join(root, "fake.txt");
@@ -47,4 +48,11 @@ test("a partial prewarm (an agency down) is reported with the CLI's exit status"
   const r = run({ PSIG_ZETARIS_NS: "video1027" }, 3);
   assert.equal(r.status, 3);
   assert.match(r.stdout + r.stderr, /not every market was covered/i);
+});
+
+test("a source that failed to register or cache makes the prewarm fail even when the CLI exits 0", () => {
+  const r = run({ PSIG_ZETARIS_NS: "video1027" }, 0, 'echo "  · [onboard] FAILED statcan v41690974 -> psig.v_ca_food: Error: Zetaris HTTP 400"');
+  assert.equal(r.status, 4);
+  assert.match(r.stderr, /1 source\(s\) failed to register or cache/);
+  assert.match(r.stderr, /statcan v41690974/);
 });

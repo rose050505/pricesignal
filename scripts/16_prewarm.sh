@@ -23,4 +23,10 @@ status=${PIPESTATUS[0]}
 cached=$(grep -oE "CACHE TABLE [a-z_]+\.[a-z0-9_]+" "$log" | sort -u | wc -l)
 echo "[prewarm] namespace $PSIG_ZETARIS_NS: ${cached// /} raw source table(s) cached in Zetaris (log: $log)"
 if [ "$status" = 3 ]; then echo "[prewarm] not every market was covered (an agency may be down); run it again before recording" >&2; fi
+failed=$(grep -E "\[onboard\] FAILED" "$log")
+if [ -n "$failed" ]; then
+  echo "[prewarm] $(printf '%s\n' "$failed" | wc -l | tr -d ' ') source(s) failed to register or cache; the run will register them live (or omit them if the agency is still down):" >&2
+  printf '%s\n' "$failed" | sed -E 's/^.*FAILED (SKU )?/  - /; s/ -> .*$//' >&2
+  [ "$status" = 0 ] && status=4
+fi
 exit "$status"
