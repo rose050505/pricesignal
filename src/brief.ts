@@ -489,6 +489,18 @@ function universalTrendErrors(text: string, facts: MarketFacts[], req: Request, 
   return out;
 }
 
+/** "a blanket +5% Q1 increase" when nobody said Q1: a quarter must come from the request or a quarterly period. */
+function quarterErrors(text: string, facts: MarketFacts[], req: Request, field: string): string[] {
+  if (/same as (?:last time|before)|지난번|저번/i.test(req.raw)) return []; // a follow-up may carry the earlier quarter
+  const allowed = new Set([...req.raw.matchAll(/\bq([1-4])\b|([1-4])\s*분기/gi)].map((m) => m[1] ?? m[2]));
+  for (const f of facts) for (const s of [f.category, f.allItems]) for (const p of [s?.latestPeriod, ...(s?.points ?? []).map((x) => x.period)]) {
+    const q = String(p ?? "").match(/-Q([1-4])$/);
+    if (q) allowed.add(q[1]);
+  }
+  const named = [...new Set([...text.matchAll(/\bQ([1-4])\b/g)].filter((m) => !allowed.has(m[1])).map((m) => m[0]))];
+  return named.length ? [`${field}: mentions ${named.join(", ")}, which neither the request nor the data names`] : [];
+}
+
 function headlineVerdictErrors(headline: string, facts: MarketFacts[], field = "headline"): string[] {
   const vf = facts.filter((f) => f.verdict || f.costVsMarket);
   if (!vf.length) return [];
@@ -732,7 +744,7 @@ export function checkNarrative(n: Narrative, allowed: number[], facts?: MarketFa
     bad.push(...headlineVerdictErrors(String(n.headline ?? ""), facts));
     if (typeof n.watch === "string") bad.push(...headlineVerdictErrors(n.watch, facts, "watch"));
     for (const [field, text] of [["headline", n.headline], ["watch", n.watch], ...Object.entries(n.markets ?? {})] as [string, unknown][]) {
-      if (typeof text === "string") bad.push(...universalTrendErrors(text, facts, req, field));
+      if (typeof text === "string") bad.push(...universalTrendErrors(text, facts, req, field), ...quarterErrors(text, facts, req, field));
     }
   } else {
     bad.push(...unknownNumbers([n.headline, ...Object.values(n.markets ?? {}), n.watch ?? ""].join(" "), allowed));

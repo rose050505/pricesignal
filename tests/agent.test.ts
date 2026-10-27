@@ -463,7 +463,8 @@ test("grounding also checks verdict words, stray 6/12, 'supports X to Y' ranges,
     { country: "DE", agency: "Eurostat", category: s(1.4, 6.1), suggested: { low: 1.0, high: 4.3, basis: "" }, verdict: "above the market benchmark", cite: "Q8", monthsStale: 1 },
     { country: "CA", agency: "StatCan", category: s(2.2, 4.1), suggested: { low: 1.5, high: 2.9, basis: "" }, verdict: "above the market benchmark", cite: "Q8", monthsStale: 1 },
   ];
-  const req: any = { raw: "", countries: ["DE", "CA"], concept: "snacks", conceptWords: [], proposedChangePct: 5, unknownCountries: [] };
+  // The real brief below answered a question that said "for Q1", so its headline may say Q1.
+  const req: any = { raw: "DE and CA snacks: thinking +5% for Q1", countries: ["DE", "CA"], concept: "snacks", conceptWords: [], proposedChangePct: 5, unknownCountries: [] };
   const allowed = allowedNumbers(facts, req, 0.7);
   const chk = (n: any) => checkNarrative(n, allowed, facts, req, 0.7);
   // found by the 26 Oct review (all passed before)

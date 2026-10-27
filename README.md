@@ -6,6 +6,13 @@ Open Agent Hackathon 2026 · Track 01 — Solving Fragmented Intelligence · bui
 
 **Video:** (link added after upload) · **Recorded runs with full traces:** [examples/](examples/) · [Sample inputs and outputs](#sample-inputs-and-outputs) · [How each sponsor is used](#sponsor-technology)
 
+| Sponsor | What it does here | Where you see it |
+|---|---|---|
+| **Zetaris** | Registers each agency API at run time as a Lightning REST table with a decoding schemastore view, caches it (`CACHE TABLE`), answers each comparison with one federated query over a business view, and joins the company price list | Trace `onboard` and `sql` lines; the federated-query card |
+| **NVIDIA Nemotron** (Nightshift's NVIDIA API lane) | Reads the messy request, proposes the discovery batch, picks official categories for products, writes the explanation; code checks every number, verdict and trend claim | Header model badge; "NVIDIA Nemotron in this run"; SKU table reasons |
+| **Meterless Nightshift** | The AI runtime behind every model call (provider contract, hedged calls, thinking switch) | "via Meterless Nightshift" in the trace |
+| **Meterless H-MEM** | Remembers policies, requests, verified mappings and last results, so a follow-up can skip planning and discovery | "Remembered with Meterless H-MEM" card; [02_same_as_last_time](examples/02_same_as_last_time/brief.md) |
+
 Check a recorded result in about a minute, with no Zetaris, Nightshift or keys:
 
 ```bash
