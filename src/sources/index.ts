@@ -39,16 +39,23 @@ const BOOTSTRAP = [
   `CREATE SCHEMASTORE CONTAINER psig`,
 ];
 
-let bootstrapped = false;
+// Shared by parallel onboarding: agencies onboard concurrently and must not each resend the bootstrap DDL.
+let bootstrapping: Promise<string[]> | undefined;
 export async function bootstrap(z: SqlRunner): Promise<string[]> {
-  if (bootstrapped) return [];
-  const log: string[] = [];
-  for (const s of BOOTSTRAP) {
-    const r = await runDdl(z, s);
-    log.push(`${r.ok ? (r.existed ? "exists" : "created") : "FAILED"}: ${s.split(" ").slice(0, 4).join(" ")}${r.error ? ` (${r.error})` : ""}`);
-  }
-  bootstrapped = !log.some((l) => l.startsWith("FAILED"));
-  return log;
+  if (bootstrapping) return bootstrapping.then(() => []);
+  const run = (async () => {
+    const log: string[] = [];
+    for (const s of BOOTSTRAP) {
+      const r = await runDdl(z, s);
+      log.push(`${r.ok ? (r.existed ? "exists" : "created") : "FAILED"}: ${s.split(" ").slice(0, 4).join(" ")}${r.error ? ` (${r.error})` : ""}`);
+    }
+    // A failed bootstrap is tried again by the next onboarding.
+    if (log.some((l) => l.startsWith("FAILED"))) bootstrapping = undefined;
+    return log;
+  })();
+  bootstrapping = run;
+  run.catch(() => { if (bootstrapping === run) bootstrapping = undefined; });
+  return run;
 }
 
 export interface OnboardResult {

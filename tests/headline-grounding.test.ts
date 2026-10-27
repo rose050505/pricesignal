@@ -110,3 +110,57 @@ test("country adjectives keep proposal verdicts attached to the named market", (
     assert.deepEqual(checkMixed({ [field]: "The proposed 2.2% is above the market benchmark in the German market." }), []);
   }
 });
+
+test("a countryless 'all markets' verdict must hold in every market", () => {
+  const req3: Request = { raw: "DE CA AU food +3%", countries: ["DE", "CA", "AU"], concept: "food", conceptWords: ["food"], proposedChangePct: 3, costIncreasePct: 8, costSharePct: 60, unknownCountries: [] };
+  const rows3 = [["DE", 0.6, 0.4], ["CA", 2.6, 2.2], ["AU", 3.1, 3.0]].flatMap(([country, prior, latest]) => [
+    { country, concept: "food", category_label: "Food", frequency: "M", period: "2026-08", yoy_pct: prior, source_id: `${country}:food` },
+    { country, concept: "food", category_label: "Food", frequency: "M", period: "2026-09", yoy_pct: latest, source_id: `${country}:food` },
+  ]);
+  const f3 = buildFacts(rows3, req3, "Q1", 0.7, new Date("2026-10-27"));
+  // +3% is above in DE and CA but within in AU; the 3.4% cost target is above in all three.
+  assert.deepEqual(f3.map((f) => [f.country, f.verdict, f.costVsMarket]), [["DE", "above the market benchmark", "above the market benchmark"], ["CA", "above the market benchmark", "above the market benchmark"], ["AU", "within the market benchmark", "above the market benchmark"]]);
+  const check3 = (headline: string) => checkNarrative({ headline, markets: {} }, allowedNumbers(f3, req3, 0.7), f3, req3, 0.7);
+  for (const wrong of [
+    "The proposed +3% is above the market benchmark in all three markets.",
+    "+3% is within the benchmark everywhere.",
+    "The proposed +3% exceeds the benchmark across all markets.",
+    "In each market the proposed +3% is above the benchmark.",
+  ]) assert.ok(check3(wrong).length, wrong);
+  for (const right of [
+    "The 3.4% cost recovery target is above the market benchmark in all three markets.",
+    "The proposed +3% is above the market benchmark in two of the three markets.",
+    "The proposed +3% is above the benchmark in DE and CA and within it in AU.",
+    "Across the three markets, all-items inflation is not the benchmark; the proposed +3% is above the market benchmark in two of them.",
+  ]) assert.deepEqual(check3(right), [], right);
+});
+
+test("a decimal point does not hide the quantifier of an 'all markets' verdict", () => {
+  const req3: Request = { raw: "DE CA AU food +3.5%", countries: ["DE", "CA", "AU"], concept: "food", conceptWords: ["food"], proposedChangePct: 3.5, unknownCountries: [] };
+  const rows3 = [["DE", 0.6, 0.4], ["CA", 3.9, 3.6], ["AU", 3.1, 3.0]].flatMap(([country, prior, latest]) => [
+    { country, concept: "food", category_label: "Food", frequency: "M", period: "2026-08", yoy_pct: prior, source_id: `${country}:food` },
+    { country, concept: "food", category_label: "Food", frequency: "M", period: "2026-09", yoy_pct: latest, source_id: `${country}:food` },
+  ]);
+  const f3 = buildFacts(rows3, req3, "Q1", 1, new Date("2026-10-27"));
+  assert.deepEqual(f3.map((f) => f.verdict), ["above the market benchmark", "below the market benchmark", "above the market benchmark"]);
+  const wrong = "In all three markets the proposed +3.5% is above the market benchmark.";
+  assert.ok(checkNarrative({ headline: wrong, markets: {} }, allowedNumbers(f3, req3, 1), f3, req3, 1).length, wrong);
+});
+
+test("a cost-recovery requirement must state the computed cost target, not another allowed number", () => {
+  assert.equal(facts[0].costNeed, 3.4);
+  for (const wrong of [
+    "Recovering 70% of the 8% cost rise requires a 5% price increase.",
+    "Covering your costs needs about 5%.",
+    "Recovering costs would need a price increase of 1.4%.",
+  ]) {
+    assert.ok(check({ headline: wrong }).length, `headline: ${wrong}`);
+    assert.ok(check({ markets: { DE: wrong } }).length, `DE: ${wrong}`);
+  }
+  for (const right of [
+    "Recovering 70% of the 8% cost rise requires a 3.4% price increase.",
+    "Covering your costs needs about 3.4%.",
+    "The 3.4% cost recovery target is above the market benchmark in Germany and Canada.",
+    "The proposed +5% is above the market benchmark in DE and CA; recovering costs requires 3.4%.",
+  ]) assert.deepEqual(check({ headline: right }), [], right);
+});

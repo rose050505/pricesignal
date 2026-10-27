@@ -16,6 +16,11 @@ const TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS || 90_000);
 // rejects the extra fields, drop them once and keep going.
 let sendReasoningHint = (process.env.PSIG_REASONING_EFFORT ?? "low") !== "off";
 
+/** Whether a rejected request blamed the optional reasoning fields (only then is it worth resending without them). */
+export function rejectsReasoningHint(status: number, body: string): boolean {
+  return (status === 400 || status === 422) && /reasoning|\bprovider\b/i.test(body) && /unrecogni[sz]ed|unknown|unsupported|not (?:permitted|allowed|supported)|extra|invalid|unexpected/i.test(body);
+}
+
 export function normalizeBaseUrl(raw: string): string {
   let u = raw.trim().replace(/\/+$/, "");
   u = u.replace(/(\/v1)+$/, "");
@@ -121,7 +126,7 @@ export async function chat(messages: ChatMessage[], opts: { lane?: "fast" | "dee
         if (attempt + 1 < attempts) await new Promise((res) => setTimeout(res, 2000 * (attempt + 1)));
         continue;
       }
-      if ((r.status === 400 || r.status === 422) && sendReasoningHint) {
+      if (sendReasoningHint && rejectsReasoningHint(r.status, r.text)) {
         sendReasoningHint = false;
         process.stderr.write(`    … runtime rejected the reasoning hint (HTTP ${r.status}); retrying without it\n`);
         attempt--;

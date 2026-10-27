@@ -97,15 +97,29 @@ export function monthsBack(n: number, from = new Date()): string {
 
 export const USER_AGENT = () => process.env.PSIG_HTTP_USER_AGENT || "PriceSignal/0.1 (Open Agent Hackathon 2026)";
 
-export async function getJson(url: string, headers: Record<string, string> = {}): Promise<any> {
-  let r: Response;
-  try {
-    r = await fetch(url, { headers: { "User-Agent": USER_AGENT(), ...headers }, signal: AbortSignal.timeout(60_000) });
-  } catch (e: any) {
-    const c = e?.cause;
-    throw new Error(`GET ${new URL(url).host} failed: ${e?.message}${c ? ` (cause: ${c.code ?? ""} ${c.message ?? c})` : ""}`);
+/** One retry after a dropped connection, a 5xx or a 429 (agencies blip); a timeout already waited a minute and is not retried. */
+export async function getJson(url: string, headers: Record<string, string> = {}, retryDelayMs = 1000): Promise<any> {
+  let r: Response | undefined;
+  let text = "";
+  for (let attempt = 0; ; attempt++) {
+    const last = attempt >= 1;
+    try {
+      r = await fetch(url, { headers: { "User-Agent": USER_AGENT(), ...headers }, signal: AbortSignal.timeout(60_000) });
+    } catch (e: any) {
+      const c = e?.cause;
+      if (!last && e?.name !== "TimeoutError" && e?.name !== "AbortError") {
+        await new Promise((res) => setTimeout(res, retryDelayMs));
+        continue;
+      }
+      throw new Error(`GET ${new URL(url).host} failed: ${e?.message}${c ? ` (cause: ${c.code ?? ""} ${c.message ?? c})` : ""}`);
+    }
+    text = await r.text();
+    if (!last && (r.status >= 500 || r.status === 429)) {
+      await new Promise((res) => setTimeout(res, retryDelayMs));
+      continue;
+    }
+    break;
   }
-  const text = await r.text();
   if (!r.ok) throw new Error(`GET ${url} -> HTTP ${r.status}: ${text.slice(0, 200)}`);
   try {
     return JSON.parse(text);

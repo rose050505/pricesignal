@@ -39,7 +39,12 @@ export interface Request {
 
 export interface TraceEvent { t: number; kind: string; title: string; detail?: unknown }
 
-export interface AgentDeps { llm?: typeof chat; sql: SqlRunner; memory: AgentMemory; discoverFn?: typeof discover; onboardFn?: typeof onboard; maxSteps?: number; hedgeMs?: number }
+export interface AgentDeps { llm?: typeof chat; sql: SqlRunner; memory: AgentMemory; discoverFn?: typeof discover; onboardFn?: typeof onboard; maxSteps?: number; hedgeMs?: number; compareRetryMs?: number }
+
+/** A federated query that fails this many times ends the run with its error instead of retrying every step. */
+const MAX_COMPARE_FAILURES = 3;
+/** Price-list queries return about 15 rows per SKU and market; Zetaris honours this limit (checked live with 12,000 rows). */
+const PRICE_LIST_ROW_LIMIT = 20_000;
 
 const SYSTEM_PLANNER = `You are PriceSignal, an agent that helps an exporter's pricing manager decide price changes per market from official inflation statistics.
 Markets and agencies: EU members (DE, FR, IT, ES, NL, BE, AT, IE, PT, FI, SE, DK, PL, CZ) = Eurostat HICP, CA = Statistics Canada CPI, AU = Australian Bureau of Statistics CPI.
@@ -63,6 +68,9 @@ export class PriceSignalAgent extends EventEmitter {
   private discoverFn: typeof discover;
   private onboardFn: typeof onboard;
   private maxSteps: number;
+  private compareRetryMs: number;
+  /** The last parse fell back to the rules (no usable model reply). */
+  private requestReadByRules = false;
   private providerSlow = false;
   private hedgeMs: number;
   /** the Zetaris runner as this agent uses it: allowlist, trace, and this run's own statement numbers (Q1, Q2, ...) */
@@ -93,12 +101,13 @@ export class PriceSignalAgent extends EventEmitter {
     this.discoverFn = deps.discoverFn ?? discover;
     this.onboardFn = deps.onboardFn ?? onboard;
     this.maxSteps = deps.maxSteps ?? 18;
+    this.compareRetryMs = deps.compareRetryMs ?? 2000;
     this.hedgeMs = deps.hedgeMs ?? (process.env.PSIG_HEDGE_MS === "off" ? Infinity : Number(process.env.PSIG_HEDGE_MS || 10_000));
     const run = deps.sql.run.bind(deps.sql);
     this.sql = { run: async (sql, opts) => {
       // One statement per call, and only SELECT or onboarding DDL (quoted text may contain anything).
-      const bare = sql.replace(/'(?:[^']|'')*'/g, "''").replace(/"[^"]*"/g, '""');
-      if (!/^\s*(SELECT\b|CREATE\s+(LIGHTNING\s+(DATABASE|REST\s+TABLE)|SCHEMASTORE\s+(CONTAINER|VIEW))\b)/i.test(sql) || /;\s*\S/.test(bare)) {
+      const bare = sqlOutsideQuotes(sql);
+      if (!/^\s*(SELECT\b|CREATE\s+(LIGHTNING\s+(DATABASE|REST\s+TABLE)|SCHEMASTORE\s+(CONTAINER|VIEW))\b)/i.test(sql) || bare === undefined || /;\s*\S/.test(bare)) {
         this.log("error", `blocked statement (only SELECT and onboarding DDL are allowed): ${sql.split("\n")[0].slice(0, 80)}`);
         throw new Error("statement blocked by the SQL allowlist");
       }
@@ -178,9 +187,12 @@ These percentages have different denominators: never infer cost_share_pct from a
 Request: """${raw}"""
 Reply with JSON only.`;
     let j: any = {};
+    this.requestReadByRules = true;
     try {
       const r = await this.hedged("request parsing", (signal) => this.llm([{ role: "user", content: prompt }], { lane: "fast", temperature: 0, attempts: 1, timeoutMs: 60_000, signal }));
-      j = extractJson(r.text) ?? {};
+      const parsed = extractJson(r.text);
+      if (parsed) this.requestReadByRules = false;
+      j = parsed ?? {};
       this.log("llm", `parsed request (${r.model}, ${r.ms} ms${via(r)})`, j);
     } catch (e) {
       this.log("warn", `LLM parse failed, using rules: ${String(e).slice(0, 120)}`);
@@ -191,7 +203,8 @@ Reply with JSON only.`;
     const unknown = explicitMarkets.unknown;
     const intent = explicitMarketConcept(raw);
     const concept = intent.concept ?? (cleanConcept(j.concept) || "food");
-    const words = intent.concept ? CONCEPT_WORDS[concept] : Array.isArray(j.concept_words) && j.concept_words.length ? j.concept_words.map((w: unknown) => String(w).toLowerCase()) : CONCEPT_WORDS[concept] ?? [concept];
+    const modelWords: string[] = Array.isArray(j.concept_words) ? j.concept_words.filter((w: unknown): w is string => typeof w === "string" && !!w.trim()).map((w: string) => w.toLowerCase()) : [];
+    const words = intent.concept ? CONCEPT_WORDS[concept] : modelWords.length ? modelWords : CONCEPT_WORDS[concept] ?? [concept];
     // "same as last time": start from the request H-MEM remembered, keep only what the user changed.
     const sameAsLast = sameAsLastRequest(raw);
     const last = sameAsLast ? this.deps.memory.lastRequest() : undefined;
@@ -255,7 +268,9 @@ Reply with JSON only.`;
     const candidates = new Map<string, Candidate[]>();
     const notes: string[] = [...(req.inputIssues ?? [])];
     for (const u of req.unknownCountries) notes.push(`${u}: not covered yet - PriceSignal currently reads Eurostat (EU markets), Statistics Canada (CA) and ABS (AU).`);
-    if (req.defaultMarkets) notes.push(`No market was named in the question, so the brief covers the default markets ${req.countries.join(", ")}.`);
+    if (req.defaultMarkets) notes.push(this.requestReadByRules
+      ? `No supported market was recognised in the question (the model could not read it, so only exact market names were matched); the brief covers the default markets ${req.countries.join(", ")}.`
+      : `No market was named in the question, so the brief covers the default markets ${req.countries.join(", ")}.`);
     if (!req.countries.length) {
       // Only markets PriceSignal does not cover were named: say so instead of answering for markets nobody asked about.
       memory.rememberRequest(req);
@@ -274,11 +289,15 @@ Reply with JSON only.`;
     let compared: SqlResult | undefined;
     let comparedViews = -1; // views.size when the last federated query ran
     let badReplies = 0;
+    let stalledTurns = 0; // planner turns in a row that changed nothing
+    let compareFailures = 0;
+    let compareError = "";
     let autopilot = rememberedPairs.length === pairs.length;
     if (autopilot) this.log("plan", "all needed series have remembered mappings - skipping the planner; verifying the live Zetaris views");
 
     // A pair is settled when it has a view, or when its agency was asked and has no usable series (":gaveup").
     const unsettled = () => pairs.filter((p) => !views.has(key(p.country, p.concept)) && !candidates.has(key(p.country, p.concept) + ":gaveup"));
+    const progress = () => `${views.size}|${unsettled().length}|${candidates.size}|${compared ? comparedViews : -1}`;
     for (let step = 0; step < this.maxSteps; step++) {
       const missing = unsettled();
       let batch: { action: string; args: any }[] = [];
@@ -316,7 +335,26 @@ Reply with JSON only.`;
       const observations: unknown[] = [];
       let finished = false;
       const sctx = { views, candidates, notes, key, pairs, getCompared: () => compared, setCompared: (c: SqlResult) => { compared = c; comparedViews = views.size; } };
+      const plannerTurn = !autopilot;
+      const before = progress();
       const results = await this.executeBatch(batch, req, sctx);
+      for (let i = 0; i < batch.length; i++) {
+        const error = (results[i] as { error?: string } | undefined)?.error;
+        if (batch[i].action === "compare" && error && error !== "no views yet") {
+          compareFailures++;
+          compareError = error;
+        }
+      }
+      if (compareFailures >= MAX_COMPARE_FAILURES && !compared) break;
+      if (compareFailures && !compared && batch.some((b) => b.action === "compare")) await new Promise((r) => setTimeout(r, this.compareRetryMs * compareFailures));
+      if (plannerTurn) {
+        stalledTurns = progress() === before ? stalledTurns + 1 : 0;
+        if (stalledTurns >= 2) {
+          // Valid JSON that repeats itself would otherwise use every step: finish the remaining pairs deterministically.
+          autopilot = true;
+          this.log("warn", "planner made no progress for 2 turns - switching to deterministic autopilot for the remaining steps");
+        }
+      }
       // Pairs the agent has not even tried to discover yet (a pair that was tried and has no series may legitimately stay missing).
       const untried = pairs.filter((p) => !views.has(key(p.country, p.concept)) && !candidates.has(key(p.country, p.concept)));
       for (let i = 0; i < batch.length; i++) {
@@ -338,10 +376,15 @@ Reply with JSON only.`;
       if (finished) break;
     }
 
-    if (!compared) {
+    if (!compared && views.size && compareFailures < MAX_COMPARE_FAILURES) {
       // Guardrail: never leave without the federated query if any view exists.
-      if (views.size) await this.execute({ action: "compare", args: {} }, req, { views, candidates, notes, key, pairs, getCompared: () => compared, setCompared: (c) => (compared = c) });
+      const r = (await this.execute({ action: "compare", args: {} }, req, { views, candidates, notes, key, pairs, getCompared: () => compared, setCompared: (c) => (compared = c) })) as { error?: string } | undefined;
+      if (r?.error) {
+        compareFailures++;
+        compareError = r.error;
+      }
     }
+    if (!compared && views.size) throw new Error(`The federated comparison over ${views.size} onboarded views failed ${compareFailures} time${compareFailures === 1 ? "" : "s"}: ${compareError.replace(/^Error: /, "")}`);
     if (!compared) throw new Error("No market could be onboarded; see trace.");
 
     // ---------- 3. facts are computed by code, narrative by the model ----------
@@ -353,7 +396,12 @@ Reply with JSON only.`;
     const calculationTime = new Date(calculatedAt);
     const facts: MarketFacts[] = buildFacts(rowsAsObjects(compared, COMPARE_COLUMNS), req, compared.id, policy, calculationTime);
     const alignment = buildAlignment(rowsAsObjects(compared, COMPARE_COLUMNS), req, facts, compared.id, calculationTime);
-    for (const p of pairs) if (!views.has(key(p.country, p.concept))) notes.push(`${p.country} ${p.concept}: no usable official series was found.`);
+    for (const p of pairs) {
+      const k = key(p.country, p.concept);
+      // An agency that did not answer already has its own note.
+      if (views.has(k) || candidates.has(k + ":noanswer")) continue;
+      notes.push(candidates.has(k) ? `${p.country} ${p.concept}: no usable official series was found.` : `${p.country} ${p.concept}: not checked in this run.`);
+    }
     const ctx = { views, candidates, notes, key, pairs, getCompared: () => compared, setCompared: (c: SqlResult) => (compared = c) };
     const ensureView = async (country: Country, concept: Concept) => {
       if (!views.has(key(country, concept)) && memory.findMapping(country, concept)?.mapping) await this.execute({ action: "use_memory_mapping", args: { country, concept } }, req, ctx);
@@ -465,6 +513,7 @@ Reply with JSON only.`;
             // An agency that does not answer counts as tried: report it once instead of asking it again every step.
             s.candidates.set(s.key(country, concept), []);
             s.candidates.set(s.key(country, concept) + ":gaveup", []);
+            s.candidates.set(s.key(country, concept) + ":noanswer", []);
             const note = `${country}: ${AGENCY_FOR[country].name} did not answer for "${concept}" (${String(e).replace(/^Error: /, "").slice(0, 80)}).`;
             if (!s.notes.includes(note)) s.notes.push(note);
             this.log("warn", `${AGENCY_FOR[country].name} did not answer for ${country} ${concept}: ${String(e).slice(0, 120)}`);
@@ -598,7 +647,7 @@ Reply with JSON only.`;
     }
     let allowLegacyFallback = false;
     try {
-      const catRes = await this.sql.run(skuCategoriesSql(req.countries));
+      const catRes = await this.sql.run(skuCategoriesSql(req.countries), { limit: PRICE_LIST_ROW_LIMIT });
       const grouped = new Map<string, { country: Country; concept: string; products: string[] }>();
       for (const row of catRes.rows) {
         const country = normalizeCountry(String(row[0]));
@@ -629,7 +678,7 @@ Reply with JSON only.`;
         notes.push("No verified official category series is available for the listed products; SKU prices are omitted.");
         return undefined;
       }
-      const res = await this.sql.run(skuRatesSql([...new Set([...skuViews.values()].map((v) => v.view))], req.countries, monthsBack(15)));
+      const res = await this.sql.run(skuRatesSql([...new Set([...skuViews.values()].map((v) => v.view))], req.countries, monthsBack(15)), { limit: PRICE_LIST_ROW_LIMIT });
       const rows = rowsAsObjects(res, SKU_RATE_COLUMNS);
       const bySku = new Map<string, Record<string, unknown>[]>();
       for (const r of rows) {
@@ -817,7 +866,7 @@ Reply with JSON only.`;
     const catViews = req.countries.map((c) => views.get(`${c}:${cat}`)?.view ?? views.get(`${c}:all_items`)?.view).filter((v): v is string => !!v);
     if (!catViews.length) return undefined;
     try {
-      const res = await this.sql.run(pricingSql([...new Set(catViews)], req.countries));
+      const res = await this.sql.run(pricingSql([...new Set(catViews)], req.countries), { limit: PRICE_LIST_ROW_LIMIT });
       const rows = rowsAsObjects(res, PRICING_COLUMNS);
       const skus: SkuLine[] = rows.map((r) => {
         const f = facts.find((x) => x.country === r.country);
@@ -912,7 +961,7 @@ Reply with JSON only.`;
         const n = extractJson(r.text) as Narrative | null;
         if (!n?.headline) throw new Error(`no headline in reply: ${r.text.replace(/\s+/g, " ").slice(0, 160)}`);
         const bad = checkNarrative(n, allowed, facts, req, policy, noteNumbers);
-        this.log("llm", `narrative (${r.model}, ${r.ms} ms${via(r)})${bad.length ? ` - does not match the facts: ${bad.join(", ")}` : " - numbers and verdicts match the facts"}`);
+        this.log("llm", `narrative (${r.model}, ${r.ms} ms${via(r)})${bad.length ? ` - does not match the facts: ${bad.join(", ")}` : " - numbers and verdicts match the facts"}`, bad.length ? { model: r.model, ms: r.ms, draft: n, problems: bad } : undefined);
         if (!bad.length) return { narrative: { ...n, markets: Object.fromEntries(Object.entries(n.markets ?? {}).map(([k, v]) => [marketKey(k), v])) } };
         issue = "grounding";
         ask.push({ role: "assistant", content: r.text }, { role: "user", content: `These numbers, ranges or verdicts do not match the facts for that market: ${bad.join(", ")}. Rewrite using only that market's numbers; the benchmark range must be exactly benchmark_range_pct low to high, and each market's verdict must be exactly its verdict field. JSON only.` });
@@ -962,10 +1011,31 @@ async function byAgency<T extends { country: Country }>(items: T[], fn: (item: T
     for (const it of list) await fn(it);
   }));
 }
+/**
+ * The first JSON object in a model reply. Reasoning before a closing </think> is skipped, stray braces in
+ * prose are passed over, and a trailing comma (a common slip) is tolerated.
+ */
 export function extractJson(text: string): any | null {
-  const t = text.replace(/```(?:json)?/g, "").trim();
-  const start = t.indexOf("{");
-  if (start < 0) return null;
+  const closed = text.lastIndexOf("</think>");
+  const t = (closed >= 0 ? text.slice(closed + "</think>".length) : text).replace(/```(?:json)?/g, "").trim();
+  for (let start = t.indexOf("{"); start >= 0; start = t.indexOf("{", start + 1)) {
+    const end = objectEnd(t, start);
+    if (end < 0) continue;
+    const body = t.slice(start, end + 1);
+    for (const candidate of [body, withoutTrailingCommas(body)]) {
+      try {
+        const j = JSON.parse(candidate);
+        if (j && typeof j === "object" && !Array.isArray(j)) return j;
+      } catch {
+        // try the lenient form, then the next brace
+      }
+    }
+  }
+  return null;
+}
+
+/** Index of the brace closing the object that opens at `start`, ignoring braces inside strings; -1 if none. */
+function objectEnd(t: string, start: number): number {
   let depth = 0;
   let inStr = false;
   let esc = false;
@@ -979,18 +1049,56 @@ export function extractJson(text: string): any | null {
     }
     if (ch === '"') inStr = true;
     else if (ch === "{") depth++;
-    else if (ch === "}") {
-      depth--;
-      if (depth === 0) {
-        try {
-          return JSON.parse(t.slice(start, i + 1));
-        } catch {
-          return null;
+    else if (ch === "}" && --depth === 0) return i;
+  }
+  return -1;
+}
+
+/** Drop commas directly before a closing brace or bracket, outside strings. */
+function withoutTrailingCommas(t: string): string {
+  let out = "";
+  let inStr = false;
+  let esc = false;
+  for (let i = 0; i < t.length; i++) {
+    const ch = t[i];
+    if (inStr) {
+      out += ch;
+      if (esc) esc = false;
+      else if (ch === "\\") esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    if (ch === "," && /^\s*[}\]]/.test(t.slice(i + 1))) continue;
+    out += ch;
+  }
+  return out;
+}
+
+/**
+ * The statement with quoted text blanked, read left to right so a quote inside a comment or another quote
+ * cannot shift what counts as quoted. Comments are refused (undefined): generated SQL never has them.
+ */
+function sqlOutsideQuotes(sql: string): string | undefined {
+  let out = "";
+  for (let i = 0; i < sql.length; i++) {
+    const ch = sql[i];
+    if (ch === "'" || ch === '"' || ch === "`") {
+      let j = i + 1;
+      for (; j < sql.length; j++) {
+        if (sql[j] === "\\") j++;
+        else if (sql[j] === ch) {
+          if (sql[j + 1] === ch) j++;
+          else break;
         }
       }
-    }
+      if (j >= sql.length) return undefined; // unterminated quote
+      out += ch + ch;
+      i = j;
+    } else if ((ch === "-" && sql[i + 1] === "-") || (ch === "/" && sql[i + 1] === "*")) return undefined;
+    else out += ch;
   }
-  return null;
+  return out;
 }
 
 /** Which runtime answered a model call, shown next to the model name in the trace. */
@@ -1000,7 +1108,7 @@ function via(r: ChatResult): string {
 
 /** A concept name from the model ends up in view names and SQL string literals: keep it to plain words. */
 function cleanConcept(v: unknown): string {
-  return v === null || v === undefined ? "" : String(v).toLowerCase().replace(/['"`\\;]/g, "").trim();
+  return typeof v !== "string" ? "" : v.toLowerCase().replace(/['"`\\;]/g, "").trim();
 }
 
 function sameAsLastRequest(raw: string): boolean {

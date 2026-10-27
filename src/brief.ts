@@ -367,6 +367,19 @@ function rangeErrors(text: string, f: MarketFacts): string[] {
   return bad;
 }
 
+/** "Recovering costs requires a 3.4% price increase": the required change must be the computed cost target. */
+function costTargetErrors(text: string, costNeeds: number[]): string[] {
+  const bad: string[] = [];
+  for (const sentence of text.split(/(?<=[.!?;])\s+/)) {
+    if (!/\b(?:recover\w*|cover(?:s|ing)?\s+(?:\w+\s+){0,2}costs?|cost[ -]recovery)\b/i.test(sentence)) continue;
+    for (const m of sentence.matchAll(/\b(?:requires?|needs?|needed|calls?\s+for|would\s+take)\s+(?:an?\s+)?(?:price\s+(?:increase|rise|change)\s+of\s+)?(?:about\s+|roughly\s+|around\s+|approximately\s+)?([+−-]?\d+(?:\.\d+)?)\s*%/gi)) {
+      const stated = Number(m[1].replace("−", "-"));
+      if (!costNeeds.some((x) => near(x, stated))) bad.push(costNeeds.length ? `cost target contradicts the computed ${costNeeds.map((x) => `${x}%`).join(" / ")}: ${m[0]}` : `cost target unavailable: ${m[0]}`);
+    }
+  }
+  return bad;
+}
+
 function comparisonSubject(text: string, at: number): "cost" | "proposal" {
   const prefix = text.slice(0, at).split(/(?<=[.!?;])\s+/).at(-1)!;
   const last = (pattern: RegExp) => [...prefix.matchAll(pattern)].at(-1)?.index ?? -1;
@@ -416,6 +429,11 @@ function headlineVerdictErrors(headline: string, facts: MarketFacts[], field = "
     for (const c of claims) {
       const present = new Set(vf.map((f) => c.subject === "cost" ? f.costVsMarket : f.verdict));
       if (![...c.verdicts].some((v) => present.has(v as MarketFacts["verdict"]))) bad.push(`${field} "${c.words.join(" or ")}" (computed: ${[...present].join(", ")})`);
+      else if (universalClaim(text, c.at)) {
+        // "in all three markets", "everywhere", "in each market": every market must have that verdict.
+        const off = vf.filter((f) => { const v = c.subject === "cost" ? f.costVsMarket : f.verdict; return v && !c.verdicts.has(v); });
+        if (off.length) bad.push(`${field} "${c.words.join(" or ")}" for every market (computed: ${off.map((f) => `${f.country} ${c.subject === "cost" ? f.costVsMarket : f.verdict}`).join(", ")})`);
+      }
     }
     return bad;
   }
@@ -426,6 +444,15 @@ function headlineVerdictErrors(headline: string, facts: MarketFacts[], field = "
     if (!verdict || !owner.verdicts.has(verdict)) bad.push(`${field} "${owner.words.join(" or ")}" for ${m.country} (computed: ${verdict})`);
   }
   return [...new Set(bad)];
+}
+
+/** Whether the sentence holding a verdict word quantifies over every market ("all three", "both", "everywhere", "each", "across"). */
+function universalClaim(text: string, at: number): boolean {
+  // A decimal point ("3.4%") does not end a sentence.
+  const bounds = [...text.matchAll(/[.!?;](?=\s|$)/g)].map((m) => m.index!);
+  const start = (bounds.filter((i) => i < at).at(-1) ?? -1) + 1;
+  const sentence = text.slice(start, bounds.find((i) => i >= at) ?? text.length);
+  return /\b(?:all(?![ -](?:items|groups))|both|every(?:where)?|each|across)\b/i.test(sentence);
 }
 
 /** The market a prose key refers to ("DE", "de", "Germany"). */
@@ -527,6 +554,7 @@ export function checkNarrative(n: Narrative, allowed: number[], facts?: MarketFa
       bad.push(...explicitSignErrors(text, [...marketNumbers(f, req, policy, true), ...extra]));
       bad.push(...unsupportedClaims(text));
       bad.push(...costPolicyErrors(text, f?.costNeed !== undefined));
+      bad.push(...costTargetErrors(text, f?.costNeed !== undefined ? [f.costNeed] : []));
       bad.push(...namedCountryErrors(text, facts, req, policy, extra));
       if (f) bad.push(...rangeErrors(text, f), ...verdictErrors(text, f), ...observedRateErrors(text, f, req), ...unavailableCategoryErrors(text, f, req));
     }
@@ -537,6 +565,7 @@ export function checkNarrative(n: Narrative, allowed: number[], facts?: MarketFa
     bad.push(...explicitSignErrors(general, facts.flatMap((f) => marketNumbers(f, req, policy, true))));
     bad.push(...unsupportedClaims(general));
     for (const text of [n.headline, n.watch]) if (typeof text === "string") bad.push(...costPolicyErrors(text, facts.some(f => f.costNeed !== undefined)));
+    for (const text of [n.headline, n.watch]) if (typeof text === "string") bad.push(...costTargetErrors(text, [...new Set(facts.flatMap((f) => f.costNeed !== undefined ? [f.costNeed] : []))]));
     for (const text of [n.headline, n.watch]) if (typeof text === "string") bad.push(...namedCountryErrors(text, facts, req, policy, extra));
     if (facts.length === 1) bad.push(...rangeErrors(general, facts[0]), ...verdictErrors(general, facts[0]), ...observedRateErrors(general, facts[0], req));
     // A countryless statement cannot borrow another market's coverage. Explicit
