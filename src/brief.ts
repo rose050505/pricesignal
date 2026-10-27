@@ -59,6 +59,8 @@ export interface Narrative {
   headlineByCode?: boolean;
   /** The reply was cut off mid-JSON; only its complete fields are shown (after the same fact check). */
   cutOff?: boolean;
+  /** The model id the runtime reported for the reply this narrative came from. */
+  model?: string;
 }
 export interface RemovedSentence { field: string; sentence: string; problems: string[] }
 

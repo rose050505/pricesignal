@@ -23,7 +23,7 @@ export class AgentMemory {
 
   rememberMapping(m: SeriesMapping): string {
     const content = `Series mapping: ${m.country} ${m.concept}${m.scope ? ` [${m.scope}]` : ""} -> ${m.agency} ${m.dataset} ${m.code} (${m.label}), ${m.frequency}, Zetaris view psig.${m.view}.${m.note ? ` Note: ${m.note}` : ""}`;
-    const rec = this.hmem.add({
+    const rec = this.addSuperseding({
       content,
       type: "factual",
       source: "pricesignal:onboard",
@@ -36,7 +36,7 @@ export class AgentMemory {
   }
 
   rememberPolicy(passThrough: number, statement: string): string {
-    const rec = this.hmem.add({
+    const rec = this.addSuperseding({
       content: `Pricing policy: ${statement} (recover ${Math.round(passThrough * 100)}% of the monetary cost increase in the selling price)`,
       type: "preference",
       source: "pricesignal:user",
@@ -51,7 +51,7 @@ export class AgentMemory {
   /** The last request, so "same as last time" can be resolved next quarter. */
   rememberRequest(r: { countries: string[]; unknownCountries?: string[]; concept: string; conceptWords: string[]; proposedChangePct?: number; costIncreasePct?: number; costSharePct?: number; costShareBasis?: "before_change" | "after_change"; raw: string }): string {
     const slim = { countries: r.countries, unknownCountries: r.unknownCountries ?? [], concept: r.concept, conceptWords: r.conceptWords, proposedChangePct: r.proposedChangePct, costIncreasePct: r.costIncreasePct, costSharePct: r.costSharePct, costShareBasis: r.costShareBasis };
-    return this.hmem.add({
+    return this.addSuperseding({
       content: `Last pricing request: markets ${r.countries.join(", ")}${r.unknownCountries?.length ? `; not covered: ${r.unknownCountries.join(", ")}` : ""}, category ${r.concept}${r.proposedChangePct !== undefined ? `, proposed ${r.proposedChangePct > 0 ? "+" : ""}${r.proposedChangePct}%` : ""} ("${r.raw.slice(0, 160)}")`,
       type: "general",
       source: "pricesignal:user",
@@ -72,7 +72,7 @@ export class AgentMemory {
 
   /** What a brief concluded for one market, so the next brief can say what changed since. */
   rememberOutcome(o: Outcome): string {
-    return this.hmem.add({
+    return this.addSuperseding({
       content: `Brief outcome: ${o.country} ${o.concept} ${o.period} ${o.yoy}% YoY, ${o.methodVersion === 2 || o.methodVersion === 3 ? "historical market benchmark" : "legacy suggested range"} ${o.low}-${o.high}%${o.policy !== undefined ? `; cost-recovery policy ${Math.round(o.policy * 100)}%` : ""}${o.sourceId ? `; source ${o.sourceId}` : ""}${o.proposed !== undefined ? `, ${o.proposed > 0 ? "+" : ""}${o.proposed}% was ${o.verdict}` : ""} (${o.at.slice(0, 10)})`,
       type: "general",
       source: "pricesignal:agent",
@@ -117,12 +117,22 @@ export class AgentMemory {
     return this.structured("pricing-policy").at(-1);
   }
 
+  /**
+   * Add a record that replaces an earlier one. The old record is kept but marked `supersededBy`, which H-MEM's own
+   * retrieval penalises, so the engine and the agent agree on which memory is current.
+   */
+  private addSuperseding(input: Parameters<HMEM["add"]>[0] & { supersedes?: string }): ReturnType<HMEM["add"]> {
+    const rec = this.hmem.add(input);
+    if (input.supersedes && this.hmem.store.get(input.supersedes)) this.hmem.store.update(input.supersedes, { supersededBy: rec.id });
+    return rec;
+  }
+
   /** Records carrying a structured tag, newest last, skipping superseded ones. */
   private structured(tag: string): Recall[] {
     const all: any[] = this.hmem.store.all();
     const superseded = new Set(all.map((r) => r.supersedes).filter(Boolean));
     return all
-      .filter((r) => (r.tags ?? []).includes(tag) && !superseded.has(r.id))
+      .filter((r) => (r.tags ?? []).includes(tag) && !superseded.has(r.id) && !r.supersededBy)
       .sort((a, b) => a.timestamp - b.timestamp || Number(a.id.slice(4)) - Number(b.id.slice(4)))
       .map((r) => this.toRecall(r, 1));
   }

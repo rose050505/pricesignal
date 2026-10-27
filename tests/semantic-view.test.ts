@@ -114,6 +114,6 @@ test("the federated-query card names the semantic view and shows its definition"
     semanticView: { name: sem.name, sql: sem.sql, members: ["v_de_food", "v_au_food"] } };
   vm.runInContext('render(sample,"q")', context);
   const out = node("#out").innerHTML;
-  assert.match(out, new RegExp(`reads the Zetaris semantic view <code>psig\\.${sem.name}</code> over 2 agency views`));
+  assert.match(out, new RegExp(`reads the business view <code>psig\\.${sem.name}</code> \\(a Zetaris schemastore view\\) over 2 agency views`));
   assert.match(out, /<details><summary>Semantic view definition<\/summary><pre>CREATE OR REPLACE SCHEMASTORE VIEW/);
 });

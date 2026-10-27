@@ -204,7 +204,8 @@ Reply with JSON only.`;
       const parsed = extractJson(r.text);
       if (parsed) this.requestReadByRules = false;
       j = parsed ?? {};
-      this.log("llm", `parsed request (${r.model}, ${r.ms} ms${via(r)})`, j);
+      if (parsed) this.log("llm", `parsed request (${r.model}, ${r.ms} ms${via(r)})`, j);
+      else this.log("warn", `request parsing: the model reply had no usable JSON - the request was read by rules (${r.model}, ${r.ms} ms)`, { reply: r.text.slice(0, 2000) });
     } catch (e) {
       this.log("warn", `LLM parse failed, using rules: ${String(e).slice(0, 120)}`);
     }
@@ -1035,6 +1036,7 @@ Reply with JSON only.`;
         if (!n?.headline) { lastReply = { reply: r.text.slice(0, 4000), finishReason: r.finishReason }; throw new Error(`no headline in reply: ${r.text.replace(/\s+/g, " ").slice(0, 160)}`); }
         const bad = checkNarrative(n, allowed, facts, req, policy, noteNumbers);
         this.log("llm", `narrative (${r.model}, ${r.ms} ms${via(r)})${bad.length ? ` - does not match the facts: ${bad.join(", ")}` : " - numbers and verdicts match the facts"}`, bad.length ? { model: r.model, ms: r.ms, draft: n, problems: bad } : undefined);
+        n.model = r.model;
         if (!bad.length) {
           // A cut-off reply missing market paragraphs is kept in reserve while the budget allows one more full reply.
           const covered = facts.filter((f) => f.category ?? f.allItems).length;

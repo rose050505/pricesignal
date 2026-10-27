@@ -1,7 +1,9 @@
 // LLM provider layer. Primary provider: Meterless Runtime (Nightshift), per the
 // Meterless provider contract: OpenAI-compatible /v1, Bearer runtime token,
 // `meterless-app` on every request, `meterless-scope: user` on chat,
-// GET /v1/models decides online/unauthorized/offline, 180 s timeout.
+// GET /v1/models decides online/unauthorized/offline (15 s). Chat calls default to a
+// 90 s limit; the agent sets 20-75 s per call. Optional reasoning-effort and
+// throughput hints are sent and dropped automatically if the runtime rejects them.
 // `nvidia` (build.nvidia.com) and `openrouter` exist only as development fallbacks.
 import { env } from "./env.ts";
 
