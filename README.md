@@ -51,7 +51,7 @@ A pricing or sales manager at a small exporter who has to justify a price change
 
 ## What it does
 
-1. **Reads a messy request**: typos, nicknames (`deutschland`, `aus`), Korean or English, a proposed change, a cost change with its share of the selling price, and a pass-through policy.
+1. **Reads a messy request**: typos, nicknames (`deutschland`, `aus`), Korean or English (the brief itself is written in English), a proposed change, a cost change with its share of the selling price, and a pass-through policy.
 2. **Finds the official series** at Eurostat, Statistics Canada and the ABS, and says what it had to work around (a discontinued dataset, a coarser category, another frequency).
 3. **Onboards each series into Zetaris** as a Lightning REST table, a decoding view and a `CACHE TABLE` copy, then compares the markets with **one federated query** over a schemastore view.
 4. **Joins the company's price list** in Zetaris; for snack and condiment products Nemotron picks the official category from a shortlist, and code validates the pick.

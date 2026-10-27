@@ -69,6 +69,9 @@
     d.setAttribute("role", "note");
     d.innerHTML = `<b>Replay of recorded runs.</b> ${R.examples.length} ${R.examples.length === 1 ? "question" : "questions"} recorded in one session starting ${R.recordedAt}, with Zetaris, Meterless Nightshift (${R.model}) and the agency APIs. This page makes no live calls: it plays back each run's trace and the results the UI received, with waits over ${MAX_GAP_MS / 1000} s shortened to that; times in the results are the recorded ones. "Try another price change" recalculates in your browser. To ask your own question, run PriceSignal locally (<a href="${R.repo}#run-it">README, "Run it"</a>).`;
     document.body.insertBefore(d, document.querySelector("main"));
+    // Ready to press "Investigate": the first recorded question is filled in.
+    const q = document.querySelector("#q");
+    if (q && !q.value && R.examples.length) q.value = R.examples[0].question;
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", banner);
   else banner();

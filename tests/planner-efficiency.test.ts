@@ -67,3 +67,11 @@ test("a pair named twice in one batch is onboarded once and not reported as reus
   assert.ok(b.views.every((v) => v.via === "onboarded"), JSON.stringify(b.views));
   assert.equal(b.metrics?.reusedViews, 0);
 });
+
+test("a planner that wants to compare before anything is onboarded gets its series onboarded instead (example 01, 27 Oct)", async () => {
+  const { a, turns } = agent(async (turn) => turn === 1 ? '{"thought":"All pairs are already onboarded from prior turns","actions":[{"action":"compare","args":{}}]}' : '{"actions":[{"action":"finish","args":{}}]}');
+  const b = await a.run("canada food prices, ok to raise 4%?");
+  assert.ok(a.trace.some((e) => /planner proposed compare while 2 needed series were not onboarded yet - onboarding them first, without another planner turn/.test(e.title)));
+  assert.equal(b.views.length, 2);
+  assert.equal(turns(), 1, "the comparison and finish need no second planner turn");
+});

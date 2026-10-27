@@ -340,6 +340,13 @@ export class PriceSignalAgent extends EventEmitter {
         batch = a ? [a] : [];
       }
       if (!batch.length) break;
+      // Example 01 on 27 Oct: on a cold run Nemotron replied "all six pairs are already onboarded" and planned only
+      // compare. Comparing nothing costs a planner turn; onboard the untried pairs instead and say so.
+      const untriedNow = pairs.filter((p) => !views.has(key(p.country, p.concept)) && !candidates.has(key(p.country, p.concept)));
+      if (!autopilot && untriedNow.length && batch.every((b) => b.action === "compare" || b.action === "finish")) {
+        this.log("warn", `planner proposed ${batch.map((b) => b.action).join(" + ")} while ${untriedNow.length} needed series were not onboarded yet - onboarding them first, without another planner turn`, { planned: batch });
+        batch = untriedNow.map((p) => ({ action: "discover_and_onboard", args: p }));
+      }
 
       const observations: unknown[] = [];
       let finished = false;
