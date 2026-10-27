@@ -36,7 +36,7 @@ test('the example recorder respects an isolated requested store and namespace', 
     const result = f.run();
     assert.equal(result.status, 0, result.stdout + result.stderr);
     const calls = JSON.parse(fs.readFileSync(path.join(f.root, 'calls.json'), 'utf8'));
-    assert.equal(calls.length, 6);
+    assert.equal(calls.length, 7);
     for (const call of calls) {
       assert.equal(path.resolve(f.root, call.memory), path.join(f.root, '.pricesignal/requested-new'));
       assert.equal(call.namespace, 'fixture-fresh');

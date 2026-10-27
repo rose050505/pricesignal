@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Record all six live examples before replacing any checked-in recording.
+# Record all seven live examples before replacing any checked-in recording.
 # Optional PSIG_MEMORY_DIR must name a NEW direct child of .pricesignal/.
 # Optional PSIG_ZETARIS_NS must be fresh to demonstrate actual cold onboarding.
 set -u -o pipefail
@@ -54,10 +54,11 @@ run 03_typo_market "canda snacks price hike 4%?? is that ok, we pass thru like 6
 run 04_unsupported_market "japan + canada food prices, ok to raise 5%?" || exit 1
 run 05_within_range "canada & australia food: costs rose 8%, unit costs are 60% of our selling price; we pass on 70%; what about +3%?" || exit 1
 run 06_eu_markets "france, italy and spain food prices: can we raise prices +3%? we pass on about 70%" || exit 1
+run 07_korean "독일 캐나다 호주 식품 물가 요즘 어때? 내년 1분기에 가격 4% 올려도 될까" || exit 1
 # All application runs and copies succeeded. Preserve old recordings before promotion.
 mkdir -p examples || exit 2
 for NAME in "${NAMES[@]}"; do
   if [ -e "examples/$NAME" ]; then mv "examples/$NAME" "$BUNDLE/previous/$NAME" || exit 2; fi
   mv "$BUNDLE/staged/$NAME" "examples/$NAME" || exit 2
 done
-printf 'runs ok: %s/6\nrecordings: examples/\nprevious recordings and logs: %s\n' "${#NAMES[@]}" "$BUNDLE" | tee -a "$SUM"
+printf 'runs ok: %s/7\nrecordings: examples/\nprevious recordings and logs: %s\n' "${#NAMES[@]}" "$BUNDLE" | tee -a "$SUM"
