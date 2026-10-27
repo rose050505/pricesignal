@@ -496,6 +496,17 @@ function universalTrendErrors(text: string, facts: MarketFacts[], req: Request, 
   return out;
 }
 
+/** "Food inflation is above the market benchmark": a verdict is about the proposed change, never about inflation itself. */
+function verdictSubjectErrors(text: string, field: string): string[] {
+  const out: string[] = [];
+  for (const clause of text.split(/(?<=[.!?;])\s+|\n+|[,;:—]|\b(?:but|while|whereas|so)\b/i)) {
+    const m = clause.match(/\binflation\b(.*?)\b(?:(?:is|are|sits?|sitting|stays?|remains?|runs?|running|looks?)\s+)?(?:all\s+|still\s+|now\s+)?(above|within|inside|below)\s+(?:its\s+|the\s+|their\s+)?(?:market\s+)?benchmarks?\b/i);
+    // "inflation of 2.2% is within…" or "the +3% increase … above" name a number or the proposal: not this slip.
+    if (m && !/%|\b(?:increases?|rises?|hikes?|changes?|proposals?|prices?)\b/i.test(m[1])) out.push(`${field}: says inflation itself is ${m[2].toLowerCase()} the market benchmark; the verdict is about the proposed change`);
+  }
+  return out;
+}
+
 /** "… and 1 observation" about a series with 12: a stated observation count must be one of the market's series counts. */
 function observationCountErrors(text: string, f: MarketFacts): string[] {
   const counts = [f.category?.averageCount, f.allItems?.averageCount].filter((n): n is number => n !== undefined);
@@ -557,6 +568,9 @@ function headlineVerdictErrors(headline: string, facts: MarketFacts[], field = "
     const [cs, ce] = clauseOf(m.at);
     const clause = text.slice(cs, ce);
     const inClause = claims.filter((c) => c.at >= cs && c.at < ce);
+    // "Inflation easing in DE and CA; flat in AU; +3% above in DE …": a country in a trend clause with no verdict of
+    // its own is described by that trend (checked separately), not by a verdict in a later clause.
+    if (!inClause.length && !/:\s*$/.test(clause) && (TREND_CLAIMS.some(([, re]) => re.test(clause)) || /\b(?:flat|stable|steady)\b/i.test(clause))) continue;
     // "Canada and Australia: within" takes the verdict after the colon; "fits Canada and Australia but exceeds
     // Germany's" says these countries do NOT have the verdict after the contrast word.
     const next = claims.find((c) => c.at >= ce);
@@ -761,7 +775,7 @@ export function checkNarrative(n: Narrative, allowed: number[], facts?: MarketFa
     bad.push(...headlineVerdictErrors(String(n.headline ?? ""), facts));
     if (typeof n.watch === "string") bad.push(...headlineVerdictErrors(n.watch, facts, "watch"));
     for (const [field, text] of [["headline", n.headline], ["watch", n.watch], ...Object.entries(n.markets ?? {})] as [string, unknown][]) {
-      if (typeof text === "string") bad.push(...universalTrendErrors(text, facts, req, field), ...quarterErrors(text, facts, req, field));
+      if (typeof text === "string") bad.push(...universalTrendErrors(text, facts, req, field), ...quarterErrors(text, facts, req, field), ...verdictSubjectErrors(text, field));
     }
   } else {
     bad.push(...unknownNumbers([n.headline, ...Object.values(n.markets ?? {}), n.watch ?? ""].join(" "), allowed));
@@ -772,6 +786,28 @@ export function checkNarrative(n: Narrative, allowed: number[], facts?: MarketFa
 /** What the narrative model sees: the facts without the monthly history, so it cannot pick a stray number. */
 /** What every market benchmark means; sent once with the narrative facts rather than per market. */
 export const BENCHMARK_BASIS = "latest YoY and available-observation mean in the year ending at the latest observation; historical reference only, not a forecast, confidence interval or evidence of customer acceptance";
+
+/**
+ * What the headline must agree with, grouped the way a headline says it: "+5% is above the market benchmark in DE, CA
+ * and AU. Inflation trend: easing in DE and CA; flat in AU." Nemotron's rejected headlines on 27 Oct merged differing
+ * verdicts ("within or below everywhere") or trends ("easing in all three markets"), or made inflation the subject of
+ * the verdict; this line states both with the proposal as the subject.
+ */
+export function headlineFacts(facts: MarketFacts[], req: Request): string | undefined {
+  const verdicts = new Map<string, string[]>();
+  const trends = new Map<string, string[]>();
+  for (const f of facts) {
+    const s = requestedSeries(f, req);
+    if (!s) continue;
+    if (f.verdict) verdicts.set(f.verdict, [...(verdicts.get(f.verdict) ?? []), f.country]);
+    trends.set(s.trend, [...(trends.get(s.trend) ?? []), f.country]);
+  }
+  const list = (c: string[]) => (c.length > 1 ? `${c.slice(0, -1).join(", ")} and ${c.at(-1)}` : c[0]);
+  const parts: string[] = [];
+  if (req.proposedChangePct !== undefined && verdicts.size) parts.push(`${signedPct(req.proposedChangePct)} is ${[...verdicts].map(([v, c]) => `${v} in ${list(c)}`).join("; ")}.`);
+  if (trends.size) parts.push(`Inflation trend: ${[...trends].map(([t, c]) => `${t} in ${list(c)}`).join("; ")}.`);
+  return parts.length ? parts.join(" ") : undefined;
+}
 
 export function factsForNarrative(facts: MarketFacts[], req?: Request, policy?: number): unknown[] {
   const slim = (s?: SeriesFacts) => (s ? { label: s.label, frequency: s.frequency, latestPeriod: s.latestPeriod, latestYoy: s.latestYoy, avg12: s.avg12, averageCount: s.averageCount, averageExpected: s.averageExpected, averageLabel: s.averageLabel, yoy6Back: s.yoy6Back, trend: s.trend } : undefined);

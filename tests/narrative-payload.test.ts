@@ -118,7 +118,7 @@ test("facts shared by every market are sent once, and the reply asked for is sho
     assert.ok(f.cost_need_pct !== undefined && f.cost_vs_market !== undefined);
   }
   assert.match(String(payload.cost_share_basis), /unit cost/);
-  assert.match(user, /"headline": str \(<= 20 words\)/);
+  assert.match(user, /"headline": str \(<= 20 words, written last/);
   assert.match(user, /2 sentences/);
 });
 

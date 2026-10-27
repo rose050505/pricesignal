@@ -50,7 +50,7 @@ test('the narrative request keeps the exact cost basis and rewrites a false mark
   let calls = 0; let payload: any; let instructions = '';
   const agent: any = new PriceSignalAgent({ memory, hedgeMs: Infinity, sql: {run:async()=>{throw Error('SQL forbidden');}}, llm: async(messages: any[]) => {
     calls++; instructions=messages[0].content;
-    payload = JSON.parse(messages[1].content.split('Facts: ')[1].split('\nReply with JSON only:')[0]);
+    payload = JSON.parse(messages[1].content.split('Facts: ')[1].split('\nReply with JSON only')[0]);
     return {model:'offline',provider:'fixture',ms:0,text:JSON.stringify({ headline:'Canada food', markets:{CA:calls === 1 ? 'The market benchmark is scaled by the 60% pass-through policy.' : 'Cost recovery target 2.7% is above the market benchmark.'} })};
   } });
   const result = await agent.narrate(req,facts,[],.6);
