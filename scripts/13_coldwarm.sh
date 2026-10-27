@@ -94,5 +94,5 @@ const memory=path.resolve(process.env.PSIG_MEMORY_DIR);
 fs.writeFileSync(path.join(memory,'.coldwarm-context.json'),JSON.stringify({memory,namespace:process.env.PSIG_ZETARIS_NS})+'\n',{flag:'wx'});
 NODE
 fi
-run warm "same as last time, but what if we only go +3%?" || exit $?
+run warm "same as last time, but what about +3%?" || exit $?
 printf '== done: %s\n' "$SUM" | tee -a "$SUM"

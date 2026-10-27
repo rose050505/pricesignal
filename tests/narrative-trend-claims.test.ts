@@ -16,7 +16,7 @@ const allEasing = fx.facts.map((f: any) => ({ ...f, category: { ...f.category, t
 test("'easing in all three markets' is rejected when one market is flat", () => {
   const bad = check("Food inflation is easing in all three markets; a blanket +5% Q1 increase looks above the evidence everywhere.");
   assert.ok(bad.some((b) => /easing in every market, but AU is flat/.test(b)), bad.join(" | "));
-  assert.ok(check("+5% is above the market benchmark in DE, CA and AU.", "Watch whether food inflation keeps cooling across all markets.").some((b) => /AU is flat/.test(b)));
+  assert.ok(check("+5% is above the market benchmark in DE, CA and AU.", "Food inflation keeps cooling across all markets.").some((b) => /AU is flat/.test(b)));
   assert.ok(check("Food inflation is rising everywhere; +5% is above the market benchmark in DE, CA and AU.").some((b) => /rising in every market/.test(b)));
 });
 
@@ -33,4 +33,15 @@ test("salvage replaces the false headline with the code headline and keeps the m
   assert.ok(s, "salvaged");
   assert.equal(s.headlineByCode, true);
   assert.deepEqual(Object.keys(s.markets).sort(), ["AU", "CA", "DE"]);
+});
+
+test("true sentences that pair 'all three markets' with a trend about named markets pass (review, 27 Oct 19:10)", () => {
+  for (const h of [
+    "+5% is above the market benchmark in all three markets, with food inflation easing in Germany and Canada.",
+    "Inflation is cooling in Germany and Canada, flat in Australia: +5% is above the benchmark in all three markets.",
+    "Food inflation is easing everywhere except Australia; +5% is above the market benchmark in DE, CA and AU.",
+    "Food inflation is not easing in all three markets; +5% is above the market benchmark in DE, CA and AU.",
+    "+5% is above the market benchmark in all three markets despite rising costs.",
+  ]) assert.deepEqual(check(h), [], h);
+  assert.deepEqual(check("+5% is above the market benchmark in DE, CA and AU.", "Watch whether food inflation keeps easing or picks up again in all three markets."), []);
 });

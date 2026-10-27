@@ -1030,7 +1030,8 @@ Reply with JSON only.`;
         const r = await this.hedged("narrative", (signal, o) => this.llm(ask, { lane: (process.env.PSIG_NARRATIVE_LANE as "fast" | "deep") || "fast", temperature: 0.2, maxTokens, attempts: 1, timeoutMs: Math.max(1_000, deadline - Date.now()), signal, ...o }));
         let n = extractJson(r.text) as Narrative | null;
         // A headline-only rewrite is merged with the paragraphs that already passed the check.
-        if (headlineFor && n?.headline && n.markets === undefined) n = { ...headlineFor, headline: n.headline };
+        // Only its headline is used, even if the reply repeats (or empties) the paragraphs.
+        if (headlineFor && n?.headline) n = { ...headlineFor, headline: n.headline };
         if (!n?.headline) {
           // A reply cut off mid-JSON keeps its finished fields; they go through the same fact check below.
           const kept = completedFields(r.text) as Narrative | null;
@@ -1060,7 +1061,7 @@ Reply with JSON only.`;
         issue = "grounding";
         // Only the headline is wrong: ask for a new headline alone, so the checked paragraphs cannot pick up new errors.
         const kept = headlineFor ? undefined : salvageNarrative(n, allowed, facts, req, policy, noteNumbers);
-        if (kept?.removed?.length && kept.removed.every((x) => x.field === "headline") && Object.keys(kept.markets).length === Object.keys(n.markets ?? {}).length && (kept.watch ?? "") === (n.watch ?? "")) {
+        if (!n.cutOff && kept?.removed?.length && kept.removed.every((x) => x.field === "headline") && Object.keys(kept.markets).length === Object.keys(n.markets ?? {}).length && (kept.watch ?? "") === (n.watch ?? "")) {
           headlineFor = n;
           ask.push({ role: "assistant", content: r.text }, { role: "user", content: `Only the headline is wrong: ${bad.join(", ")}. Reply with JSON only: {"headline": str (<= 20 words)}. State each market's verdict exactly as given, and describe a trend only as that market's own trend field.` });
           continue;

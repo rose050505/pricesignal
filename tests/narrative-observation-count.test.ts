@@ -26,3 +26,7 @@ test("a stated observation count must be the series' count", () => {
   assert.ok(bad.some((b) => /1 observation.*12/.test(b)), bad.join(" | "));
   assert.deepEqual(check(`Italian food inflation is ${s.latestYoy}% YoY, based on 12 of 12 monthly observations.`), []);
 });
+
+test("allowing the observation count does not let the same number through as a rate or a gap (review, 27 Oct 19:10)", () => {
+  for (const t of ["A 12% price rise would be above the market benchmark.", "Italian food inflation has eased by 12 points."]) assert.ok(check(t).length, t);
+});

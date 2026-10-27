@@ -252,9 +252,6 @@ export function marketNumbers(f: MarketFacts | undefined, req: Request, policy?:
       add(s.avg12);
       add(s.yoy6Back);
       if (s.yoy6Back !== undefined) add(s.latestYoy - s.yoy6Back);
-      // The observation count is in the facts ("12 of 12 monthly observations"); a rate of that value is still
-      // checked against the series by observedRateErrors.
-      if (!preserveSigns) { add(s.averageCount); add(s.averageExpected); }
     }
     add(f.suggested?.low);
     add(f.suggested?.high);
@@ -285,7 +282,8 @@ export function allowedNumbers(facts: MarketFacts[], req: Request, policy?: numb
 
 const stripYears = (t: string) => t.replace(/\b(19|20)\d{2}(-(Q[1-4]|\d{2}))?\b/g, " ");
 // "12-month average", "over 6 months", "4-quarter average" describe the window, not a rate; a bare 6 or 12 is checked like any number.
-const stripWindows = (t: string) => t.replace(/\b(?:6|12)[- ]?(?:months?|periods?)\b|\b4[- ]?quarters?\b/gi, " ");
+// "12 observations" / "12 of 12 monthly observations" is a count, checked against the series by observationCountErrors.
+const stripWindows = (t: string) => t.replace(/\b(?:6|12)[- ]?(?:months?|periods?)\b|\b4[- ]?quarters?\b|\b\d{1,2}\s+(?:of\s+(?:the\s+)?\d{1,2}\s+)?(?:monthly\s+|quarterly\s+)?(?:observations?|readings?|data points?)\b/gi, " ");
 const near = (a: number, b: number) => Math.abs(a - b) < 0.051;
 
 function unknownNumbers(text: string, allowed: number[]): string[] {
@@ -479,11 +477,17 @@ const TREND_CLAIMS: [SeriesFacts["trend"], RegExp][] = [
 function universalTrendErrors(text: string, facts: MarketFacts[], req: Request, field: string): string[] {
   const out: string[] = [];
   for (const sentence of text.split(/(?<=[.!?;])\s+|\n+/)) {
-    if (!EVERY_MARKET.test(sentence)) continue;
+    // Negated, excepted or conditional sentences do not claim the trend for every market.
+    if (/\b(?:not|never|except|apart from|other than|whether|if)\b|n't\b/i.test(sentence)) continue;
+    // Per clause: "+5% is above the benchmark in all three markets, with inflation easing in Germany and Canada" is true.
+    for (const clause of sentence.split(/[,;:—]|\b(?:but|while|whereas|so|despite|with)\b/i)) {
+    if (!EVERY_MARKET.test(clause) || countryMentions(clause, facts).length) continue;
     for (const [trend, re] of TREND_CLAIMS) {
-      if (!re.test(sentence)) continue;
+      if (!re.test(clause)) continue;
+      if (trend === "rising" && /\b(?:costs?|prices?)\b/i.test(clause) && !/\binflation\b/i.test(clause)) continue; // prices rising = positive inflation
       const off = facts.flatMap((f) => { const s = requestedSeries(f, req); return s && s.trend !== trend ? [`${f.country} is ${s.trend}`] : []; });
       if (off.length) out.push(`${field}: says ${trend} in every market, but ${off.join(", ")}`);
+    }
     }
   }
   return out;
