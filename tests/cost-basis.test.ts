@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
-import { buildFacts, costInputNeeded, factsForNarrative, fallbackHeadline, gapSummary, mergeNotes, renderBrief, type Brief } from "../src/brief.ts";
+import { basketNote, buildFacts, costInputNeeded, factsForNarrative, fallbackHeadline, fitSummary, gapSummary, mergeNotes, renderBrief, type Brief } from "../src/brief.ts";
 import { buildAlignment } from "../src/alignment.ts";
 import { AgentMemory } from "../src/memory.ts";
 import { HMEM } from "../src/hmem_impl.ts";
@@ -130,7 +130,7 @@ test("UI renders the before/after basis and a concrete unavailable-cost reason w
 test("the actual server serializer supplies basis and cost diagnostics to both partial and final UI payloads", () => {
   const server = fs.readFileSync(new URL("../src/server.ts", import.meta.url), "utf8");
   const body = server.match(/function toResult\(b: Brief\) \{([\s\S]*?)\n\}/)![1];
-  const serialize = vm.runInNewContext(`(function(b) { ${body} })`, { COMPARE_COLUMNS, costInputNeeded, fallbackHeadline, gapSummary, mergeNotes });
+  const serialize = vm.runInNewContext(`(function(b) { ${body} })`, { COMPARE_COLUMNS, basketNote, costInputNeeded, fallbackHeadline, fitSummary, gapSummary, mergeNotes });
   for (const partialStage of ["markets", "pricing", undefined]) {
     const b = fixture("after_change", -100), result = serialize({ ...b, partialStage });
     assert.equal(result.costShareBasis, "after_change");

@@ -832,6 +832,50 @@ export function gapSummary(b: Brief): string | undefined {
   return `How far: ${signedPct(p)} is ${parts.join(", ")}.${cost}`;
 }
 
+// Official food indices that count restaurant and take-away meals (StatCan Food includes "Food purchased from
+// restaurants"; ABS Food and non-alcoholic beverages includes "Meals out and take away foods") and the one that does
+// not (Eurostat COICOP 01; restaurants sit in division 11).
+const FOOD_BASKETS: { re: RegExp; label: string; restaurants: boolean }[] = [
+  { re: /^statcan:18100004:v41690974$/, label: "StatCan Food", restaurants: true },
+  { re: /^abs:CPI:1\.20001\./, label: "ABS Food and non-alcoholic beverages", restaurants: true },
+  { re: /^eurostat:prc_hicp_\w+:CP01:/, label: "Eurostat Food and non-alcoholic beverages", restaurants: false },
+];
+
+/** Says which food series include restaurant meals when one comparison mixes the two kinds; otherwise undefined. */
+export function basketNote(facts: MarketFacts[], req: Request): string | undefined {
+  if (req.concept === "all_items") return undefined;
+  const groups = new Map<string, { restaurants: boolean; countries: string[] }>();
+  for (const f of facts) {
+    const id = requestedSeries(f, req)?.sourceId;
+    const kind = id ? FOOD_BASKETS.find((k) => k.re.test(id)) : undefined;
+    if (!kind) continue;
+    const g = groups.get(kind.label) ?? { restaurants: kind.restaurants, countries: [] };
+    g.countries.push(f.country);
+    groups.set(kind.label, g);
+  }
+  const side = (restaurants: boolean) => [...groups].filter(([, g]) => g.restaurants === restaurants);
+  const [inc, exc] = [side(true), side(false)];
+  if (!inc.length || !exc.length) return undefined;
+  const names = (xs: typeof inc) => xs.map(([label, g]) => `${g.countries.join(" and ")} (${label})`).join(" and ");
+  const count = (xs: typeof inc) => xs.reduce((n, [, g]) => n + g.countries.length, 0);
+  return `Basket note: the ${names(inc)} series ${count(inc) > 1 ? "include" : "includes"} restaurant and take-away meals; the ${names(exc)} series ${count(exc) > 1 ? "do" : "does"} not (HICP counts restaurants separately).`;
+}
+
+/**
+ * Which change would sit inside every market benchmark: the common range, or, when the benchmarks do not overlap,
+ * the two markets that disagree and each market's top. It restates benchmark ends; it is not a recommended price.
+ */
+export function fitSummary(b: Brief): string | undefined {
+  const items = b.facts.filter((f) => f.suggested && requestedSeries(f, b.request));
+  if (items.length < 2 || items.length < b.request.countries.length) return undefined;
+  const pct = (x: number) => `${x > 0 ? "+" : ""}${x.toFixed(1)}%`;
+  const top = items.reduce((a, f) => (f.suggested!.high < a.suggested!.high ? f : a));
+  const bottom = items.reduce((a, f) => (f.suggested!.low > a.suggested!.low ? f : a));
+  const lo = bottom.suggested!.low, hi = top.suggested!.high;
+  if (lo <= hi) return `Within every market benchmark: ${lo === hi ? pct(lo) : `${pct(lo)} to ${pct(hi)}`}.`;
+  return `No single change is within every market benchmark: the ${top.country} top (${hi.toFixed(1)}%) is below the ${bottom.country} bottom (${lo.toFixed(1)}%). Highest change within each: ${items.map((f) => `${f.country} ${pct(f.suggested!.high)}`).join(", ")}.`;
+}
+
 export function renderBrief(b: Brief): string {
   const L: string[] = [];
   const req = b.request;
@@ -848,6 +892,8 @@ export function renderBrief(b: Brief): string {
   if (headline) L.push(`**${headline}**`, "");
   const gap = gapSummary(b);
   if (gap) L.push(gap, "");
+  const fit = b.facts.length ? fitSummary(b) : undefined;
+  if (fit) L.push(fit, "");
   if (modelHeadline && modelHeadline !== headline) L.push(`> Nemotron: ${modelHeadline}`, "");
   L.push(`${req.invalidPassThrough ? "Cost policy unavailable: provide a valid pass-through percentage from 0% to 100%" : `Cost policy: recover ${Math.round(b.passThrough * 100)}% of incremental unit cost${b.policySource ? ` (${b.policySource})` : ""}`}${req.proposedChangePct !== undefined ? ` · proposed change: ${signedPct(req.proposedChangePct)}` : ""}. ${req.costIncreasePct === undefined && !req.invalidPassThrough ? "Add your cost change and unit-cost share (for example “costs rose 8%, unit costs are 60% of our selling price”) to turn this policy into a cost-recovery target." : "This policy does not scale the market benchmark."}`, "");
   if (req.costIncreasePct !== undefined) {
@@ -855,6 +901,8 @@ export function renderBrief(b: Brief): string {
     L.push(`Your unit costs: ${signedPct(req.costIncreasePct)} (${req.costRemembered ? "remembered from your last request" : "stated in this request"}). ${need === undefined ? `Cost-recovery price scenario unavailable. ${costInputNeeded(req, b.passThrough)}` : `Cost share is ${req.costSharePct}%: ${costShareBasisDescription(req)}${req.costShareRemembered ? " (remembered)" : ""}; recovering ${Math.round(b.passThrough * 100)}% of the incremental cost gives a ${signedPct(need)} selling-price scenario.`}`, "");
   }
   L.push(`The historical market benchmark spans the latest YoY rate and the mean of available observations in the year ending at the latest observation. It is not a forecast, a confidence interval or evidence that customers will accept a price change. A single value is a reference point, not a recommended price. It compares a one-off price change with about a year of consumer-price growth; if your last increase was longer ago, the comparable growth is larger. Exchange-rate moves are not included.`, "");
+  const basket = basketNote(b.facts, req);
+  if (basket) L.push(basket, "");
   L.push(`| Market | Official category | Latest period | YoY | Available-year average | Trend vs. 6 months ago | All-items YoY | Market benchmark | Proposed change |`);
   L.push(`|---|---|---|---|---|---|---|---|---|`);
   for (const f of b.facts) {

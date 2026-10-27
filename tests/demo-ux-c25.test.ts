@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
 import { COMPARE_COLUMNS } from "../src/sources/index.ts";
-import { costInputNeeded, fallbackHeadline, gapSummary, mergeNotes, renderBrief } from "../src/brief.ts";
+import { basketNote, costInputNeeded, fallbackHeadline, fitSummary, gapSummary, mergeNotes, renderBrief } from "../src/brief.ts";
 
 const html = fs.readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
 const script = html.match(/<script>([\s\S]*?)<\/script>/)![1];
@@ -25,7 +25,7 @@ function browser() {
 }
 
 const serverSrc = fs.readFileSync(new URL("../src/server.ts", import.meta.url), "utf8");
-const toResult = vm.runInNewContext(`(b) => {${serverSrc.match(/function toResult\(b: Brief\) \{([\s\S]*?)\n\}/)![1]}}`, { COMPARE_COLUMNS, costInputNeeded, fallbackHeadline, gapSummary, mergeNotes });
+const toResult = vm.runInNewContext(`(b) => {${serverSrc.match(/function toResult\(b: Brief\) \{([\s\S]*?)\n\}/)![1]}}`, { COMPARE_COLUMNS, basketNote, costInputNeeded, fallbackHeadline, fitSummary, gapSummary, mergeNotes });
 const partialBrief: any = { request: req, facts: fx.facts, notes: fx.notes, passThrough: fx.passThrough, compared: { id: "Q7", sql: "", columns: [], rows: [] }, sqlLog: [], views: [], ms: 36000, trace: [], partialStage: "markets" };
 
 test("the partial result already carries the code headline, and the UI shows it while the summary is written", () => {
