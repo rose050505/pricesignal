@@ -239,6 +239,7 @@ Verification replays market means and observation counts, benchmarks, proposal a
 
 ```
 src/agent.ts          request parsing, planner actions, guardrails
+src/prompts.ts        every instruction sent to Nemotron (planner, request reading, narrative, headline rewrite)
 src/cli.ts            npm run ask; writes out/<time>/brief.md, trace.json, evidence.json, result.json
 src/result.ts         the result payload the UI renders (live and replayed)
 src/demo.ts           npm run demo: the UI replaying examples/ with no live calls; --build writes the static site
