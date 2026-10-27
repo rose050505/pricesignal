@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import vm from "node:vm";
+import { mergeNotes } from "../src/brief.ts";
 
 const html = fs.readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
 const script = html.match(/<script>([\s\S]*?)<\/script>/)![1];
@@ -331,7 +332,7 @@ test('the shared server serializer preserves alignment in partial and final payl
   const server = fs.readFileSync(new URL('../src/server.ts', import.meta.url), 'utf8');
   const body = server.match(/function toResult\(b: Brief\) \{([\s\S]*?)\n\}/)?.[1];
   assert.ok(body);
-  const serialize = vm.runInNewContext(`(function(b) { ${body} })`, { COMPARE_COLUMNS: [] });
+  const serialize = vm.runInNewContext(`(function(b) { ${body} })`, { COMPARE_COLUMNS: [], mergeNotes });
   const base = { ...result(), request: {}, sqlLog: [] };
   const expected = alignment();
   for (const partialStage of ['markets', 'pricing', undefined]) {

@@ -7,7 +7,7 @@ import { EventEmitter } from "node:events";
 import { chat, ChatMessage, ChatResult } from "./llm.ts";
 import { AgentMemory, type SeriesMapping } from "./memory.ts";
 import { SqlResult, SqlRunner, rowsAsObjects, isIncompleteResultError } from "./zetaris.ts";
-import { AGENCY_FOR, COMPARE_COLUMNS, Candidate, Concept, Country, COUNTRY_ALIASES, CONCEPT_WORDS, compareSql, marketSemanticView, semanticCompareSql, discover, monthsBack, normalizeCountry, onboard, skuSearchWords, isBroadFoodLabel, ensureCached, rawTableRef, sourceAnswers } from "./sources/index.ts";
+import { AGENCY_FOR, COMPARE_COLUMNS, Candidate, Concept, Country, COUNTRY_ALIASES, CONCEPT_WORDS, compareSql, marketSemanticView, semanticCompareSql, discover, monthsBack, normalizeCountry, onboard, skuSearchWords, isBroadFoodLabel, ensureCached, rawTableRef, sourceAnswers, humanError } from "./sources/index.ts";
 import { MarketFacts, Brief, RunMetrics, SkuLine, buildFacts, renderBrief, signedPct, marketKey, allowedNumbers, checkNarrative, salvageNarrative, factsForNarrative, BENCHMARK_BASIS, costShareBasisDescription, seriesFacts, marketBenchmark, Narrative, NarrativeIssue } from "./brief.ts";
 import { buildAlignment } from "./alignment.ts";
 import { PRICE_DB, PRICING_COLUMNS, SKU_RATE_COLUMNS, ensurePriceList, priceTable, priceView, pricingSql, skuCategoriesSql, skuRatesSql } from "./sources/pricelist.ts";
@@ -526,7 +526,7 @@ Reply with JSON only.`;
             s.candidates.set(s.key(country, concept), []);
             s.candidates.set(s.key(country, concept) + ":gaveup", []);
             s.candidates.set(s.key(country, concept) + ":noanswer", []);
-            const note = `${country}: ${AGENCY_FOR[country].name} did not answer for "${concept}" (${String(e).replace(/^Error: /, "").slice(0, 160)}).`;
+            const note = `${country}: ${AGENCY_FOR[country].name} did not answer for "${concept}" (${humanError(e)}).`;
             if (!s.notes.includes(note)) s.notes.push(note);
             this.log("warn", `${AGENCY_FOR[country].name} did not answer for ${country} ${concept}: ${String(e).slice(0, 120)}`);
             return { error: "agency did not answer", candidates: [] };
@@ -594,7 +594,7 @@ Reply with JSON only.`;
           }
           if (r.cached && r.rawTable) this.cached.add(r.rawTable);
           const how = onboardingSummary(r);
-          this.log("onboard", `${r.ok ? "onboarded" : "FAILED"} ${c.agency} ${c.code} -> psig.${r.view}${r.ok ? ` (${how}: ${r.rows} rows, latest ${r.latest})` : `: ${r.error}`}`, { candidate: c, result: { ...r, sql: r.sql } });
+          this.log("onboard", `${r.ok ? "onboarded" : "FAILED"} ${c.agency} ${c.code} -> psig.${r.view}${r.ok ? ` (${how}: ${r.rows} rows, latest ${r.latest})` : `: ${humanError(r.error)}`}`, { candidate: c, result: { ...r, sql: r.sql } });
           if (r.ok) {
             const own: string[] = [...((s.candidates as any).get(s.key(country, concept) + ":notes") ?? [])];
             if (c.isBroadFallback || concept !== "food" && concept !== "all_items" && isOfficialBroadFood(c)) {
@@ -612,7 +612,7 @@ Reply with JSON only.`;
         case "compare": {
           for (const p of s.pairs) {
             if (s.views.has(s.key(p.country, p.concept)) || !memory.findMapping(p.country, p.concept)?.mapping) continue;
-            this.log("plan", `guardrail: ${p.country} ${p.concept} is in memory but was not requested - reusing it before compare`);
+            this.log("plan", `guardrail: the planner skipped ${p.country} ${p.concept}, which is remembered - reusing the remembered view before comparing`);
             await this.execute({ action: "use_memory_mapping", args: { country: p.country, concept: p.concept } }, req, s);
           }
           const vs = [...s.views.values()].map((v) => v.view);
@@ -856,7 +856,7 @@ Reply with JSON only.`;
         try {
           const result = await this.onboardFn(this.sql, candidate, group.concept);
           if (result.cached && result.rawTable) this.cached.add(result.rawTable);
-          this.log("onboard", `${result.ok ? "onboarded" : "FAILED"} SKU ${candidate.agency} ${candidate.code} -> psig.${result.view}${result.ok ? ` (${onboardingSummary(result)}: ${result.rows} rows, latest ${result.latest})` : `: ${result.error}`}`, { candidate, selection: choice, result });
+          this.log("onboard", `${result.ok ? "onboarded" : "FAILED"} SKU ${candidate.agency} ${candidate.code} -> psig.${result.view}${result.ok ? ` (${onboardingSummary(result)}: ${result.rows} rows, latest ${result.latest})` : `: ${humanError(result.error)}`}`, { candidate, selection: choice, result });
           if (!result.ok) return undefined;
           if (!isUsableObservationCount(result.rows) || !hasFreshPeriod(result.latest, candidate.frequency)) {
             this.log("warn", `selected SKU view psig.${result.view} has no fresh dated rows (latest ${result.latest ?? "unknown"}); it cannot be used for pricing`);

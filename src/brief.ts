@@ -692,7 +692,21 @@ export function factsForNarrative(facts: MarketFacts[], req?: Request, policy?: 
 export function mergeNotes(notes: string[]): string[] {
   const out: string[] = [];
   const groups = new Map<string, string[]>();
-  for (const n of [...new Set(notes)]) {
+  // A market-level caveat ("DE: … discontinued …") is not repeated inside that market's category notes
+  // ("DE snacks: … discontinued … proxy …"); category-specific sentences stay.
+  const sentences = (body: string) => body.split(/(?<=\.)\s+(?=[A-Z])/).map((x) => x.trim());
+  const marketLevel = new Map<string, Set<string>>();
+  for (const n of new Set(notes)) {
+    const m = n.match(/^([A-Z]{2}): (.*)$/s);
+    if (m) for (const x of sentences(m[2])) (marketLevel.get(m[1]) ?? marketLevel.set(m[1], new Set()).get(m[1])!).add(x);
+  }
+  const unique = [...new Set(notes)].flatMap((n) => {
+    const m = n.match(/^([A-Z]{2}) ([a-z_]+): (.*)$/s);
+    if (!m) return [n];
+    const kept = sentences(m[3]).filter((x) => !marketLevel.get(m[1])?.has(x));
+    return kept.length ? [`${m[1]} ${m[2]}: ${kept.join(" ")}`] : [];
+  });
+  for (const n of unique) {
     const m = n.match(/^(.*?so )"([^"]+)"( is compared at .*)$/);
     if (!m) { out.push(n); continue; }
     const k = m[1] + "\u0000" + m[3];

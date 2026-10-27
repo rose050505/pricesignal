@@ -2,7 +2,7 @@
 // Zetaris's recipes tried are POST-only, so we use the GET method
 // getDataFromVectorByReferencePeriodRange; vectors are index numbers (2002=100)
 // and this adapter maps Canada to the Food and All-items vectors only.
-import { Candidate, Concept, Country, DiscoverResult, OnboardPlan, getJson, monthsBack, zetarisName } from "./types.ts";
+import { Candidate, Concept, Country, DiscoverResult, OnboardPlan, getJson, humanError, monthsBack, zetarisName } from "./types.ts";
 
 const BASE = "https://www150.statcan.gc.ca/t1/wds/rest";
 export const STATCAN_DB = "PSIG_STATCAN";
@@ -34,7 +34,7 @@ export async function discover(country: Country, concept: Concept): Promise<Disc
   } catch (e) {
     // The vector is catalogued, so it is still offered: a copy already registered and cached in Zetaris can pass
     // the same row and freshness verification; without one, onboarding fails as before.
-    notes.push(`StatCan's API did not answer during discovery (${String(e).replace(/^Error: /, "").slice(0, 120)}); the catalogued ${entry.label} vector is checked against its registered Zetaris copy instead.`);
+    notes.push(`StatCan's API did not answer during discovery (${humanError(e)}); the catalogued ${entry.label} vector is checked against its registered Zetaris copy instead.`);
   }
   const obj = Array.isArray(j) ? j[0]?.object : j?.object;
   const pts: { refPer: string }[] = obj?.vectorDataPoint ?? [];

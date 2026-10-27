@@ -97,6 +97,18 @@ export function monthsBack(n: number, from = new Date()): string {
 
 export const USER_AGENT = () => process.env.PSIG_HTTP_USER_AGENT || "PriceSignal/0.1 (Open Agent Hackathon 2026)";
 
+/** One plain line for a source failure; the raw error (often a Spark stack) stays in the trace data. */
+export function humanError(raw: unknown): string {
+  const s = String(raw ?? "");
+  if (/<!doctype html|<html|returned a web page/i.test(s)) return /Spark|Hive|Zetaris/i.test(s) ? "the agency returned a web page instead of data (likely maintenance), so Zetaris could not read the series" : "the agency returned a web page instead of data (likely maintenance)";
+  if (/ECONNRESET|Connection reset|socket hang up|fetch failed|ECONNREFUSED|ENOTFOUND/i.test(s)) return /Spark|Hive|Zetaris/i.test(s) ? "the connection to the agency dropped while Zetaris was reading the series" : "the connection to the agency dropped";
+  if (/timed? ?out|TimeoutError|AbortError/i.test(s)) return "the request timed out";
+  const http = s.match(/-> HTTP (\d{3})/);
+  if (http) return `the agency returned HTTP ${http[1]}`;
+  if (/SparkException|HiveSQLException/.test(s)) return "Zetaris could not read the agency's response";
+  return s.replace(/^Error: /, "").slice(0, 140);
+}
+
 /** One retry after a dropped connection, a 5xx or a 429 (agencies blip); a timeout already waited a minute and is not retried. */
 export async function getJson(url: string, headers: Record<string, string> = {}, retryDelayMs = 1000): Promise<any> {
   let r: Response | undefined;
