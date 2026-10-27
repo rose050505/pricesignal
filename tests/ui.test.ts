@@ -175,6 +175,24 @@ test('SKU choices distinguish a model match, remembered match and an unconfirmed
   }
 });
 
+test("Nemotron's product-category choice and its reason are visible in the SKU table, not folded away", () => {
+  // Independent judge review, 27 Oct 18:15: the most agentic Nemotron step was hidden in a collapsed row.
+  const b=browser();
+  const sku={sku:'GCJ-500',product:'Gochujang 500 g',country:'AU',currentPrice:8.5,currency:'AUD',yoy:1.3,period:'2026-08',rateLabel:'Food additives and condiments',selectionFit:'specific',selectionReason:'Covers condiment and sauce products.'};
+  b.context.sample={...result(),skus:[{...sku,selectionSource:'model'}]};
+  b.run('render(sample,"gochujang +3%")');
+  let html=b.node('#out').innerHTML;
+  assert.match(html,/<b>Product match · Model-selected<\/b> — Nemotron read the product name: “Covers condiment and sauce products\.”/);
+  assert.doesNotMatch(html,/<details[^>]*><summary>Product match/);
+  b.context.sample={...result(),skus:[{...sku,selectionSource:'memory'}]};
+  b.run('render(sample,"gochujang +3%")');
+  html=b.node('#out').innerHTML;
+  assert.match(html,/<b>Product match · Remembered match<\/b> — an earlier Nemotron choice, recalled from H-MEM: “Covers condiment and sauce products\.”/);
+  b.context.sample={...result(),skus:[{...sku,selectionSource:'fallback',selectionFit:'broader',selectionReason:'Using the official Food series as a broader proxy.'}]};
+  b.run('render(sample,"gochujang +3%")');
+  assert.match(b.node('#out').innerHTML,/<details[^>]*><summary>Broader proxy · Unconfirmed match<\/summary>/);
+});
+
 test('evidence distinguishes the market comparison from the SKU rate query',()=>{
   const b=browser();
   b.context.sample={...result(),facts:[{country:'DE',agency:'Eurostat',category:{label:'Food',latestYoy:1,avg12:1,latestPeriod:'2026-09',trend:'steady',points:[]}}],pricing:{id:'Q2',sql:'SELECT sku_fixture'}};

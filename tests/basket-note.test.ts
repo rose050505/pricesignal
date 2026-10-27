@@ -34,5 +34,6 @@ test("the brief and the result card carry the note", () => {
   const server = fs.readFileSync(new URL("../src/server.ts", import.meta.url), "utf8");
   assert.match(server, /basket: b\.facts\.length \? basketNote\(b\.facts, b\.request\) \?\? null : null/);
   const html = fs.readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
-  assert.match(html, /exchange rates are not included\.\$\{r\.basket\?` \$\{esc\(r\.basket\)\}`:""\}<\/div>/);
+  // At the decision point, beside the interpreted category - not folded into the method details.
+  assert.match(html, /not a forecast or a recommended price\.\$\{r\.basket\?` \$\{esc\(r\.basket\)\}`:""\}<\/div><details class="method">/);
 });
