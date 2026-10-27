@@ -1,8 +1,8 @@
 // PriceSignal agent: messy pricing question -> discover fragmented sources ->
 // onboard them into Zetaris -> one federated SQL -> evidence-backed brief.
-// The model (Nemotron via Meterless Nightshift) chooses the next action from a
-// JSON action protocol; code executes actions, enforces guardrails, and computes
-// every number that reaches the user.
+// The model (Nemotron via Meterless Nightshift) reads the request and proposes
+// JSON actions; code validates and completes them, enforces guardrails, and
+// computes every number that reaches the user.
 import { EventEmitter } from "node:events";
 import { chat, ChatMessage, ChatResult } from "./llm.ts";
 import { AgentMemory, type SeriesMapping } from "./memory.ts";

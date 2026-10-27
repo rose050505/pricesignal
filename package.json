@@ -1,7 +1,7 @@
 {
   "name": "pricesignal",
   "version": "0.1.0",
-  "description": "Cross-border inflation agent for exporters: discovers fragmented statistics sources, onboards them into Zetaris, and answers with evidence. Powered by Meterless Nightshift (NVIDIA Nemotron) and H-MEM memory.",
+  "description": "Cross-border inflation agent for exporters: finds official series at three statistics agencies, onboards them into Zetaris, and answers with evidence. Powered by Meterless Nightshift (NVIDIA Nemotron) and H-MEM memory.",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
