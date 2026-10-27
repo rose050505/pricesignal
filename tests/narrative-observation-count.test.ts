@@ -17,3 +17,12 @@ test("a series' observation count may be repeated; a rate with that value may no
   assert.deepEqual(check(`Italian food inflation is ${s.latestYoy}% YoY in ${s.latestPeriod}, with a 12-month average of ${s.avg12}% and 12 observations.`), []);
   assert.ok(check(`Italian food inflation is 12% YoY in ${s.latestPeriod}.`).length);
 });
+
+test("a stated observation count must be the series' count", () => {
+  // Example 06 (27 Oct 18:56): "French food inflation is 1.5% YoY ..., with a 12-month average of 1.5% and 1 observation."
+  // passed the check although the series had 12 of 12 observations.
+  const s = facts[0].category!;
+  const bad = check(`Italian food inflation is ${s.latestYoy}% YoY in ${s.latestPeriod}, with a 12-month average of ${s.avg12}% and 1 observation.`);
+  assert.ok(bad.some((b) => /1 observation.*12/.test(b)), bad.join(" | "));
+  assert.deepEqual(check(`Italian food inflation is ${s.latestYoy}% YoY, based on 12 of 12 monthly observations.`), []);
+});

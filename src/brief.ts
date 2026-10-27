@@ -489,6 +489,16 @@ function universalTrendErrors(text: string, facts: MarketFacts[], req: Request, 
   return out;
 }
 
+/** "… and 1 observation" about a series with 12: a stated observation count must be one of the market's series counts. */
+function observationCountErrors(text: string, f: MarketFacts): string[] {
+  const counts = [f.category?.averageCount, f.allItems?.averageCount].filter((n): n is number => n !== undefined);
+  const out: string[] = [];
+  for (const m of text.matchAll(/\b(\d{1,2})\s+(?:of\s+(?:the\s+)?\d{1,2}\s+)?(?:monthly\s+|quarterly\s+)?(?:observations?|readings?|data points?)\b/gi)) {
+    if (!counts.includes(Number(m[1]))) out.push(`${f.country}: says ${m[0]}, but the series ${counts.length === 1 ? "has" : "have"} ${counts.join(" and ") || "no"} observations`);
+  }
+  return out;
+}
+
 /** "a blanket +5% Q1 increase" when nobody said Q1: a quarter must come from the request or a quarterly period. */
 function quarterErrors(text: string, facts: MarketFacts[], req: Request, field: string): string[] {
   if (/same as (?:last time|before)|지난번|저번/i.test(req.raw)) return []; // a follow-up may carry the earlier quarter
@@ -723,7 +733,7 @@ export function checkNarrative(n: Narrative, allowed: number[], facts?: MarketFa
       bad.push(...costPolicyErrors(text, f?.costNeed !== undefined));
       bad.push(...costTargetErrors(text, f?.costNeed !== undefined ? [f.costNeed] : []));
       bad.push(...namedCountryErrors(text, facts, req, policy, extra));
-      if (f) bad.push(...rangeErrors(text, f), ...verdictErrors(text, f), ...observedRateErrors(text, f, req), ...unavailableCategoryErrors(text, f, req), ...availableDataDenialErrors(text, f, req, facts));
+      if (f) bad.push(...rangeErrors(text, f), ...verdictErrors(text, f), ...observedRateErrors(text, f, req), ...unavailableCategoryErrors(text, f, req), ...availableDataDenialErrors(text, f, req, facts), ...observationCountErrors(text, f));
     }
     if (typeof n.headline !== "string" || (n.watch !== undefined && typeof n.watch !== "string")) bad.push("headline or watch: not text");
     const general = [n.headline, n.watch ?? ""].join(" ");
