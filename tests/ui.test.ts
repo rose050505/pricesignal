@@ -182,7 +182,7 @@ test("Nemotron's product-category choice and its reason are visible in the SKU t
   b.context.sample={...result(),skus:[{...sku,selectionSource:'model'}]};
   b.run('render(sample,"gochujang +3%")');
   let html=b.node('#out').innerHTML;
-  assert.match(html,/<b>Product match · Model-selected<\/b> — Nemotron read the product name: “Covers condiment and sauce products\.”/);
+  assert.match(html,/<b>Product match · Model-selected<\/b> — Nemotron's reason for this official category: “Covers condiment and sauce products\.”/);
   assert.doesNotMatch(html,/<details[^>]*><summary>Product match/);
   b.context.sample={...result(),skus:[{...sku,selectionSource:'memory'}]};
   b.run('render(sample,"gochujang +3%")');

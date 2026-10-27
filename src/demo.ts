@@ -22,6 +22,7 @@ export function buildDemoSite(outDir: string, examplesDir = path.join(ROOT, "exa
   fs.rmSync(outDir, { recursive: true, force: true });
   fs.mkdirSync(path.join(outDir, "replay"), { recursive: true });
   const examples: { name: string; question: string; elapsedSeconds: number | null }[] = [];
+  let namespace: string | null = null;
   const models = new Set<string>();
   const recorded: string[] = [];
   for (const name of names) {
@@ -43,13 +44,14 @@ export function buildDemoSite(outDir: string, examplesDir = path.join(ROOT, "exa
       if (m) models.add(m[1]);
     }
     // recordedAt is written when a run ends; the session started elapsedSeconds earlier.
+    namespace ??= typeof recording.namespace === "string" ? recording.namespace : null;
     if (recording.recordedAt) recorded.push(new Date(Date.parse(recording.recordedAt) - (recording.elapsedSeconds ?? 0) * 1000).toISOString());
   }
   const first = recorded.sort()[0];
   const recordedAt = first
     ? `${new Date(first).toLocaleString("en-GB", { timeZone: "Asia/Seoul", day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })} KST`
     : "an earlier date";
-  const catalog = { recordedAt, model: [...models].join(", ") || "the recorded model", repo: REPO, examples };
+  const catalog = { recordedAt, model: [...models].join(", ") || "the recorded model", repo: REPO, namespace, examples };
   fs.writeFileSync(path.join(outDir, "replay", "catalog.js"), `window.PSIG_REPLAY=${JSON.stringify(catalog)};\n`);
 
   let html = fs.readFileSync(path.join(ROOT, "public", "index.html"), "utf-8");

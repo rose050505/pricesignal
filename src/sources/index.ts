@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import * as eurostat from "./eurostat.ts";
 import * as abs from "./abs.ts";
 import * as statcan from "./statcan.ts";
+import * as bls from "./bls.ts";
 import { Candidate, Concept, Country, DiscoverResult, EU_CODES, OnboardPlan, getJson, zetarisName } from "./types.ts";
 import { SqlRunner, runDdl } from "../zetaris.ts";
 import { hasFreshPeriod, isUsableObservationCount } from "./validation.ts";
@@ -14,6 +15,7 @@ export const AGENCY_FOR: Record<Country, { agency: Candidate["agency"]; name: st
   ...(Object.fromEntries(EU_CODES.map((c) => [c, { agency: "eurostat", name: "Eurostat (HICP)", measure: "HICP annual rate of change" }])) as Record<(typeof EU_CODES)[number], { agency: Candidate["agency"]; name: string; measure: string }>),
   CA: { agency: "statcan", name: "Statistics Canada (CPI)", measure: "CPI index, 2002=100" },
   AU: { agency: "abs", name: "Australian Bureau of Statistics (CPI)", measure: "CPI index" },
+  US: { agency: "bls", name: "U.S. Bureau of Labor Statistics (CPI)", measure: "CPI-U index, 1982-84=100" },
 };
 
 export async function discover(country: Country, concept: Concept, words?: string[]): Promise<DiscoverResult> {
@@ -24,16 +26,19 @@ export async function discover(country: Country, concept: Concept, words?: strin
       return abs.discover(country, concept, words);
     case "statcan":
       return statcan.discover(country, concept);
+    case "bls":
+      return bls.discover(country, concept);
   }
 }
 
 export function onboardPlan(c: Candidate, concept: Concept): OnboardPlan {
   if (c.agency === "eurostat") return eurostat.onboardSql(c, concept);
   if (c.agency === "abs") return abs.onboardSql(c, concept);
+  if (c.agency === "bls") return bls.onboardSql(c, concept);
   return statcan.onboardSql(c, concept);
 }
 
-const DB_FOR: Record<Candidate["agency"], string> = { eurostat: eurostat.EUROSTAT_DB, abs: abs.ABS_DB, statcan: statcan.STATCAN_DB };
+const DB_FOR: Record<Candidate["agency"], string> = { eurostat: eurostat.EUROSTAT_DB, abs: abs.ABS_DB, statcan: statcan.STATCAN_DB, bls: bls.BLS_DB };
 
 /** The raw Lightning REST table a series view reads; CACHE TABLE goes on this table, not on the view. */
 export function rawTableRef(c: Candidate, concept: Concept): string {
@@ -94,6 +99,7 @@ const BOOTSTRAP = [
   `CREATE LIGHTNING DATABASE ${eurostat.EUROSTAT_DB} DESCRIBE BY "PriceSignal-Eurostat-HICP"`,
   `CREATE LIGHTNING DATABASE ${abs.ABS_DB} DESCRIBE BY "PriceSignal-ABS-CPI"`,
   `CREATE LIGHTNING DATABASE ${statcan.STATCAN_DB} DESCRIBE BY "PriceSignal-StatCan-CPI"`,
+  `CREATE LIGHTNING DATABASE ${bls.BLS_DB} DESCRIBE BY "PriceSignal-BLS-CPI"`,
   `CREATE SCHEMASTORE CONTAINER psig`,
 ];
 

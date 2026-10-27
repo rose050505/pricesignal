@@ -1,4 +1,4 @@
-// Shared shapes for the three statistics agencies. Each adapter answers two
+// Shared shapes for the statistics agencies. Each adapter answers two
 // questions the agent cannot answer from memory alone: "which series matches
 // this concept here, and is it still alive?" (discover) and "how do I make it a
 // governed Zetaris table?" (onboardSql).
@@ -7,12 +7,12 @@
 // markets goes through the same discover/onboard path as Germany.
 export const EU_CODES = ["DE", "FR", "IT", "ES", "NL", "BE", "AT", "IE", "PT", "FI", "SE", "DK", "PL", "CZ"] as const;
 export type EuCountry = (typeof EU_CODES)[number];
-export type Country = EuCountry | "CA" | "AU";
-export const SUPPORTED_COUNTRIES: Country[] = [...EU_CODES, "CA", "AU"];
+export type Country = EuCountry | "CA" | "AU" | "US";
+export const SUPPORTED_COUNTRIES: Country[] = [...EU_CODES, "CA", "AU", "US"];
 export type Concept = "all_items" | "food" | string;
 
 export interface Candidate {
-  agency: "eurostat" | "statcan" | "abs";
+  agency: "eurostat" | "statcan" | "abs" | "bls";
   country: Country;
   dataset: string; // agency dataset / product id
   code: string; // category code (COICOP, ABS index, StatCan vector)
@@ -43,6 +43,8 @@ export const COUNTRY_ALIASES: Record<string, Country> = {
   de: "DE", ger: "DE", germany: "DE", deutschland: "DE", "독일": "DE",
   ca: "CA", canada: "CA", canadian: "CA", "캐나다": "CA",
   au: "AU", aus: "AU", australia: "AU", oz: "AU", "호주": "AU",
+  // Not lower-case "us" (an ordinary word); upper-case "US" is read as the ISO code.
+  usa: "US", "u.s.": "US", "u.s.a.": "US", "united states": "US", america: "US", american: "US", "미국": "US",
   france: "FR", frankreich: "FR", "프랑스": "FR",
   italy: "IT", italia: "IT", "이탈리아": "IT",
   spain: "ES", espana: "ES", "españa": "ES", "스페인": "ES",

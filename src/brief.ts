@@ -925,11 +925,13 @@ export function gapSummary(b: Brief): string | undefined {
 }
 
 // Official food indices that count restaurant and take-away meals (StatCan Food includes "Food purchased from
-// restaurants"; ABS Food and non-alcoholic beverages includes "Meals out and take away foods") and the one that does
+// restaurants"; ABS Food and non-alcoholic beverages includes "Meals out and take away foods"; BLS Food includes
+// "Food away from home") and the one that does
 // not (Eurostat COICOP 01; restaurants sit in division 11).
 const FOOD_BASKETS: { re: RegExp; label: string; restaurants: boolean }[] = [
   { re: /^statcan:18100004:v41690974$/, label: "StatCan Food", restaurants: true },
   { re: /^abs:CPI:1\.20001\./, label: "ABS Food and non-alcoholic beverages", restaurants: true },
+  { re: /^bls:CU:CUUR0000SAF1$/, label: "BLS Food", restaurants: true },
   { re: /^eurostat:prc_hicp_\w+:CP01:/, label: "Eurostat Food and non-alcoholic beverages", restaurants: false },
 ];
 

@@ -1115,7 +1115,7 @@ function onboardingSummary(result: { existed: boolean; createdObjects?: number; 
 
 /** A label match alone must not turn a narrow catalog hit into an official Food proxy. */
 function isOfficialBroadFood(candidate: { agency: string; code: string; label: string }): boolean {
-  const code = new Map([["eurostat", "CP01"], ["abs", "20001"], ["statcan", "v41690974"]]).get(candidate.agency);
+  const code = new Map([["eurostat", "CP01"], ["abs", "20001"], ["statcan", "v41690974"], ["bls", "CUUR0000SAF1"]]).get(candidate.agency);
   return candidate.code === code && isBroadFoodLabel(candidate.label);
 }
 

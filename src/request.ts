@@ -62,7 +62,7 @@ export function requestMarkets(raw: string, modelNames: string[]): { countries: 
   }
   // These names only preserve explicit unsupported requests; they add no data-source coverage.
   const unsupported = [
-    ["Japan", "japan", "일본"], ["United States", "united states", "USA", "US", "미국"],
+    ["Japan", "japan", "일본"],
     ["United Kingdom", "united kingdom", "UK", "britain", "영국"], ["China", "china", "중국"],
     ["South Korea", "south korea", "korea", "한국", "대한민국"], ["Brazil", "brazil", "브라질"],
   ];

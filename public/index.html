@@ -80,7 +80,7 @@ details.method{margin-top:6px}
     <h2 style="margin-top:18px">Live trace</h2>
     <ul class="trace" id="trace"><li><span class="k">idle</span><span class="sub">Steps appear here as the agent works.</span></li></ul>
   </section>
-  <section class="right" id="out" tabindex="-1"><div class="card empty"><b>For an exporter deciding a price change in several markets.</b> Ask in plain words; the brief compares your proposal with official food inflation in each market.<div class="sub" style="margin-top:6px">NVIDIA Nemotron reads the question · official series from Eurostat, Statistics Canada and the ABS are registered in Zetaris · one federated SQL query · Meterless H-MEM remembers what was verified · every figure is computed in code and checked.</div></div></section>
+  <section class="right" id="out" tabindex="-1"><div class="card empty"><b>For an exporter deciding a price change in several markets.</b> Ask in plain words; the brief compares your proposal with official food inflation in each market.<div class="sub" style="margin-top:6px">NVIDIA Nemotron reads the question · official series from Eurostat, Statistics Canada, the ABS and the US BLS are registered in Zetaris · one federated SQL query · Meterless H-MEM remembers what was verified · every figure is computed in code and checked.</div></div></section>
 </main>
 <script src="/scenario.js"></script>
 <script src="/preview-panel.js"></script>
@@ -100,8 +100,11 @@ const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&g
 EX.forEach(t=>{const b=document.createElement("button");b.textContent=t;b.onclick=()=>{$("#q").value=t};$("#examples").appendChild(b)});
 // The model that actually answered (from the trace) stays in the header after the status refresh.
 let servedModel=null,modelRunStarted=false;
+// Every Zetaris object of a run carries the run's suffix (PSIG_ZETARIS_NS); the live trace leaves it out, the SQL keeps it.
+let runSuffix=null;
+const shortNames=t=>runSuffix?String(t).split("_"+runSuffix).join(""):t;
 function showModel(){const p=$("#modelpill");if(!p)return;if(servedModel){p.textContent=servedModel.t;p.className=servedModel.c}else if(modelRunStarted){p.textContent=runActive?"model: awaiting a successful response":"model: no successful response this run";p.className="pill"}}
-async function status(){try{const s=await (await fetch("/api/status")).json();
+async function status(){try{const s=await (await fetch("/api/status")).json();runSuffix=s.namespace||null;
   if(s.replay){$("#status").innerHTML=`<span class="pill ok">Replay of recorded runs · no live calls</span><span class="pill" id="modelpill">recorded model: ${esc(s.fast)}</span><span class="pill">Zetaris · recorded SQL results</span><span class="pill">H-MEM · recorded</span>`;showModel();return}
   $("#status").innerHTML=`<span class="pill ${s.state==="online"?"ok":"bad"}">${esc(s.provider==="meterless"?"Meterless Nightshift":s.provider)} · ${esc(s.state)}</span><span class="pill" id="modelpill">configured model: ${esc(s.fast)}</span><span class="pill ${s.zetaris==="online"?"ok":"bad"}">Zetaris · ${esc(s.zetaris||"unknown")}</span><span class="pill">H-MEM · ${s.memoryRecords} memories</span>`;showModel();
 }catch(e){$("#status").innerHTML=`<span class="pill bad">server unreachable</span>`}}
@@ -170,7 +173,7 @@ function addTrace(e){
     else{const li=document.createElement("li");li.className="muted";reuseRow={n:1,li};li.innerHTML=reuseHtml(1);trace.appendChild(li)}
   }else{
     reuseRow=null;
-    const li=document.createElement("li");if(e.kind==="sql")li.className="muted";const v=traceView(e);li.innerHTML=`<span class="k ${esc(v.k)}">${esc(v.k)}</span><span>${esc(v.t)}</span>`;trace.appendChild(li);
+    const li=document.createElement("li");if(e.kind==="sql")li.className="muted";const v=traceView(e);li.innerHTML=`<span class="k ${esc(v.k)}">${esc(v.k)}</span><span>${esc(shortNames(v.t))}</span>`;trace.appendChild(li);
   }
   if(follow)trace.scrollTop=trace.scrollHeight;
   trackProgress(e);
@@ -202,7 +205,7 @@ function card(f,prop,text,concept){const s=f.category||f.allItems;if(!s)return`<
 function skuPick(s){
   const fit=s.selectionFit==="broader"?"Broader proxy":"Product match";
   const source=s.selectionSource==="fallback"&&/only candidate/.test(s.selectionReason||"")?"Only official option":{model:"Model-selected",memory:"Remembered match",fallback:"Unconfirmed match"}[s.selectionSource]||s.selectionSource;
-  const who={model:"Nemotron read the product name",memory:"an earlier Nemotron choice, recalled from H-MEM"}[s.selectionSource];
+  const who={model:"Nemotron's reason for this official category",memory:"an earlier Nemotron choice, recalled from H-MEM"}[s.selectionSource];
   if(who)return`<div class="sub" style="white-space:normal;text-align:left;margin-top:4px"><b>${fit} · ${esc(source)}</b>${s.selectionReason?` — ${who}: “${esc(s.selectionReason)}”`:""}</div>`;
   return`<details style="white-space:normal;text-align:left;margin-top:4px"><summary>${fit} · ${esc(source)}</summary><div class="sub">${esc(s.selectionReason)}</div></details>`;
 }

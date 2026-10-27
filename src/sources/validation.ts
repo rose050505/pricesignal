@@ -1,6 +1,6 @@
 /** Decoding changes invalidate remembered views without touching the raw REST tables. */
 export function sourceDecoderVersion(agency: string): number {
-  return agency === "abs" || agency === "statcan" ? 2 : 1;
+  return agency === "abs" || agency === "statcan" || agency === "bls" ? 2 : 1;
 }
 
 /** Reused and newly decoded views share the same valid, non-future release window. */

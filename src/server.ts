@@ -40,7 +40,7 @@ const server = http.createServer(async (req, res) => {
       } catch {
         zetaris = "offline";
       }
-      return send(res, 200, { zetaris, provider: cfg.provider, baseUrl: cfg.baseUrl.replace(/\/\/[^/]*@/, "//"), fast: cfg.fast, deep: cfg.deep, state: st.state, models: st.models.slice(0, 20), memoryRecords: memory.hmem.store.all().length });
+      return send(res, 200, { zetaris, provider: cfg.provider, baseUrl: cfg.baseUrl.replace(/\/\/[^/]*@/, "//"), fast: cfg.fast, deep: cfg.deep, state: st.state, models: st.models.slice(0, 20), memoryRecords: memory.hmem.store.all().length, namespace: process.env.PSIG_ZETARIS_NS || null });
     }
     if (req.method === "GET" && url.pathname === "/api/memory") {
       return send(res, 200, memory.hmem.store.all().map((r: any) => ({ id: r.id, layer: r.layer, type: r.type, content: r.content, confidence: r.confidence, accessCount: r.accessCount })));

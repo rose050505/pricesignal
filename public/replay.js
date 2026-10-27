@@ -15,7 +15,7 @@
   };
 
   window.fetch = async (url, opts) => {
-    if (url === "/api/status") return json({ replay: true, state: "replay", provider: "replay", fast: R.model, zetaris: "recorded", memoryRecords: null });
+    if (url === "/api/status") return json({ replay: true, state: "replay", provider: "replay", fast: R.model, zetaris: "recorded", memoryRecords: null, namespace: R.namespace ?? null });
     if (url === "/api/ask") {
       const q = norm(JSON.parse((opts && opts.body) || "{}").question);
       const hit = R.examples.find((e) => norm(e.question) === q);

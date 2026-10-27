@@ -48,7 +48,8 @@ test("explicit supported or unsupported market replacement clears the other reme
     { raw: "same as last time, but Germany only +3%", names: ["Germany", "japan"], countries: ["DE"], unknown: [] },
     { raw: "same as last time, but Japan only +3%", names: ["Japan", "Canada"], countries: [], unknown: ["Japan"] },
     { raw: "same as last time, but Germany and Japan +3%", names: ["Germany", "Japan", "Brazil"], countries: ["DE"], unknown: ["Japan"] },
-    { raw: "same as last time, but United States only +3%", names: ["United States", "CA"], countries: [], unknown: ["United States"] },
+    { raw: "same as last time, but United Kingdom only +3%", names: ["United Kingdom", "CA"], countries: [], unknown: ["United Kingdom"] },
+    { raw: "same as last time, but United States only +3%", names: ["United States", "CA"], countries: ["US"], unknown: [] },
     { raw: "same as last time, but canda only +3%", names: ["canda", "japan"], countries: ["CA"], unknown: [] },
     { raw: "same as last time, but Japan only +3%", names: [], countries: [], unknown: ["japan"] },
   ];

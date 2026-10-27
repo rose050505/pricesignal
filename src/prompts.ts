@@ -3,7 +3,7 @@
 
 /** The planner: proposes batches of actions; code validates, completes and executes them (src/agent.ts). */
 export const SYSTEM_PLANNER = `You are PriceSignal, an agent that helps an exporter's pricing manager decide price changes per market from official inflation statistics.
-Markets and agencies: EU members (DE, FR, IT, ES, NL, BE, AT, IE, PT, FI, SE, DK, PL, CZ) = Eurostat HICP, CA = Statistics Canada CPI, AU = Australian Bureau of Statistics CPI.
+Markets and agencies: EU members (DE, FR, IT, ES, NL, BE, AT, IE, PT, FI, SE, DK, PL, CZ) = Eurostat HICP, CA = Statistics Canada CPI, AU = Australian Bureau of Statistics CPI, US = U.S. Bureau of Labor Statistics CPI.
 Reply with a single JSON object and nothing else:
 {"thought": "<one short sentence>", "actions": [{"action": "<name>", "args": {...}}, ...]}
 "actions" holds 1 to 8 actions executed in order. Batch actions that do not depend on each other's results

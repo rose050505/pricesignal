@@ -3,7 +3,7 @@
 import { loadEnv } from "./env.ts";
 import { ZetarisClient } from "./zetaris.ts";
 import { chat, providerConfig, providerStatus } from "./llm.ts";
-import { discover } from "./sources/index.ts";
+import { discover, getJson } from "./sources/index.ts";
 import { AgentMemory } from "./memory.ts";
 
 loadEnv();
@@ -39,11 +39,18 @@ await check("llm chat", async () => {
   const pu: any = p.usage ?? {};
   return `${r.provider} model=${r.model} ${r.ms} ms -> ${r.text.slice(0, 40)} (out ${u.completion_tokens ?? "?"} tok) | parse-size call: ${p.ms} ms, out ${pu.completion_tokens ?? "?"} tok, model=${p.model}`;
 });
-for (const c of ["DE", "CA", "AU"] as const) {
+for (const c of ["DE", "CA", "AU", "US"] as const) {
   await check(`sources ${c}`, async () => {
     const d = await discover(c, "food");
     const k = d.candidates[0];
     if (!k) throw new Error(`no candidate; notes: ${d.notes.join(" | ")}`);
+    // BLS discovery reads a vetted list (the keyless API allows 25 requests a day), so ask the endpoint once here.
+    if (k.agency === "bls") {
+      const j: any = await getJson(k.sourceUrl);
+      const latest = j?.Results?.series?.[0]?.data?.[0];
+      if (j?.status !== "REQUEST_SUCCEEDED" || !latest) throw new Error(`BLS answered ${j?.status ?? "without a status"}: ${(j?.message ?? []).join(" ")}`);
+      k.lastPeriod = `${latest.year}-${String(latest.period).slice(1)}`;
+    }
     return `${k.dataset}/${k.code} "${k.label}" ${k.frequency} last=${k.lastPeriod}${d.notes.length ? ` | notes: ${d.notes.join(" | ")}` : ""}`;
   });
 }

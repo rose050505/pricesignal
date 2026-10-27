@@ -170,7 +170,7 @@ test("parallel onboarding sends the shared bootstrap DDL once", async () => {
     { ...cand("AU", "food"), code: "20001", frequency: "Q" },
   ];
   await Promise.all(cs.map((c) => onboard(z, c, "food", new Date("2026-10-27"))));
-  assert.equal(statements.filter((s) => /^CREATE (LIGHTNING DATABASE|SCHEMASTORE CONTAINER)/.test(s)).length, 4);
+  assert.equal(statements.filter((s) => /^CREATE (LIGHTNING DATABASE|SCHEMASTORE CONTAINER)/.test(s)).length, 5, "four agency databases and the psig container");
 });
 
 test("extractJson finds the action object after reasoning, stray braces or a trailing comma", () => {
