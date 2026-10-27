@@ -40,3 +40,16 @@ test("a proposal in words is used only when Nemotron read the same number, and t
   const down = await parse("australia food, thinking of four percent");
   assert.equal(down.r.proposedChangePct, undefined);
 });
+
+test("an observed or cost range is not a proposal range, wherever the cost word stands (review 27 Oct 14:12)", async () => {
+  for (const [q, prop] of [
+    ["german food prices rose 3-4% last year. can we raise prices +5%?", 5],
+    ["DE food: HICP is running 3-4%, thinking +5% for Q1", 5],
+    ["australia food: our 8-10% cost increase, we pass on 70%. thinking +5%", 5],
+    ["canada food +4%? 60-70% pass-through", 4],
+  ] as const) {
+    const { r } = await parse(q, { countries: ["DE"], concept: "food", proposed_change_pct: prop });
+    assert.equal(r.proposedChangePct, prop, q);
+    assert.ok(!(r.inputIssues ?? []).some((i: string) => /range of proposed/.test(i)), q);
+  }
+});

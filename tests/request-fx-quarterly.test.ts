@@ -47,3 +47,27 @@ test("the result card states the one-off vs one-year premise and that exchange r
   assert.match(html, /It compares a one-off change with about a year of consumer prices; exchange rates are not included\./);
   assert.doesNotMatch(html, /is \+2% enough this quarter\?/);
 });
+
+test("an exchange-rate mention or a price phrase in Korean does not turn the proposal into something else (review 27 Oct 14:12)", async () => {
+  for (const q of ["환율 때문에 독일 가격 5% 올려도 될까?", "독일 식품, 환율 고려하면 5% 인상 괜찮을까?"]) {
+    const r = await parse(q);
+    assert.equal(r.proposedChangePct, 5, q);
+  }
+  for (const q of ["독일 식품 5%를 가격에 반영해도 될까?", "독일 식품 가격 5% 정도 반영할까?"]) {
+    const r = await parse(q);
+    assert.equal(r.proposedChangePct, 5, q);
+    assert.equal(r.passThrough, undefined, q);
+  }
+  // Still a pass-through when the share of a cost rise is meant.
+  const pass = await parse("독일 식품 5% 인상, 원가 상승분의 70%를 가격에 반영해요");
+  assert.equal(pass.passThrough, 0.7);
+});
+
+test("only a repeated quarterly increase gets the quarterly note, not quarterly CPI or a quarterly review", async () => {
+  for (const q of ["australia food: quarterly CPI looks high, is +3% ok?", "australia food: is +3% enough for our quarterly price review?"]) {
+    const r = await parse(q);
+    assert.ok(!(r.inputIssues ?? []).some((i: string) => /repeated quarterly increase/.test(i)), q);
+  }
+  const r = await parse("australia food: quarterly increases of +2%, ok?");
+  assert.ok((r.inputIssues ?? []).some((i: string) => /repeated quarterly increase/.test(i)));
+});

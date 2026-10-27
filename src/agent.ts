@@ -1404,14 +1404,17 @@ function requestPercentages(raw: string, model: any): {
       || /^\s*(?:(?:unit|current)\s+)?cost[ -]*(?:share|ratio)\b|^\s*(?:원가|비용)\s*비중/i.test(after)
       || (costWords.test(before) && /^\s*(?:of\s+)?(?:(?:the|our|current)\s+)*(?:(?:selling|sales|sale|retail)\s+)?price\b/i.test(after));
     const pass = !share && (/\bpass(?:ed|ing)?\b|\brecover(?:y)?\b|반영|전가|회수/i.test(before)
-      || /^\s*(?:pass[ -]?(?:through|thru)|(?:만|을|를|정도|가량|쯤)?\s*(?:(?:판매\s*)?가격(?:에|으로)\s*)?(?:반영|전가|회수))/i.test(after));
+      || /^\s*(?:pass[ -]?(?:through|thru)|(?:만|을|를)?\s*(?:반영|전가|회수))/i.test(after)
+      || (/원가|비용|상승분|인상분|증가분|그\s*중/.test(before) && /^\s*(?:만|을|를|정도|가량|쯤)?\s*(?:(?:판매\s*)?가격(?:에|으로)\s*)?(?:반영|전가|회수)/.test(after)));
     const cost = !share && !pass && (costWords.test(before) || /^\s*(?:costs?\s+(?:rise|increase|growth|change)|원가\s*(?:상승|증가))/i.test(after));
     // A later price clause cannot reverse an earlier cost change, even without punctuation.
     const directionAfter = cost ? after.split(/\b(?:prices?|selling)\b|가격/i)[0] : after;
     const direction = /\b(?:fall|fell|decreas\w*|reduc\w*|cut|lower\w*)\b|인하|내리|하락|감소/i.test(`${before} ${directionAfter}`);
     const x = Number(m[2].replace(",", ".")) * (/^[\-−－]$/.test(m[1]) || (!m[1] && !share && !pass && direction) ? -1 : 1);
     const lastIndex = (pattern: RegExp) => [...before.matchAll(pattern)].at(-1)?.index ?? -1;
-    const unrelatedAt = lastIndex(new RegExp(`\\b(?:tax|VAT|margin|inflation|CPI|HICP|interest|discount rate)\\b|부가세|세율|마진|이익률|물가상승률|${FX_MOVE.source}`, "gi"));
+    const fxAt = lastIndex(new RegExp(FX_MOVE.source, "gi"));
+    const fxSubject = fxAt >= 0 && !/가격|인상|인하|올려|올리|내려|\bprices?\b|\braise\b|\bincrease\b|\bgo\b|\bwant\b|\bneed\b/i.test(before.slice(fxAt).replace(FX_MOVE, " ")) && !/^\s*(?:인상|인하|올려|올리|내려|price|raise|increase)/i.test(after);
+    const unrelatedAt = Math.max(lastIndex(/\b(?:tax|VAT|margin|inflation|CPI|HICP|interest|discount rate)\b|부가세|세율|마진|이익률|물가상승률/gi), fxSubject ? fxAt : -1);
     const proposalAt = lastIndex(/\b(?:thinking|considering|propos\w*|planning|what about|(?:can|could|should|would|will)\s+[^:;.!?]*?\b(?:raise|increase|reduce|cut|change)\s+(?:our\s+)?prices?)\b|가격(?:은|을|이)?\s*(?:인상|인하|변경)/gi);
     const unrelated = unrelatedAt >= 0 && proposalAt <= unrelatedAt
       || /^\s*(?:VAT|tax|margin|inflation|부가세|세율|마진|이익률)\b/i.test(after);
@@ -1463,7 +1466,8 @@ function requestPercentages(raw: string, model: any): {
   const ambiguousProposal = uniqueProposals.length > 1;
   // "3-4%" or "3 to 4%" outside a cost, pass-through or share phrase is a range, not one proposal.
   const rangeProposal = [...raw.matchAll(/(\d+(?:[.,]\d+)?)\s*(?:-|–|—|~|〜|\bto\b)\s*(\d+(?:[.,]\d+)?)\s*(?:%|pct\b|percent\b|퍼센트|프로)/gi)]
-    .some(m => !/\b(?:costs?|pass\w*|recover\w*|share|margin|tax|VAT|inflation)\b|원가|비용|반영|전가|비중/i.test(raw.slice(Math.max(0, m.index! - 40), m.index)));
+    .some(m => !/\b(?:costs?|pass\w*|recover\w*|share|margin|tax|VAT|inflation|CPI|HICP|rose|risen|running|was|were)\b|원가|비용|반영|전가|비중|물가/i.test(raw.slice(Math.max(0, m.index! - 40), m.index))
+      && !/^\s*(?:of\s+)?(?:(?:our|the)\s+)?(?:costs?\b|cost increase|pass|recover|원가|비용|반영|전가)/i.test(raw.slice(m.index! + m[0].length, m.index! + m[0].length + 30)));
   // "four percent": used only when no digits gave a proposal and Nemotron read the same number from the request.
   const wordProposal = !proposals.length && !rangeProposal ? proposalFromWords(raw, model.proposed_change_pct) : undefined;
   const proposal = proposals[0] ?? (wordProposal ? { x: wordProposal.value } : undefined);
@@ -1477,7 +1481,7 @@ function requestPercentages(raw: string, model: any): {
   if (ambiguousProposal) issues.push("Multiple different proposed price changes were supplied; provide one proposal. No proposal is chosen or recalled for this comparison.");
   if (rangeProposal) issues.push("A range of proposed changes was given; provide one proposal. No proposal is chosen or recalled for this comparison.");
   if (FX_MOVE.test(raw)) issues.push("An exchange-rate change was mentioned; exchange rates are not used in this comparison.");
-  if (/\b(?:every|each|per)\s+quarter\b|\bquarterly\b|매\s*분기|분기마다/i.test(raw)) issues.push("The question describes a repeated quarterly increase. The benchmark is year-on-year, and repeated quarterly increases add up over a year.");
+  if (/\b(?:every|each|per)\s+quarter\b|\bquarterly\s+(?:increases?|rises?|hikes?|raises?)\b|매\s*분기|분기마다/i.test(raw)) issues.push("The question describes a repeated quarterly increase. The benchmark is year-on-year, and repeated quarterly increases add up over a year.");
   if (proposals.some(p => !Number.isFinite(p.x) || p.x < -100)) issues.push("The proposed price change must be finite and at least -100%; the invalid value is omitted and is not replaced from memory.");
   if (invalidCostChange) issues.push("The cost change must be finite and at least -100%; the invalid value is omitted and is not replaced from memory.");
   return {
