@@ -919,9 +919,12 @@ export function gapSummary(b: Brief): string | undefined {
     else parts.push(`within ${name} (${benchmarkText({ low, high })})`);
   }
   if (!parts.length) return undefined;
+  // A benchmark is a historical reference, not a threshold: 0.1 pp outside a narrow span is said to be close.
+  const close = b.facts.filter((f) => f.suggested && requestedSeries(f, b.request) && ((f.verdict === "above the market benchmark" && r1(p - f.suggested.high) <= 0.2) || (f.verdict === "below the market benchmark" && r1(f.suggested.low - p) <= 0.2))).map((f) => f.country);
+  const closeNote = close.length ? ` ${close.length > 1 ? `${close.slice(0, -1).join(", ")} and ${close.at(-1)} are` : `${close[0]} is`} a close call (0.2 pp or less outside the benchmark).` : "";
   const need = b.facts.find((f) => f.costNeed !== undefined)?.costNeed;
   const cost = need === undefined ? "" : ` Your cost-recovery scenario is ${signedPct(need)}: ${signedPct(p)} ${Math.abs(p - need) < 0.05 ? "matches it" : `is ${pp(p - need)} pp ${p > need ? "more" : "less"}`}.`;
-  return `How far: ${signedPct(p)} is ${parts.join(", ")}.${cost}`;
+  return `How far: ${signedPct(p)} is ${parts.join(", ")}.${closeNote}${cost}`;
 }
 
 // Official food indices that count restaurant and take-away meals (StatCan Food includes "Food purchased from
