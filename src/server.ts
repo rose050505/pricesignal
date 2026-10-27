@@ -13,7 +13,7 @@ import { ZetarisClient } from "./zetaris.ts";
 import { providerConfig, providerStatus } from "./llm.ts";
 import { COMPARE_COLUMNS } from "./sources/index.ts";
 import { publishRun, subscribeRun, type Run } from "./run-stream.ts";
-import { saveRunRecord } from "./run-record.ts";
+import { saveEvidence, saveRunRecord } from "./run-record.ts";
 
 loadEnv();
 const PORT = Number(env("PSIG_PORT", "5177"));
@@ -64,12 +64,20 @@ const server = http.createServer(async (req, res) => {
         .then((b) => {
           // Keep the activity log of every finished UI run, like the CLI does; a failed write never fails the run.
           let record: string | null = null;
+          let verification: { ok: boolean; checks: number; path: string; errors: string[] } | null = null;
           try {
-            record = path.relative(ROOT, saveRunRecord(path.join(ROOT, "out"), question, b));
+            const dir = saveRunRecord(path.join(ROOT, "out"), question, b);
+            record = path.relative(ROOT, dir);
+            try {
+              const v = saveEvidence(dir, b);
+              verification = { ...v, path: path.relative(ROOT, v.path) };
+            } catch (e) {
+              console.error(`[pricesignal] could not export the evidence packet: ${String(e)}`);
+            }
           } catch (e) {
             console.error(`[pricesignal] could not save the run record: ${String(e)}`);
           }
-          run.result = { ...toResult(b), record };
+          run.result = { ...toResult(b), record, verification };
           run.done = true;
           publishRun(run, run.result, "result");
         })

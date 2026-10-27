@@ -151,3 +151,20 @@ test("the federated query and its result rows are shown right under the market c
   assert.match(out.slice(card), /<details><summary>SQL<\/summary><pre>SELECT country, concept FROM psig\.v_de_food UNION ALL/);
   assert.match(out.slice(card), /<details><summary>All 5 rows<\/summary>/);
 });
+
+test("a finished run shows the offline evidence replay and the command that repeats it", () => {
+  const b = browser();
+  b.context.sample = { ...resultWith(nemotron), verification: { ok: true, checks: 579, path: "out/ui-2026-10-27T03-00-00-000Z/evidence.json", errors: [] } };
+  b.run('render(sample,"demo question 1")');
+  let out = b.node("#out").innerHTML;
+  assert.match(out, /Evidence replayed:<\/b> 579 offline checks re-derived the benchmarks, verdicts and SKU prices from the saved Zetaris rows/);
+  assert.match(out, /<code>npm run verify -- out\/ui-2026-10-27T03-00-00-000Z\/evidence\.json<\/code>/);
+  b.context.sample = { ...resultWith(nemotron), verification: { ok: false, checks: 12, path: "out/x/evidence.json", errors: ["facts[0].verdict differs"] } };
+  b.run('render(sample,"demo question 1")');
+  out = b.node("#out").innerHTML;
+  assert.match(out, /Evidence replay found problems/);
+  assert.match(out, /facts\[0\]\.verdict differs/);
+  b.context.sample = resultWith(nemotron);
+  b.run('render(sample,"demo question 1")');
+  assert.doesNotMatch(b.node("#out").innerHTML, /Evidence repl/);
+});
