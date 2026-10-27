@@ -120,6 +120,8 @@ export interface OnboardResult {
   view: string; table: string; ok: boolean; existed: boolean; rows: number; latest?: string; error?: string; sql: string[];
   /** The raw REST table is cached in Zetaris (CACHE TABLE), so verification and later queries read the cache. */
   cached?: boolean; rawTable?: string;
+  /** The cache held an agency error page; it was dropped and the source read again. */
+  reloaded?: boolean;
   /** Series REST table/view counts, excluding shared database/schema bootstrap objects. */
   createdObjects?: number; existingObjects?: number;
 }
@@ -139,6 +141,7 @@ export async function onboard(z: SqlRunner, c: Candidate, concept: Concept, now 
   }
   const rawTable = rawTableRef(c, concept);
   let cached = false;
+  let reloaded = false;
   let lastError = "";
   // One retry after a short pause: an agency read through Zetaris can fail for a single request (StatCan did on 27 Oct).
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -152,13 +155,25 @@ export async function onboard(z: SqlRunner, c: Candidate, concept: Concept, now 
       const fresh = hasFreshPeriod(observedPeriod, c.frequency, now);
       const latest = typeof observedPeriod === "string" ? observedPeriod : undefined;
       const error = !hasRows ? "view returned no rows or an invalid observation count" : !fresh ? `view has no fresh ${c.frequency} observation period (latest ${String(observedPeriod ?? "missing")})` : undefined;
-      return { view: plan.view, table: plan.table, ok: hasRows && fresh, existed, createdObjects, existingObjects, rows: hasRows ? Number(count) : 0, latest, error, sql: plan.statements, cached, rawTable };
+      return { view: plan.view, table: plan.table, ok: hasRows && fresh, existed, createdObjects, existingObjects, rows: hasRows ? Number(count) : 0, latest, error, sql: plan.statements, cached, rawTable, ...(reloaded ? { reloaded } : {}) };
     } catch (e) {
       lastError = String(e).slice(0, 300);
+      // A cache filled while the agency served a maintenance page keeps failing, and CACHE TABLE on it is a no-op:
+      // drop it so the retry reads the agency again (on 27 Oct this kept CA Food out all morning).
+      if (!attempt && BAD_CACHED_RESPONSE.test(String(e))) {
+        try {
+          await z.run(`UNCACHE TABLE IF EXISTS ${rawTable}`);
+          cachedAt.delete(rawTable);
+          reloaded = true;
+        } catch { /* the retry still runs */ }
+      }
     }
   }
   return { view: plan.view, table: plan.table, ok: false, existed, createdObjects, existingObjects, rows: 0, error: lastError, sql: plan.statements, cached, rawTable };
 }
+
+/** Zetaris errors that mean the stored agency response is not data (an HTML page), as opposed to an agency that is down. */
+const BAD_CACHED_RESPONSE = /IllegalArgumentException: The value \(<|<!--|<!doctype html|<html|JsonParseException|Unexpected character \('<'/i;
 
 export const COMPARE_COLUMNS = ["country", "concept", "category_label", "frequency", "period", "yoy_pct", "source_id"];
 

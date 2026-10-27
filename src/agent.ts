@@ -1052,8 +1052,8 @@ Reply with JSON only.`;
 type ExecCtx = { views: Map<string, any>; candidates: Map<string, Candidate[]>; notes: string[]; key: (a: string, b: string) => string; pairs: { country: Country; concept: Concept }[]; getCompared: () => SqlResult | undefined; setCompared: (c: SqlResult) => void };
 type SkuView = { view: string; note?: string; selectionReason?: string; selectionSource?: "model" | "memory" | "fallback"; selectionFit?: "specific" | "broader" };
 
-function onboardingSummary(result: { existed: boolean; createdObjects?: number; existingObjects?: number; cached?: boolean }): string {
-  if (result.createdObjects !== undefined && result.existingObjects !== undefined) return `created ${result.createdObjects} SQL object${result.createdObjects === 1 ? "" : "s"}; ${result.existingObjects} already existed; ${result.cached ? "source cached in Zetaris; " : ""}verified`;
+function onboardingSummary(result: { existed: boolean; createdObjects?: number; existingObjects?: number; cached?: boolean; reloaded?: boolean }): string {
+  if (result.createdObjects !== undefined && result.existingObjects !== undefined) return `created ${result.createdObjects} SQL object${result.createdObjects === 1 ? "" : "s"}; ${result.existingObjects} already existed; ${result.reloaded ? "an old cached error page was dropped and the source read again; " : ""}${result.cached ? "source cached in Zetaris; " : ""}verified`;
   return result.existed ? "Zetaris already had it - reused and verified" : "created REST table + view";
 }
 

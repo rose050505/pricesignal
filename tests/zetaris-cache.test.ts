@@ -136,3 +136,39 @@ test("the reachability check before a refresh sends the agency's own request hea
     globalThis.fetch = real;
   }
 });
+
+test("a Zetaris cache that holds an agency's maintenance page is dropped and reloaded, not kept with a no-op CACHE", async () => {
+  // Measured 27 Oct 11:45: CA Food failed through Zetaris all morning (IllegalArgumentException on the StatCan HTML
+  // page) while StatCan answered curl with JSON; UNCACHE TABLE then SELECT read it live and succeeded.
+  process.env.PSIG_ONBOARD_RETRY_MS = "0";
+  resetCacheRegistry();
+  const raw = rawTableRef(statcanFood, "food");
+  let poisoned = true;
+  const sqls: string[] = [];
+  const z: SqlRunner = {
+    async run(sql: string): Promise<SqlResult> {
+      sqls.push(sql);
+      if (sql === `UNCACHE TABLE IF EXISTS ${raw}`) poisoned = false;
+      if (/^SELECT COUNT/.test(sql)) {
+        if (poisoned) throw new Error("Zetaris HTTP 400: SparkException: Job aborted: java.lang.IllegalArgumentException: The value (<!--Last modified Dec 16, 2021 --> <!DOCTYPE html>");
+        return { id: "x", sql, columns: ["n", "latest"], rows: [[14, "2026-09"]], ms: 1 };
+      }
+      return { id: "x", sql, columns: [], rows: [], ms: 1 };
+    },
+  };
+  const r = await onboard(z, statcanFood, "food", new Date("2026-10-27"));
+  assert.equal(r.ok, true, r.error);
+  assert.equal(r.cached, true);
+  assert.equal(r.reloaded, true);
+  const uncache = sqls.indexOf(`UNCACHE TABLE IF EXISTS ${raw}`);
+  assert.ok(uncache > 0 && sqls.indexOf(`CACHE TABLE ${raw}`, uncache) > uncache, sqls.join("\n"));
+});
+
+test("a verification failure that is not a bad cached response leaves the cache alone", async () => {
+  process.env.PSIG_ONBOARD_RETRY_MS = "0";
+  resetCacheRegistry();
+  const { z, sqls } = recorder((sql) => /^SELECT COUNT/.test(sql));
+  const r = await onboard(z, statcanFood, "food", new Date("2026-10-27"));
+  assert.equal(r.ok, false);
+  assert.ok(!sqls.some((s) => /^UNCACHE/.test(s)), "an outage does not drop the only copy");
+});
