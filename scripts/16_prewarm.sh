@@ -16,7 +16,7 @@ if [ -z "${PSIG_ZETARIS_NS:-}" ]; then
 fi
 mkdir -p logs || exit $?
 export PSIG_MEMORY_DIR=".pricesignal/prewarm-$PSIG_ZETARIS_NS"
-question="${1:-our gochujang & snacks: is food inflation in deutschland, canada & aus still running hot?? thinking +5% for Q1, too much? we usually pass on ~70% of cost increases}"
+question="${1:-our gochujang & snacks: is food inflation in deutschland, canada & aus still running hot?? our costs rose 8%, unit costs are 60% of our selling price. we pass on ~70% of cost increases. thinking +5% for Q1, too much?}"
 log="logs/16_prewarm_$(date +%H%M%S).log"
 npx tsx src/cli.ts "$question" 2>&1 | tee "$log"
 status=${PIPESTATUS[0]}
