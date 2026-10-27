@@ -252,6 +252,9 @@ export function marketNumbers(f: MarketFacts | undefined, req: Request, policy?:
       add(s.avg12);
       add(s.yoy6Back);
       if (s.yoy6Back !== undefined) add(s.latestYoy - s.yoy6Back);
+      // The observation count is in the facts ("12 of 12 monthly observations"); a rate of that value is still
+      // checked against the series by observedRateErrors.
+      if (!preserveSigns) { add(s.averageCount); add(s.averageExpected); }
     }
     add(f.suggested?.low);
     add(f.suggested?.high);
