@@ -4,7 +4,7 @@
 // JSON actions; code validates and completes them, enforces guardrails, and
 // computes every number that reaches the user.
 import { EventEmitter } from "node:events";
-import { chat, ChatMessage, ChatResult } from "./llm.ts";
+import { chat, ChatMessage, ChatResult, thinkingOff } from "./llm.ts";
 import { AgentMemory, type SeriesMapping } from "./memory.ts";
 import { SqlResult, SqlRunner, rowsAsObjects, isIncompleteResultError } from "./zetaris.ts";
 import { AGENCY_FOR, COMPARE_COLUMNS, Candidate, Concept, Country, COUNTRY_ALIASES, CONCEPT_WORDS, compareSql, marketSemanticView, semanticCompareSql, discover, monthsBack, normalizeCountry, onboard, skuSearchWords, isBroadFoodLabel, ensureCached, rawTableRef, sourceAnswers, humanError, durableNotes } from "./sources/index.ts";
@@ -322,7 +322,7 @@ Reply with JSON only.`;
         batch = [{ action: "compare", args: {} }];
       } else if (!autopilot) {
         try {
-          const r = await this.hedged("planner", (signal) => this.llm(messages, { lane: "fast", temperature: 0.1, maxTokens: 6000, attempts: 1, timeoutMs: 75_000, signal }));
+          const r = await this.hedged("planner", (signal) => this.llm(messages, { lane: "fast", temperature: 0.1, maxTokens: thinkingOff() ? 1500 : 6000, attempts: 1, timeoutMs: 75_000, signal }));
           const j = extractJson(r.text);
           batch = Array.isArray(j?.actions) ? j.actions.filter((a: any) => a?.action).slice(0, 8) : j?.action ? [j] : [];
           if (!batch.length) throw new Error(`no action in: ${r.text.slice(0, 120)}`);
@@ -848,7 +848,7 @@ Reply with JSON only.`;
         timer = setTimeout(() => { controller.abort(); reject(new Error("SKU selection time budget expired")); }, 20_000);
       });
       const reply = await Promise.race([
-        this.llm(selectionMessages(choices), { lane: "fast", temperature: 0, maxTokens: 2500, attempts: 1, timeoutMs: 20_000, signal: controller.signal }),
+        this.llm(selectionMessages(choices), { lane: "fast", temperature: 0, maxTokens: thinkingOff() ? 1200 : 2500, attempts: 1, timeoutMs: 20_000, signal: controller.signal }),
         expired,
       ]);
       const checked = validateSelectionsPerGroup(extractJson(reply.text), choices, reply.model);
@@ -1007,7 +1007,9 @@ Reply with JSON only.`;
     const deadline = Date.now() + Number(process.env.PSIG_NARRATIVE_BUDGET_MS || 55_000);
     let issue: NarrativeIssue | undefined; // why the last attempt failed, so the brief states the real reason
     const drafts: Narrative[] = []; // drafts that failed the fact check, for sentence-level salvage
-    let maxTokens = 8000; // Nemotron's hidden reasoning counts against it; raised once if a reply is cut off
+    // Room for the reply (and Nemotron's hidden reasoning when it is on); raised once if a reply is cut off.
+    let maxTokens = thinkingOff() ? 1500 : 8000;
+    const raisedTokens = thinkingOff() ? 4000 : 16_000;
     let cutOffBest: Narrative | undefined; // the best checked part of a cut-off reply, used if no full reply passes
     let lastReply: { reply: string; finishReason?: string } | undefined; // the raw reply of an unusable attempt, kept in the trace
     const withMarketKeys = (n: Narrative): Narrative => ({ ...n, markets: Object.fromEntries(Object.entries(n.markets ?? {}).map(([k, v]) => [marketKey(k), v])) });
@@ -1026,12 +1028,12 @@ Reply with JSON only.`;
           const kept = completedFields(r.text) as Narrative | null;
           if (kept?.headline) {
             n = { ...kept, markets: kept.markets ?? {}, cutOff: true };
-            if (r.finishReason === "length") maxTokens = 16_000;
+            if (r.finishReason === "length") maxTokens = raisedTokens;
             this.log("warn", `narrative reply was cut off - keeping its complete fields (${Object.keys(n.markets).length} market paragraph(s)) for the fact check`, { reply: r.text.slice(0, 4000) });
           }
         }
         if (!n?.headline && r.finishReason === "length") {
-          maxTokens = 16_000;
+          maxTokens = raisedTokens;
           throw new Error(`reply cut off at the token limit (finish_reason=length; ${JSON.stringify(r.usage ?? {}).slice(0, 120)}) - the next attempt allows ${maxTokens} tokens: ${r.text.replace(/\s+/g, " ").slice(0, 100)}`);
         }
         if (!n?.headline) { lastReply = { reply: r.text.slice(0, 4000), finishReason: r.finishReason }; throw new Error(`no headline in reply: ${r.text.replace(/\s+/g, " ").slice(0, 160)}`); }
@@ -1121,7 +1123,7 @@ export function extractJson(text: string): any | null {
     const end = objectEnd(t, start);
     if (end < 0) continue;
     const body = t.slice(start, end + 1);
-    for (const candidate of [body, withoutTrailingCommas(body)]) {
+    for (const candidate of [body, withoutTrailingCommas(body), escapedControls(withoutTrailingCommas(body))]) {
       try {
         const j = JSON.parse(candidate);
         if (j && typeof j === "object" && !Array.isArray(j)) return j;
@@ -1157,19 +1159,40 @@ export function completedFields(text: string): any | null {
     else if (ch === ",") value = false;
     else if (ch === "{") { depth++; value = false; }
     else if (ch === "}") {
-      if (--depth === 0) { try { return JSON.parse(t.slice(start, i + 1)); } catch { return null; } }
+      if (--depth === 0) {
+        const whole = extractJson(t.slice(start, i + 1));
+        if (whole) return whole;
+        break; // closed but malformed (e.g. an unescaped quote): keep the fields finished before the break
+      }
       cuts.push({ at: i + 1, depth });
     }
   }
   for (const c of cuts.reverse()) {
+    // A real end of value is followed by "," or "}" (or the end of a cut-off reply); a stray quote inside a
+    // sentence is not, so "Australian "food" CPI" never becomes the paragraph "Australian ".
+    const next = t.slice(c.at).trimStart()[0];
+    if (next !== undefined && next !== "," && next !== "}") continue;
     try {
-      const j = JSON.parse(t.slice(start, c.at) + "}".repeat(c.depth));
+      const j = JSON.parse(escapedControls(t.slice(start, c.at)) + "}".repeat(c.depth));
       if (j && typeof j.headline === "string") return j;
     } catch {
       // an earlier cut may still close cleanly
     }
   }
   return null;
+}
+
+/** Raw line breaks and tabs inside JSON strings, escaped (JSON forbids them; models sometimes write them). */
+function escapedControls(json: string): string {
+  let out = "", inStr = false, esc = false;
+  for (const ch of json) {
+    if (inStr && !esc && (ch === "\n" || ch === "\r" || ch === "\t")) { out += ch === "\n" ? "\\n" : ch === "\r" ? "\\r" : "\\t"; continue; }
+    out += ch;
+    if (esc) esc = false;
+    else if (inStr && ch === "\\") esc = true;
+    else if (ch === '"') inStr = !inStr;
+  }
+  return out;
 }
 
 /** Index of the brace closing the object that opens at `start`, ignoring braces inside strings; -1 if none. */

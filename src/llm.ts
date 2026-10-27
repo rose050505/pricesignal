@@ -21,6 +21,8 @@ let sendReasoningHint = (process.env.PSIG_REASONING_EFFORT ?? "low") !== "off";
 // parse request fell from 4-7 s and 1.2-1.8k output tokens (with /no_think and effort hints only) to 0.7-1.3 s
 // and about 50 tokens. Dropped once if a runtime rejects the field.
 let sendThinkingSwitch = true;
+/** Whether calls go out with Nemotron's reasoning pass switched off (then token limits fit the reply alone). */
+export const thinkingOff = () => (process.env.PSIG_NO_THINK ?? "1") !== "0" && sendThinkingSwitch;
 
 /** Whether a rejected request blamed the optional reasoning fields (only then is it worth resending without them). */
 export function rejectsReasoningHint(status: number, body: string): boolean {
@@ -119,12 +121,13 @@ export async function chat(messages: ChatMessage[], opts: { lane?: "fast" | "dee
       const r = await fetchText(`${cfg.baseUrl}/chat/completions`, {
         method: "POST",
         headers,
-        // Nemotron is a reasoning model: thinking tokens count against max_tokens, so keep a generous floor.
+        // With reasoning on, thinking tokens count against max_tokens, so keep a generous floor. With it off, the
+        // caller's limit stands: a large max_tokens alone slowed the NVIDIA lane (245 tokens: 3.5 s at 1024, 25 s at 8000).
         body: JSON.stringify({
           model,
           messages,
           temperature: opts.temperature ?? 0.2,
-          max_tokens: Math.max(opts.maxTokens ?? 2048, Number(process.env.PSIG_MIN_MAX_TOKENS || 6000)),
+          max_tokens: Math.max(opts.maxTokens ?? 2048, noThink && sendThinkingSwitch ? 0 : Number(process.env.PSIG_MIN_MAX_TOKENS || 6000)),
           ...(sendReasoningHint ? { reasoning: { effort: process.env.PSIG_REASONING_EFFORT || "low", exclude: true }, reasoning_effort: process.env.PSIG_REASONING_EFFORT || "low", provider: { sort: "throughput" } } : {}),
           ...(noThink && sendThinkingSwitch ? { chat_template_kwargs: { enable_thinking: false } } : {}),
         }),

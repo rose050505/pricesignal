@@ -137,7 +137,10 @@ test("a reply cut off at the token limit is retried with a larger limit", async 
   });
   const res = await (agent as any).narrate(base, facts, NOTES, 0.7);
   assert.ok(res.narrative);
-  assert.ok(calls[1].maxTokens >= 16000, String(calls[1].maxTokens));
+  // Thinking is off by default, so the limit fits the reply itself: through Nightshift's NVIDIA lane the same
+  // 245-token narrative took 3.5-4.3 s at 512-1024 max_tokens and 19-25 s at 8000 (27 Oct 18:40).
+  assert.ok(calls[0].maxTokens <= 2000, String(calls[0].maxTokens));
+  assert.ok(calls[1].maxTokens >= 4000 && calls[1].maxTokens > calls[0].maxTokens, String(calls[1].maxTokens));
   assert.ok(agent.trace.some((e) => /cut off at the token limit/.test(e.title)), agent.trace.map((e) => e.title).join("\n"));
 });
 

@@ -3,7 +3,7 @@
 // are kept and go through the same fact check; an unfinished sentence never reaches the brief.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { completedFields } from "../src/agent.ts";
+import { completedFields, extractJson } from "../src/agent.ts";
 
 test("the complete fields of a cut-off reply are kept, the unfinished one is dropped", () => {
   const cut = '{"headline":"+5% is above the market benchmark in DE, CA and AU","markets":{"DE":"German food CPI was 0.4% YoY in September 2026. +5% is above the benchmark.","CA":"Canadian food CPI was 2.2% Y';
@@ -15,6 +15,20 @@ test("the complete fields of a cut-off reply are kept, the unfinished one is dro
   assert.equal(completedFields('{"headline":"+5% is ab'), null);
   // A complete reply is returned unchanged.
   assert.deepEqual(completedFields('{"headline":"H","markets":{"DE":"a."},"watch":"w"}'), { headline: "H", markets: { DE: "a." }, watch: "w" });
+});
+
+test("a closed reply with a raw line break inside a sentence is read in full", () => {
+  // JSON forbids a raw newline inside a string; models write one now and then (independent review, 27 Oct 18:15).
+  const raw = '{"headline":"H","markets":{"DE":"German food CPI was 0.4% YoY.\nThat is low.","AU":"b."},"watch":"w"}';
+  const want = { headline: "H", markets: { DE: "German food CPI was 0.4% YoY.\nThat is low.", AU: "b." }, watch: "w" };
+  assert.deepEqual(extractJson(raw), want);
+  assert.deepEqual(completedFields(raw), want);
+});
+
+test("a closed reply broken by an unescaped quote keeps the fields before the break", () => {
+  const broken = '{"headline":"H","markets":{"DE":"a.","CA":"b.","AU":"Australian "food" CPI is 3%."},"watch":"w"}';
+  assert.equal(extractJson(broken), null);
+  assert.deepEqual(completedFields(broken), { headline: "H", markets: { DE: "a.", CA: "b." } });
 });
 
 test("a cut-off narrative reply is shown with its complete, fact-checked paragraphs", async () => {

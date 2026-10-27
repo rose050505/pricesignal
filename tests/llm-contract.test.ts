@@ -94,6 +94,22 @@ test("chat asks Nemotron to skip its hidden reasoning pass (chat template switch
   }
 });
 
+test("with thinking off the token limit is the caller's own; with thinking on it keeps room for the reasoning", async () => {
+  const ns = await fakeNightshift(() => ({ status: 200, body: completion }));
+  try {
+    await chat([{ role: "user", content: "hi" }], { attempts: 1, timeoutMs: 5_000, maxTokens: 1500 });
+    assert.equal(JSON.parse(ns.seen[0].body).max_tokens, 1500);
+    await chat([{ role: "user", content: "hi" }], { attempts: 1, timeoutMs: 5_000 });
+    assert.equal(JSON.parse(ns.seen[1].body).max_tokens, 2048);
+    process.env.PSIG_NO_THINK = "0";
+    await chat([{ role: "user", content: "hi" }], { attempts: 1, timeoutMs: 5_000, maxTokens: 1500 });
+    assert.equal(JSON.parse(ns.seen[2].body).max_tokens, 6000);
+  } finally {
+    delete process.env.PSIG_NO_THINK;
+    await ns.close();
+  }
+});
+
 test("a runtime that rejects the chat template switch gets the request again without it", async () => {
   const ns = await fakeNightshift((s) => (JSON.parse(s.body).chat_template_kwargs ? { status: 400, body: { error: "unrecognized field: chat_template_kwargs" } } : { status: 200, body: completion }));
   try {
