@@ -73,7 +73,7 @@ function serve(dir: string, port: number): void {
       res.writeHead(200, { "Content-Type": TYPES[path.extname(file)] ?? "application/octet-stream", "Cache-Control": "no-store" });
       fs.createReadStream(file).pipe(res);
     })
-    .listen(port, () => console.log(`[pricesignal] replay of the recorded runs on http://localhost:${port} (no live calls)`));
+    .listen(port, "127.0.0.1", () => console.log(`[pricesignal] replay of the recorded runs on http://localhost:${port} (no live calls)`));
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

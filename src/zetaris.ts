@@ -22,10 +22,8 @@ export function isIncompleteResultError(error: unknown): error is IncompleteResu
     (typeof error === "object" && error !== null && "name" in error && error.name === "IncompleteResultError");
 }
 
+// Statement ids for direct callers (smoke, probe); the agent numbers its own statements per run.
 let counter = 0;
-export function resetCiteIds(): void {
-  counter = 0;
-}
 export function nextCiteId(): string {
   counter += 1;
   return `Q${counter}`;

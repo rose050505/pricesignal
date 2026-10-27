@@ -104,4 +104,6 @@ const server = http.createServer(async (req, res) => {
 });
 
 
-server.listen(PORT, () => console.log(`[pricesignal] UI on http://localhost:${PORT}`));
+// Local by default: the UI spends model calls and shows the memory store. PSIG_HOST=0.0.0.0 opens it to the network.
+const HOST = env("PSIG_HOST", "127.0.0.1");
+server.listen(PORT, HOST, () => console.log(`[pricesignal] UI on http://${HOST === "127.0.0.1" ? "localhost" : HOST}:${PORT}`));

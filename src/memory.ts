@@ -95,10 +95,6 @@ export class AgentMemory {
     return undefined;
   }
 
-  rememberNote(text: string): string {
-    return this.hmem.add({ content: text, type: "general", source: "pricesignal:agent", confidence: 0.7 }).id;
-  }
-
   recall(query: string, topN = 8): { context: string; items: Recall[] } {
     const res = this.hmem.query(query, { topN, threshold: 0.05 });
     const items: Recall[] = res.memories.map((r: any) => this.toRecall(r.memory, Number(r.relevance ?? 0)));
