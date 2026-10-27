@@ -9,7 +9,7 @@
     "setup": "npx --yes degit meterless/meterless/engines/hmem/reference#1742dec56a66e58eef9dda2d2b865823758ca8cd vendor/hmem --force && cd vendor/hmem && npm install --no-audit --no-fund",
     "setup:conformance": "npx --yes degit meterless/meterless/engines/hmem/conformance#1742dec56a66e58eef9dda2d2b865823758ca8cd vendor/hmem-conformance --force",
     "conformance": "cd vendor/hmem && HMEM_IMPL=$(pwd)/../../src/hmem_impl.ts npx tsx ../hmem-conformance/runner.ts",
-    "test": "tsx --test tests/*.test.ts",
+    "test": "tsx --test --import ./tests/fixed-clock.ts tests/*.test.ts",
     "smoke": "tsx src/smoke.ts",
     "ask": "tsx src/cli.ts",
     "verify": "tsx src/verify.ts",
