@@ -1193,7 +1193,7 @@ function requestMarkets(raw: string, modelNames: string[]): { countries: Country
   const hits: { country: Country; at: number }[] = [];
   const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   for (const [alias, country] of Object.entries(COUNTRY_ALIASES)) {
-    const suffix = /[가-힣]/.test(alias) ? "(?=$|[^\\p{L}]|(?:에서|에서는|에는|으로|와|과|은|는|을|를|에|의|만)(?=$|[^\\p{L}]))" : "(?![\\p{L}])";
+    const suffix = /[가-힣]/.test(alias) ? "(?=$|[^\\p{L}]|(?:에서|에서는|에는|으로|와|과|은|는|을|를|에|의|만|이랑|랑|하고|이나|나|및|도|까지)(?=$|[^\\p{L}]))" : "(?![\\p{L}])";
     for (const match of raw.matchAll(new RegExp(`(?<![\\p{L}])${escape(alias)}${suffix}`, "giu"))) hits.push({ country, at: match.index! });
   }
   for (const match of raw.matchAll(/\b[A-Z]{2}\b/g)) {
@@ -1214,7 +1214,9 @@ function requestMarkets(raw: string, modelNames: string[]): { countries: Country
       const before = raw.slice(Math.max(0, match.index! - 24), match.index!);
       const after = raw.slice(match.index! + match[0].length);
       if (/^\s*(?:food|snacks?|condiments?|prices?|inflation|CPI|HICP|markets?)\b|^\s*(?:식품|간식|물가|가격)/i.test(after)
-        || /\b(?:in|for|and|market)\s*$/i.test(before) || /[,&/]\s*$/.test(before)) { countries.push(country); break; }
+        || /\b(?:in|for|and|market)\s*$/i.test(before) || /[,&/]\s*$/.test(before)
+        // A list that opens the request: "germny and austrlia food".
+        || /^\s*(?:and|or|&|,|\/)/i.test(after)) { countries.push(country); break; }
     }
   }
   for (const name of modelNames) {
@@ -1324,7 +1326,7 @@ function requestPercentages(raw: string, model: any): {
       || /^\s*(?:(?:unit|current)\s+)?cost[ -]*(?:share|ratio)\b|^\s*(?:원가|비용)\s*비중/i.test(after)
       || (costWords.test(before) && /^\s*(?:of\s+)?(?:(?:the|our|current)\s+)*(?:(?:selling|sales|sale|retail)\s+)?price\b/i.test(after));
     const pass = !share && (/\bpass(?:ed|ing)?\b|\brecover(?:y)?\b|반영|전가|회수/i.test(before)
-      || /^\s*(?:pass[ -]?(?:through|thru)|반영|전가|회수)/i.test(after));
+      || /^\s*(?:pass[ -]?(?:through|thru)|(?:만|을|를|정도|가량|쯤)?\s*(?:(?:판매\s*)?가격(?:에|으로)\s*)?(?:반영|전가|회수))/i.test(after));
     const cost = !share && !pass && (costWords.test(before) || /^\s*(?:costs?\s+(?:rise|increase|growth|change)|원가\s*(?:상승|증가))/i.test(after));
     // A later price clause cannot reverse an earlier cost change, even without punctuation.
     const directionAfter = cost ? after.split(/\b(?:prices?|selling)\b|가격/i)[0] : after;
