@@ -5,7 +5,7 @@
 
 How far: +5% is 0.9 pp above the CA benchmark top (4.1%).
 
-> Nemotron: Food inflation is easing in Canada; a blanket +5% Q1 increase looks above the evidence.
+> Nemotron: +5% is above the market benchmark in CA
 
 Cost policy: recover 60% of incremental unit cost (remembered from an earlier request (mem-22)) · proposed change: +5%. Add your cost change and unit-cost share (for example “costs rose 8%, unit costs are 60% of our selling price”) to turn this policy into a cost-recovery target.
 
@@ -18,7 +18,7 @@ The historical market benchmark spans the latest YoY rate and the mean of availa
 Every rate above comes from Zetaris query **Q6** (one federated SQL over the onboarded sources); market benchmarks and comparisons are computed in code from those rates.
 
 ## Your price list
-Internal SKUs (Zetaris view `psig.v_price_list_ex20261027_185440_1840793`) joined in query **Q13** with official category series for the products in each market; broader proxies are marked. Each SKU's benchmark price scenario applies its selected series' historical rates to its current price, computed in code.
+Internal SKUs (Zetaris view `psig.v_price_list_ex20261027_234114_2269488`) joined in query **Q13** with official category series for the products in each market; broader proxies are marked. Each SKU's benchmark price scenario applies its selected series' historical rates to its current price, computed in code.
 
 | SKU | Product | Market | Current price | Benchmark price scenario | At +5% | Rate used |
 |---|---|---|---|---|---|---|
@@ -28,64 +28,64 @@ Internal SKUs (Zetaris view `psig.v_price_list_ex20261027_185440_1840793`) joine
 
 ## By market
 ### CA — Statistics Canada (CPI)
-Canadian food inflation has eased to 2.2% YoY in September 2026, down from a 12-month average of 4.1%. +5% is above the market benchmark (2.2 to 4.1).
+Food inflation is 2.2% YoY in September 2026, with a 12-month average of 4.1% across 12 monthly observations. +5% is above the market benchmark.
 <sub>source: `statcan:18100004:v41690974` · monthly · cite Q6</sub>
 
 ## Since your last brief (remembered in H-MEM)
-- CA Food (last brief 2026-10-27, mem-19): no new official release (still 2026-09, +2.2%); market benchmark unchanged; cost-recovery policy 70% -> 60%; last time -2% was below the market benchmark; now +5% is above the market benchmark.
+- CA Food (last brief 2026-10-27, mem-19): no new official release (still 2026-09, +2.2%); market benchmark unchanged; cost-recovery policy 70% -> 60%; last time +3% was within the market benchmark; now +5% is above the market benchmark.
 
 ## Fragmentation the agent found
 - japan: not covered yet - PriceSignal currently reads Eurostat (EU markets), Statistics Canada (CA) and ABS (AU).
 - CA condiments: For Canada this agent maps only StatCan's "Food" and "All-items" CPI vectors, so "condiments" is compared at the Food level (coarser than the other markets). Food is used as a broader category proxy (coarser) for these products; no product-specific official series was found. (remembered SKU selection)
 - CA snacks: For Canada this agent maps only StatCan's "Food" and "All-items" CPI vectors, so "snacks" is compared at the Food level (coarser than the other markets). Food is used as a broader category proxy (coarser) for these products; no product-specific official series was found. (remembered SKU selection)
 
-**Watch:** Re-check next month for Japan food price data availability and Canada's latest monthly print.
+**Watch:** Re-check next month's food prints for any change in trend.
 
 ## Evidence
-Views: `psig.v_ca_food_v41690974_live_yoyv2_ex20261027_185440_1840793` (memory), `psig.v_ca_all_items_v41690973_live_yoyv2_ex20261027_185440_1840793` (memory), `psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_185440_1840793` (memory), `psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_185440_1840793` (memory)
+Views: `psig.v_ca_food_v41690974_live_yoyv2_ex20261027_234114_2269488` (memory), `psig.v_ca_all_items_v41690973_live_yoyv2_ex20261027_234114_2269488` (memory), `psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_234114_2269488` (memory), `psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_234114_2269488` (memory)
 
-<details><summary>Q2 · 1 rows · 152 ms</summary>
+<details><summary>Q2 · 1 row · 359 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q4 · 1 rows · 143 ms</summary>
+<details><summary>Q4 · 1 row · 289 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_all_items_v41690973_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_all_items_v41690973_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q6 · 28 rows · 448 ms</summary>
+<details><summary>Q6 · 28 rows · 1125 ms</summary>
 
 ```sql
-SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_market_inflation_ded1b012_ex20261027_185440_1840793 WHERE period >= '2025-07'
+SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_market_inflation_5d067095_ex20261027_234114_2269488 WHERE period >= '2025-07'
 ORDER BY country, concept, period
 ```
 </details>
-<details><summary>Q10 · 1 rows · 144 ms</summary>
+<details><summary>Q10 · 1 row · 407 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q12 · 1 rows · 163 ms</summary>
+<details><summary>Q12 · 1 row · 341 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q13 · 42 rows · 367 ms</summary>
+<details><summary>Q13 · 42 rows · 782 ms</summary>
 
 ```sql
 SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept AS rate_concept, s.category_label, s.frequency, s.period, s.yoy_pct, s.source_id
-FROM psig.v_price_list_ex20261027_185440_1840793 p
+FROM psig.v_price_list_ex20261027_234114_2269488 p
 JOIN (
-    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
+    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
     UNION ALL
-    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
+    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
     UNION ALL
-    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
+    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
 ) s ON p.country = s.country AND p.sku_category = s.concept
 WHERE p.country IN ('CA')
 ORDER BY p.country, p.sku, s.period

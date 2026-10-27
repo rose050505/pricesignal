@@ -60,7 +60,7 @@ test("asking a recorded question replays its trace, the early result and the fin
   const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "psig-site-")), "site");
   buildDemoSite(out, recordedExamples());
   const { ctx, inserted } = replayPage(out);
-  assert.match(inserted[0].innerHTML, /Replay of recorded runs\.<\/b> 1 question recorded from 27 Oct 2026, 18:55 KST/);
+  assert.match(inserted[0].innerHTML, /Replay of recorded runs\.<\/b> 1 question recorded in one session starting 27 Oct 2026, 18:55 KST/);
   assert.match(inserted[0].innerHTML, /no live calls/);
   const status = await (await ctx.fetch("/api/status")).json();
   assert.equal(status.replay, true);

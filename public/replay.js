@@ -4,7 +4,7 @@
 (function () {
   const R = window.PSIG_REPLAY;
   if (!R) return;
-  const MAX_GAP_MS = 1000; // longer waits in the recording are shortened to this
+  const MAX_GAP_MS = 700; // longer waits in the recording are shortened to this
   const realFetch = window.fetch ? window.fetch.bind(window) : null;
   const json = (body) => ({ ok: true, status: 200, json: async () => body });
   const norm = (s) => String(s || "").replace(/\s+/g, " ").trim().toLowerCase();
@@ -67,7 +67,7 @@
     const d = document.createElement("div");
     d.className = "replay-banner";
     d.setAttribute("role", "note");
-    d.innerHTML = `<b>Replay of recorded runs.</b> ${R.examples.length} ${R.examples.length === 1 ? "question" : "questions"} recorded from ${R.recordedAt} with Zetaris, Meterless Nightshift (${R.model}) and the agency APIs. This page makes no live calls: it plays back each run's trace and the results the UI received, with waits over ${MAX_GAP_MS / 1000} s shortened; times in the results are the recorded ones. "Try another price change" recalculates in your browser. To ask your own question, run PriceSignal locally (<a href="${R.repo}#run-it">README, "Run it"</a>).`;
+    d.innerHTML = `<b>Replay of recorded runs.</b> ${R.examples.length} ${R.examples.length === 1 ? "question" : "questions"} recorded in one session starting ${R.recordedAt}, with Zetaris, Meterless Nightshift (${R.model}) and the agency APIs. This page makes no live calls: it plays back each run's trace and the results the UI received, with waits over ${MAX_GAP_MS / 1000} s shortened to that; times in the results are the recorded ones. "Try another price change" recalculates in your browser. To ask your own question, run PriceSignal locally (<a href="${R.repo}#run-it">README, "Run it"</a>).`;
     document.body.insertBefore(d, document.querySelector("main"));
   };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", banner);

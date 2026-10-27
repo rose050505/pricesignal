@@ -2,9 +2,9 @@
   "question": "canda snacks price hike 4%?? is that ok, we pass thru like 60pct of costs",
   "trace": [
     {
-      "t": 1793094921985,
+      "t": 1793112127446,
       "kind": "llm",
-      "title": "parsed request (nvidia/nemotron-3.5-lightning-30b-a3b, 1882 ms via Meterless Nightshift)",
+      "title": "parsed request (nvidia/nemotron-3.5-lightning-30b-a3b, 3338 ms via Meterless Nightshift)",
       "detail": {
         "countries": [
           "canda"
@@ -19,7 +19,7 @@
       }
     },
     {
-      "t": 1793094922006,
+      "t": 1793112127490,
       "kind": "request",
       "title": "markets CA | category \"snacks\" | proposed +4%",
       "detail": {
@@ -39,27 +39,27 @@
       }
     },
     {
-      "t": 1793094922006,
+      "t": 1793112127490,
       "kind": "memory",
       "title": "policy changed: 70% (mem-1) -> 60%; the old preference is superseded, not deleted"
     },
     {
-      "t": 1793094922012,
+      "t": 1793112127514,
       "kind": "memory",
       "title": "stored pricing policy mem-22"
     },
     {
-      "t": 1793094923239,
+      "t": 1793112128428,
       "kind": "plan",
-      "title": "discover_series {\"country\":\"CA\",\"concept\":\"snacks\"} · discover_series {\"country\":\"CA\",\"concept\":\"all_items\"}  [nvidia/nemotron-3.5-lightning-30b-a3b via Meterless Nightshift]",
+      "title": "discover_and_onboard {\"country\":\"CA\",\"concept\":\"snacks\"}  [nvidia/nemotron-3.5-lightning-30b-a3b via Meterless Nightshift]",
       "detail": {
-        "thought": "Need to discover the snacks series for Canada and onboard it, then compare with all_items to evaluate the 4% price hike reasonableness given 60% cost pass-through.",
+        "thought": "Need to discover and onboard the snacks series for Canada to have both views ready for comparison.",
         "model": "nvidia/nemotron-3.5-lightning-30b-a3b",
-        "ms": 1227
+        "ms": 913
       }
     },
     {
-      "t": 1793094923988,
+      "t": 1793112129292,
       "kind": "discover",
       "title": "Statistics Canada (CPI): 1 candidate(s) for \"snacks\"",
       "detail": {
@@ -86,46 +86,7 @@
       }
     },
     {
-      "t": 1793094924175,
-      "kind": "discover",
-      "title": "Statistics Canada (CPI): 1 candidate(s) for \"all_items\"",
-      "detail": {
-        "country": "CA",
-        "concept": "all_items",
-        "candidates": [
-          {
-            "agency": "statcan",
-            "country": "CA",
-            "dataset": "18100004",
-            "code": "v41690973",
-            "label": "All-items",
-            "frequency": "M",
-            "measure": "index",
-            "lastPeriod": "2026-09",
-            "status": "active",
-            "sourceUrl": "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690973%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01"
-          }
-        ],
-        "notes": []
-      }
-    },
-    {
-      "t": 1793094934176,
-      "kind": "warn",
-      "title": "planner: no reply after 10 s - sent the same request again without the thinking switch (another Nightshift lane can answer); the first reply wins"
-    },
-    {
-      "t": 1793094939443,
-      "kind": "plan",
-      "title": "onboard_series {\"country\":\"CA\",\"concept\":\"snacks\",\"candidate\":0} · onboard_series {\"country\":\"CA\",\"concept\":\"all_items\",\"candidate\":0}  [nvidia/nemotron-3.5-lightning-30b-a3b via Meterless Nightshift]",
-      "detail": {
-        "thought": "Both series have been discovered; need to onboard them to get views before comparison.",
-        "model": "nvidia/nemotron-3.5-lightning-30b-a3b",
-        "ms": 15266
-      }
-    },
-    {
-      "t": 1793094939481,
+      "t": 1793112129365,
       "kind": "sql",
       "title": "already in Zetaris (not created again): CREATE LIGHTNING DATABASE PSIG_EUROSTAT DESCRIBE BY \"PriceSignal-Eurostat-HICP\"",
       "detail": {
@@ -134,7 +95,7 @@
       }
     },
     {
-      "t": 1793094939504,
+      "t": 1793112129429,
       "kind": "sql",
       "title": "already in Zetaris (not created again): CREATE LIGHTNING DATABASE PSIG_ABS DESCRIBE BY \"PriceSignal-ABS-CPI\"",
       "detail": {
@@ -143,7 +104,7 @@
       }
     },
     {
-      "t": 1793094939527,
+      "t": 1793112129467,
       "kind": "sql",
       "title": "already in Zetaris (not created again): CREATE LIGHTNING DATABASE PSIG_STATCAN DESCRIBE BY \"PriceSignal-StatCan-CPI\"",
       "detail": {
@@ -152,7 +113,7 @@
       }
     },
     {
-      "t": 1793094939552,
+      "t": 1793112129525,
       "kind": "sql",
       "title": "already in Zetaris (not created again): CREATE SCHEMASTORE CONTAINER psig",
       "detail": {
@@ -161,49 +122,49 @@
       }
     },
     {
-      "t": 1793094939577,
+      "t": 1793112129584,
       "kind": "sql",
-      "title": "already in Zetaris (not created again): CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_ex20261027_185440_1840793 FROM PSIG_",
+      "title": "already in Zetaris (not created again): CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_ex20261027_234114_2269488 FROM PSIG_",
       "detail": {
-        "sql": "CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_ex20261027_185440_1840793 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+        "sql": "CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_ex20261027_234114_2269488 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
         "existed": true
       }
     },
     {
-      "t": 1793094939601,
+      "t": 1793112129642,
       "kind": "sql",
-      "title": "already in Zetaris (not created again): CREATE SCHEMASTORE VIEW v_ca_snacks_v41690974_live_yoyv2_ex20261027_185440_1840793 WITH CO",
+      "title": "already in Zetaris (not created again): CREATE SCHEMASTORE VIEW v_ca_snacks_v41690974_live_yoyv2_ex20261027_234114_2269488 WITH CO",
       "detail": {
-        "sql": "CREATE SCHEMASTORE VIEW v_ca_snacks_v41690974_live_yoyv2_ex20261027_185440_1840793 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'snacks' AS concept, 'v41690974' AS category_code, 'Food' AS category_label,\n       'M' AS frequency, period,\n       CASE WHEN CAST(SUBSTR(period, 1, 4) AS INT) - CAST(SUBSTR(previous_period, 1, 4) AS INT) = 1\n                  AND previous_idx > 0\n            THEN ROUND(100.0 * (idx / previous_idx - 1), 2) END AS yoy_pct,\n       'statcan:18100004:v41690974' AS source_id\nFROM (\n  SELECT period, idx,\n         LAG(idx, 1) OVER (PARTITION BY SUBSTR(period, 6) ORDER BY period) AS previous_idx,\n         LAG(period, 1) OVER (PARTITION BY SUBSTR(period, 6) ORDER BY period) AS previous_period\n  FROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690974_live_ex20261027_185440_1840793\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n  ) decoded\n) s",
+        "sql": "CREATE SCHEMASTORE VIEW v_ca_snacks_v41690974_live_yoyv2_ex20261027_234114_2269488 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'snacks' AS concept, 'v41690974' AS category_code, 'Food' AS category_label,\n       'M' AS frequency, period,\n       CASE WHEN CAST(SUBSTR(period, 1, 4) AS INT) - CAST(SUBSTR(previous_period, 1, 4) AS INT) = 1\n                  AND previous_idx > 0\n            THEN ROUND(100.0 * (idx / previous_idx - 1), 2) END AS yoy_pct,\n       'statcan:18100004:v41690974' AS source_id\nFROM (\n  SELECT period, idx,\n         LAG(idx, 1) OVER (PARTITION BY SUBSTR(period, 6) ORDER BY period) AS previous_idx,\n         LAG(period, 1) OVER (PARTITION BY SUBSTR(period, 6) ORDER BY period) AS previous_period\n  FROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690974_live_ex20261027_234114_2269488\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n  ) decoded\n) s",
         "existed": true
       }
     },
     {
-      "t": 1793094939678,
+      "t": 1793112129825,
       "kind": "sql",
-      "title": "Q1: CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_185440_1840793",
+      "title": "Q1: CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_234114_2269488",
       "detail": {
         "id": "Q1",
-        "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_185440_1840793",
+        "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_234114_2269488",
         "rows": 0,
-        "ms": 77
+        "ms": 182
       }
     },
     {
-      "t": 1793094939821,
+      "t": 1793112130172,
       "kind": "sql",
       "title": "Q2: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex2",
       "detail": {
         "id": "Q2",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL",
         "rows": 1,
-        "ms": 143
+        "ms": 347
       }
     },
     {
-      "t": 1793094939821,
+      "t": 1793112130173,
       "kind": "onboard",
-      "title": "onboarded statcan v41690974 -> psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_185440_1840793 (created 0 SQL objects; 2 already existed; source cached in Zetaris; verified: 14 rows, latest 2026-09)",
+      "title": "onboarded statcan v41690974 -> psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_234114_2269488 (created 0 SQL objects; 2 already existed; source cached in Zetaris; verified: 14 rows, latest 2026-09)",
       "detail": {
         "candidate": {
           "agency": "statcan",
@@ -219,8 +180,8 @@
           "sourceUrl": "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01"
         },
         "result": {
-          "view": "v_ca_snacks_v41690974_live_yoyv2_ex20261027_185440_1840793",
-          "table": "statcan_ca_v41690974_live_ex20261027_185440_1840793",
+          "view": "v_ca_snacks_v41690974_live_yoyv2_ex20261027_234114_2269488",
+          "table": "statcan_ca_v41690974_live_ex20261027_234114_2269488",
           "ok": true,
           "existed": true,
           "createdObjects": 0,
@@ -228,143 +189,105 @@
           "rows": 14,
           "latest": "2026-09",
           "sql": [
-            "CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_ex20261027_185440_1840793 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-            "CREATE SCHEMASTORE VIEW v_ca_snacks_v41690974_live_yoyv2_ex20261027_185440_1840793 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'snacks' AS concept, 'v41690974' AS category_code, 'Food' AS category_label,\n       'M' AS frequency, period,\n       CASE WHEN CAST(SUBSTR(period, 1, 4) AS INT) - CAST(SUBSTR(previous_period, 1, 4) AS INT) = 1\n                  AND previous_idx > 0\n            THEN ROUND(100.0 * (idx / previous_idx - 1), 2) END AS yoy_pct,\n       'statcan:18100004:v41690974' AS source_id\nFROM (\n  SELECT period, idx,\n         LAG(idx, 1) OVER (PARTITION BY SUBSTR(period, 6) ORDER BY period) AS previous_idx,\n         LAG(period, 1) OVER (PARTITION BY SUBSTR(period, 6) ORDER BY period) AS previous_period\n  FROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690974_live_ex20261027_185440_1840793\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n  ) decoded\n) s"
+            "CREATE LIGHTNING REST TABLE statcan_ca_v41690974_live_ex20261027_234114_2269488 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+            "CREATE SCHEMASTORE VIEW v_ca_snacks_v41690974_live_yoyv2_ex20261027_234114_2269488 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'snacks' AS concept, 'v41690974' AS category_code, 'Food' AS category_label,\n       'M' AS frequency, period,\n       CASE WHEN CAST(SUBSTR(period, 1, 4) AS INT) - CAST(SUBSTR(previous_period, 1, 4) AS INT) = 1\n                  AND previous_idx > 0\n            THEN ROUND(100.0 * (idx / previous_idx - 1), 2) END AS yoy_pct,\n       'statcan:18100004:v41690974' AS source_id\nFROM (\n  SELECT period, idx,\n         LAG(idx, 1) OVER (PARTITION BY SUBSTR(period, 6) ORDER BY period) AS previous_idx,\n         LAG(period, 1) OVER (PARTITION BY SUBSTR(period, 6) ORDER BY period) AS previous_period\n  FROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690974_live_ex20261027_234114_2269488\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n  ) decoded\n) s"
           ],
           "cached": true,
-          "rawTable": "psig_statcan.statcan_ca_v41690974_live_ex20261027_185440_1840793"
+          "rawTable": "psig_statcan.statcan_ca_v41690974_live_ex20261027_234114_2269488"
         }
       }
     },
     {
-      "t": 1793094939822,
+      "t": 1793112130175,
       "kind": "memory",
       "title": "stored mapping mem-23"
     },
     {
-      "t": 1793094939844,
-      "kind": "sql",
-      "title": "already in Zetaris (not created again): CREATE LIGHTNING REST TABLE statcan_ca_v41690973_live_ex20261027_185440_1840793 FROM PSIG_",
+      "t": 1793112131090,
+      "kind": "plan",
+      "title": "discover_and_onboard {\"country\":\"CA\",\"concept\":\"all_items\"}  [nvidia/nemotron-3.5-lightning-30b-a3b via Meterless Nightshift]",
       "detail": {
-        "sql": "CREATE LIGHTNING REST TABLE statcan_ca_v41690973_live_ex20261027_185440_1840793 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690973%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-        "existed": true
+        "thought": "Need to onboard the all_items series for Canada to have both views ready for comparison.",
+        "model": "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "ms": 915
       }
     },
     {
-      "t": 1793094939869,
+      "t": 1793112131194,
       "kind": "sql",
-      "title": "already in Zetaris (not created again): CREATE SCHEMASTORE VIEW v_ca_all_items_v41690973_live_yoyv2_ex20261027_185440_1840793 WITH",
-      "detail": {
-        "sql": "CREATE SCHEMASTORE VIEW v_ca_all_items_v41690973_live_yoyv2_ex20261027_185440_1840793 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'all_items' AS concept, 'v41690973' AS category_code, 'All-items' AS category_label,\n       'M' AS frequency, period,\n       CASE WHEN CAST(SUBSTR(period, 1, 4) AS INT) - CAST(SUBSTR(previous_period, 1, 4) AS INT) = 1\n                  AND previous_idx > 0\n            THEN ROUND(100.0 * (idx / previous_idx - 1), 2) END AS yoy_pct,\n       'statcan:18100004:v41690973' AS source_id\nFROM (\n  SELECT period, idx,\n         LAG(idx, 1) OVER (PARTITION BY SUBSTR(period, 6) ORDER BY period) AS previous_idx,\n         LAG(period, 1) OVER (PARTITION BY SUBSTR(period, 6) ORDER BY period) AS previous_period\n  FROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690973_live_ex20261027_185440_1840793\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n  ) decoded\n) s",
-        "existed": true
-      }
-    },
-    {
-      "t": 1793094939938,
-      "kind": "sql",
-      "title": "Q3: CACHE TABLE psig_statcan.statcan_ca_v41690973_live_ex20261027_185440_1840793",
+      "title": "Q3: CACHE TABLE psig_statcan.statcan_ca_v41690973_live_ex20261027_234114_2269488",
       "detail": {
         "id": "Q3",
-        "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690973_live_ex20261027_185440_1840793",
+        "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690973_live_ex20261027_234114_2269488",
         "rows": 0,
-        "ms": 69
+        "ms": 103
       }
     },
     {
-      "t": 1793094940069,
+      "t": 1793112131500,
       "kind": "sql",
       "title": "Q4: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_all_items_v41690973_live_yoyv2_",
       "detail": {
         "id": "Q4",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_all_items_v41690973_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_all_items_v41690973_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL",
         "rows": 1,
-        "ms": 131
+        "ms": 306
       }
     },
     {
-      "t": 1793094940069,
-      "kind": "onboard",
-      "title": "onboarded statcan v41690973 -> psig.v_ca_all_items_v41690973_live_yoyv2_ex20261027_185440_1840793 (created 0 SQL objects; 2 already existed; source cached in Zetaris; verified: 14 rows, latest 2026-09)",
-      "detail": {
-        "candidate": {
-          "agency": "statcan",
-          "country": "CA",
-          "dataset": "18100004",
-          "code": "v41690973",
-          "label": "All-items",
-          "frequency": "M",
-          "measure": "index",
-          "lastPeriod": "2026-09",
-          "status": "active",
-          "sourceUrl": "https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690973%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01"
-        },
-        "result": {
-          "view": "v_ca_all_items_v41690973_live_yoyv2_ex20261027_185440_1840793",
-          "table": "statcan_ca_v41690973_live_ex20261027_185440_1840793",
-          "ok": true,
-          "existed": true,
-          "createdObjects": 0,
-          "existingObjects": 2,
-          "rows": 14,
-          "latest": "2026-09",
-          "sql": [
-            "CREATE LIGHTNING REST TABLE statcan_ca_v41690973_live_ex20261027_185440_1840793 FROM PSIG_STATCAN REQUEST(\n    endpoint \"https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690973%22&startRefPeriod=2024-08-01&endReferencePeriod=2035-12-01\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
-            "CREATE SCHEMASTORE VIEW v_ca_all_items_v41690973_live_yoyv2_ex20261027_185440_1840793 WITH CONTAINER psig AS\nSELECT 'CA' AS country, 'all_items' AS concept, 'v41690973' AS category_code, 'All-items' AS category_label,\n       'M' AS frequency, period,\n       CASE WHEN CAST(SUBSTR(period, 1, 4) AS INT) - CAST(SUBSTR(previous_period, 1, 4) AS INT) = 1\n                  AND previous_idx > 0\n            THEN ROUND(100.0 * (idx / previous_idx - 1), 2) END AS yoy_pct,\n       'statcan:18100004:v41690973' AS source_id\nFROM (\n  SELECT period, idx,\n         LAG(idx, 1) OVER (PARTITION BY SUBSTR(period, 6) ORDER BY period) AS previous_idx,\n         LAG(period, 1) OVER (PARTITION BY SUBSTR(period, 6) ORDER BY period) AS previous_period\n  FROM (\n  SELECT SUBSTR(dp.refPer, 1, 7) AS period, CAST(dp.value AS DOUBLE) AS idx\n  FROM psig_statcan.statcan_ca_v41690973_live_ex20261027_185440_1840793\n  LATERAL VIEW explode(object.vectorDataPoint) AS dp\n  ) decoded\n) s"
-          ],
-          "cached": true,
-          "rawTable": "psig_statcan.statcan_ca_v41690973_live_ex20261027_185440_1840793"
-        }
-      }
-    },
-    {
-      "t": 1793094940070,
+      "t": 1793112131501,
       "kind": "memory",
-      "title": "stored mapping mem-24"
+      "title": "reused mem-4: CA all_items -> psig.v_ca_all_items_v41690973_live_yoyv2_ex20261027_234114_2269488 (14 rows, latest 2026-09)"
     },
     {
-      "t": 1793094940070,
+      "t": 1793112131501,
+      "kind": "plan",
+      "title": "guardrail: CA all_items was already in H-MEM - reused it instead of discovering again"
+    },
+    {
+      "t": 1793112131501,
       "kind": "plan",
       "title": "all needed series are ready - running the federated comparison"
     },
     {
-      "t": 1793094940215,
+      "t": 1793112131886,
       "kind": "sql",
-      "title": "Q5: CREATE OR REPLACE SCHEMASTORE VIEW v_market_inflation_c9eda513_ex20261027_185440_1840793 W",
+      "title": "Q5: CREATE OR REPLACE SCHEMASTORE VIEW v_market_inflation_5144f35b_ex20261027_234114_2269488 W",
       "detail": {
         "id": "Q5",
-        "sql": "CREATE OR REPLACE SCHEMASTORE VIEW v_market_inflation_c9eda513_ex20261027_185440_1840793 WITH CONTAINER psig AS\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_all_items_v41690973_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL",
+        "sql": "CREATE OR REPLACE SCHEMASTORE VIEW v_market_inflation_5144f35b_ex20261027_234114_2269488 WITH CONTAINER psig AS\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_all_items_v41690973_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL",
         "rows": 0,
-        "ms": 145
+        "ms": 384
       }
     },
     {
-      "t": 1793094940674,
+      "t": 1793112133010,
       "kind": "sql",
       "title": "Q6: SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v",
       "detail": {
         "id": "Q6",
-        "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_market_inflation_c9eda513_ex20261027_185440_1840793 WHERE period >= '2025-07'\nORDER BY country, concept, period",
+        "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_market_inflation_5144f35b_ex20261027_234114_2269488 WHERE period >= '2025-07'\nORDER BY country, concept, period",
         "rows": 28,
-        "ms": 459
+        "ms": 1123
       }
     },
     {
-      "t": 1793094940674,
+      "t": 1793112133010,
       "kind": "compare",
-      "title": "federated query Q6 on the semantic view psig.v_market_inflation_c9eda513_ex20261027_185440_1840793 (2 agency views) -> 28 rows"
+      "title": "federated query Q6 on the semantic view psig.v_market_inflation_5144f35b_ex20261027_234114_2269488 (2 agency views) -> 28 rows"
     },
     {
-      "t": 1793094940675,
+      "t": 1793112133011,
       "kind": "plan",
       "title": "all markets compared - finishing without another planner turn"
     },
     {
-      "t": 1793094940675,
+      "t": 1793112133013,
       "kind": "progress",
-      "title": "market numbers ready in 20.6 s - pricing SKUs and writing the summary"
+      "title": "market numbers ready in 8.9 s - pricing SKUs and writing the summary"
     },
     {
-      "t": 1793094940698,
+      "t": 1793112133057,
       "kind": "sql",
       "title": "already in Zetaris (not created again): CREATE LIGHTNING DATABASE PSIG_INTERNAL DESCRIBE BY \"PriceSignal-internal-price-list\"",
       "detail": {
@@ -373,76 +296,76 @@
       }
     },
     {
-      "t": 1793094940722,
+      "t": 1793112133096,
       "kind": "sql",
-      "title": "already in Zetaris (not created again): CREATE LIGHTNING REST TABLE internal_price_list_ex20261027_185440_1840793 FROM PSIG_INTERN",
+      "title": "already in Zetaris (not created again): CREATE LIGHTNING REST TABLE internal_price_list_ex20261027_234114_2269488 FROM PSIG_INTERN",
       "detail": {
-        "sql": "CREATE LIGHTNING REST TABLE internal_price_list_ex20261027_185440_1840793 FROM PSIG_INTERNAL REQUEST(\n    endpoint \"https://raw.githubusercontent.com/rose050505/pricesignal/main/data/price_list.json\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+        "sql": "CREATE LIGHTNING REST TABLE internal_price_list_ex20261027_234114_2269488 FROM PSIG_INTERNAL REQUEST(\n    endpoint \"https://raw.githubusercontent.com/rose050505/pricesignal/main/data/price_list.json\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
         "existed": true
       }
     },
     {
-      "t": 1793094940746,
+      "t": 1793112133146,
       "kind": "sql",
-      "title": "already in Zetaris (not created again): CREATE SCHEMASTORE VIEW v_price_list_ex20261027_185440_1840793 WITH CONTAINER psig AS",
+      "title": "already in Zetaris (not created again): CREATE SCHEMASTORE VIEW v_price_list_ex20261027_234114_2269488 WITH CONTAINER psig AS",
       "detail": {
-        "sql": "CREATE SCHEMASTORE VIEW v_price_list_ex20261027_185440_1840793 WITH CONTAINER psig AS\nSELECT sku, product, market AS country, category AS sku_category, currency, CAST(current_price AS DOUBLE) AS current_price\nFROM psig_internal.internal_price_list_ex20261027_185440_1840793",
+        "sql": "CREATE SCHEMASTORE VIEW v_price_list_ex20261027_234114_2269488 WITH CONTAINER psig AS\nSELECT sku, product, market AS country, category AS sku_category, currency, CAST(current_price AS DOUBLE) AS current_price\nFROM psig_internal.internal_price_list_ex20261027_234114_2269488",
         "existed": true
       }
     },
     {
-      "t": 1793094940816,
+      "t": 1793112133264,
       "kind": "sql",
-      "title": "Q7: CACHE TABLE psig_internal.internal_price_list_ex20261027_185440_1840793",
+      "title": "Q7: CACHE TABLE psig_internal.internal_price_list_ex20261027_234114_2269488",
       "detail": {
         "id": "Q7",
-        "sql": "CACHE TABLE psig_internal.internal_price_list_ex20261027_185440_1840793",
+        "sql": "CACHE TABLE psig_internal.internal_price_list_ex20261027_234114_2269488",
         "rows": 0,
-        "ms": 70
+        "ms": 118
       }
     },
     {
-      "t": 1793094941017,
+      "t": 1793112133602,
       "kind": "sql",
-      "title": "Q8: SELECT DISTINCT country, sku_category, product FROM psig.v_price_list_ex20261027_185440_18",
+      "title": "Q8: SELECT DISTINCT country, sku_category, product FROM psig.v_price_list_ex20261027_234114_22",
       "detail": {
         "id": "Q8",
-        "sql": "SELECT DISTINCT country, sku_category, product FROM psig.v_price_list_ex20261027_185440_1840793 WHERE country IN ('CA') ORDER BY country, sku_category, product",
+        "sql": "SELECT DISTINCT country, sku_category, product FROM psig.v_price_list_ex20261027_234114_2269488 WHERE country IN ('CA') ORDER BY country, sku_category, product",
         "rows": 3,
-        "ms": 201
+        "ms": 337
       }
     },
     {
-      "t": 1793094941017,
+      "t": 1793112133602,
       "kind": "pricing",
       "title": "the price list sells condiments, food, snacks in CA - checking official category coverage for its products"
     },
     {
-      "t": 1793094941089,
+      "t": 1793112133750,
       "kind": "sql",
-      "title": "Q9: CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_185440_1840793",
+      "title": "Q9: CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_234114_2269488",
       "detail": {
         "id": "Q9",
-        "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_185440_1840793",
+        "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_234114_2269488",
         "rows": 0,
-        "ms": 71
+        "ms": 147
       }
     },
     {
-      "t": 1793094941239,
+      "t": 1793112134143,
       "kind": "sql",
       "title": "Q10: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_condiments_v41690974_live_yoyv2",
       "detail": {
         "id": "Q10",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL",
         "rows": 1,
-        "ms": 150
+        "ms": 393
       }
     },
     {
-      "t": 1793094941240,
+      "t": 1793112134144,
       "kind": "memory",
-      "title": "reused product-checked SKU mapping mem-8: CA:condiments -> psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_185440_1840793",
+      "title": "reused product-checked SKU mapping mem-8: CA:condiments -> psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_234114_2269488",
       "detail": {
         "products": [
           "Gochujang 500 g"
@@ -457,31 +380,31 @@
       }
     },
     {
-      "t": 1793094941348,
+      "t": 1793112134332,
       "kind": "sql",
-      "title": "Q11: CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_185440_1840793",
+      "title": "Q11: CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_234114_2269488",
       "detail": {
         "id": "Q11",
-        "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_185440_1840793",
+        "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_234114_2269488",
         "rows": 0,
-        "ms": 107
+        "ms": 188
       }
     },
     {
-      "t": 1793094941478,
+      "t": 1793112134657,
       "kind": "sql",
       "title": "Q12: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex2",
       "detail": {
         "id": "Q12",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL",
         "rows": 1,
-        "ms": 130
+        "ms": 325
       }
     },
     {
-      "t": 1793094941478,
+      "t": 1793112134658,
       "kind": "memory",
-      "title": "reused product-checked SKU mapping mem-9: CA:snacks -> psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_185440_1840793",
+      "title": "reused product-checked SKU mapping mem-10: CA:snacks -> psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_234114_2269488",
       "detail": {
         "products": [
           "Honey butter chips 60 g"
@@ -496,157 +419,149 @@
       }
     },
     {
-      "t": 1793094941546,
+      "t": 1793112134803,
       "kind": "sql",
-      "title": "Q13: CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_185440_1840793",
+      "title": "Q13: CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_234114_2269488",
       "detail": {
         "id": "Q13",
-        "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_185440_1840793",
+        "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_234114_2269488",
         "rows": 0,
-        "ms": 67
+        "ms": 144
       }
     },
     {
-      "t": 1793094941666,
+      "t": 1793112135174,
       "kind": "sql",
       "title": "Q14: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_food_v41690974_live_yoyv2_ex202",
       "detail": {
         "id": "Q14",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL",
         "rows": 1,
-        "ms": 120
+        "ms": 371
       }
     },
     {
-      "t": 1793094941667,
+      "t": 1793112135175,
       "kind": "memory",
-      "title": "reused mem-3: CA food -> psig.v_ca_food_v41690974_live_yoyv2_ex20261027_185440_1840793 (14 rows, latest 2026-09)"
+      "title": "reused mem-2: CA food -> psig.v_ca_food_v41690974_live_yoyv2_ex20261027_234114_2269488 (14 rows, latest 2026-09)"
     },
     {
-      "t": 1793094942030,
+      "t": 1793112136178,
       "kind": "sql",
       "title": "Q15: SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept",
       "detail": {
         "id": "Q15",
-        "sql": "SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept AS rate_concept, s.category_label, s.frequency, s.period, s.yoy_pct, s.source_id\nFROM psig.v_price_list_ex20261027_185440_1840793 p\nJOIN (\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n) s ON p.country = s.country AND p.sku_category = s.concept\nWHERE p.country IN ('CA')\nORDER BY p.country, p.sku, s.period",
+        "sql": "SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept AS rate_concept, s.category_label, s.frequency, s.period, s.yoy_pct, s.source_id\nFROM psig.v_price_list_ex20261027_234114_2269488 p\nJOIN (\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n) s ON p.country = s.country AND p.sku_category = s.concept\nWHERE p.country IN ('CA')\nORDER BY p.country, p.sku, s.period",
         "rows": 42,
-        "ms": 363
+        "ms": 1003
       }
     },
     {
-      "t": 1793094942031,
+      "t": 1793112136179,
       "kind": "pricing",
       "title": "federated query Q15 joined 3 SKUs with official category series (2 broader proxies) -> 3 SKUs priced"
     },
     {
-      "t": 1793094944980,
-      "kind": "warn",
-      "title": "narrative reply was cut off - keeping its complete fields (2 market paragraph(s)) for the fact check",
-      "detail": {
-        "reply": "{\"headline\": \"Canadian food inflation eases; 4% snack hike within market benchmark.\", \"markets\": {\"CA\": \"Canadian food inflation has eased to 2.2% YoY in September 2026, down from a 12-month average of 4.1%. A 4% snack hike is within the market benchmark (2.2 to 4.1).\", \"watch\": \"Re-check October Canadian food prints next month, especially whether the easing trend continues.\"}"
-      }
-    },
-    {
-      "t": 1793094944988,
+      "t": 1793112138010,
       "kind": "llm",
-      "title": "narrative (nvidia/nemotron-3.5-lightning-30b-a3b, 4304 ms via Meterless Nightshift) - numbers and verdicts match the facts"
+      "title": "narrative (nvidia/nemotron-3.5-lightning-30b-a3b, 4967 ms via Meterless Nightshift) - numbers and verdicts match the facts"
     },
     {
-      "t": 1793094945000,
+      "t": 1793112138025,
       "kind": "done",
-      "title": "brief ready in 25 s (15 SQL statements, 3 views reused from memory; 5 model calls, 3 planner calls, 2 discoveries)"
+      "title": "brief ready in 14 s (15 SQL statements, 4 views reused from memory; 4 model calls, 2 planner calls, 1 discoveries)"
     }
   ],
   "sql": [
     {
       "id": "Q1",
-      "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_185440_1840793",
+      "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_234114_2269488",
       "rows": 0,
-      "ms": 77
+      "ms": 182
     },
     {
       "id": "Q2",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL",
       "rows": 1,
-      "ms": 143
+      "ms": 347
     },
     {
       "id": "Q3",
-      "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690973_live_ex20261027_185440_1840793",
+      "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690973_live_ex20261027_234114_2269488",
       "rows": 0,
-      "ms": 69
+      "ms": 103
     },
     {
       "id": "Q4",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_all_items_v41690973_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_all_items_v41690973_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL",
       "rows": 1,
-      "ms": 131
+      "ms": 306
     },
     {
       "id": "Q5",
-      "sql": "CREATE OR REPLACE SCHEMASTORE VIEW v_market_inflation_c9eda513_ex20261027_185440_1840793 WITH CONTAINER psig AS\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_all_items_v41690973_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL",
+      "sql": "CREATE OR REPLACE SCHEMASTORE VIEW v_market_inflation_5144f35b_ex20261027_234114_2269488 WITH CONTAINER psig AS\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_all_items_v41690973_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL",
       "rows": 0,
-      "ms": 145
+      "ms": 384
     },
     {
       "id": "Q6",
-      "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_market_inflation_c9eda513_ex20261027_185440_1840793 WHERE period >= '2025-07'\nORDER BY country, concept, period",
+      "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_market_inflation_5144f35b_ex20261027_234114_2269488 WHERE period >= '2025-07'\nORDER BY country, concept, period",
       "rows": 28,
-      "ms": 459
+      "ms": 1123
     },
     {
       "id": "Q7",
-      "sql": "CACHE TABLE psig_internal.internal_price_list_ex20261027_185440_1840793",
+      "sql": "CACHE TABLE psig_internal.internal_price_list_ex20261027_234114_2269488",
       "rows": 0,
-      "ms": 70
+      "ms": 118
     },
     {
       "id": "Q8",
-      "sql": "SELECT DISTINCT country, sku_category, product FROM psig.v_price_list_ex20261027_185440_1840793 WHERE country IN ('CA') ORDER BY country, sku_category, product",
+      "sql": "SELECT DISTINCT country, sku_category, product FROM psig.v_price_list_ex20261027_234114_2269488 WHERE country IN ('CA') ORDER BY country, sku_category, product",
       "rows": 3,
-      "ms": 201
+      "ms": 337
     },
     {
       "id": "Q9",
-      "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_185440_1840793",
+      "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_234114_2269488",
       "rows": 0,
-      "ms": 71
+      "ms": 147
     },
     {
       "id": "Q10",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL",
       "rows": 1,
-      "ms": 150
+      "ms": 393
     },
     {
       "id": "Q11",
-      "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_185440_1840793",
+      "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_234114_2269488",
       "rows": 0,
-      "ms": 107
+      "ms": 188
     },
     {
       "id": "Q12",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL",
       "rows": 1,
-      "ms": 130
+      "ms": 325
     },
     {
       "id": "Q13",
-      "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_185440_1840793",
+      "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_234114_2269488",
       "rows": 0,
-      "ms": 67
+      "ms": 144
     },
     {
       "id": "Q14",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL",
       "rows": 1,
-      "ms": 120
+      "ms": 371
     },
     {
       "id": "Q15",
-      "sql": "SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept AS rate_concept, s.category_label, s.frequency, s.period, s.yoy_pct, s.source_id\nFROM psig.v_price_list_ex20261027_185440_1840793 p\nJOIN (\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n) s ON p.country = s.country AND p.sku_category = s.concept\nWHERE p.country IN ('CA')\nORDER BY p.country, p.sku, s.period",
+      "sql": "SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept AS rate_concept, s.category_label, s.frequency, s.period, s.yoy_pct, s.source_id\nFROM psig.v_price_list_ex20261027_234114_2269488 p\nJOIN (\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261027_234114_2269488 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n) s ON p.country = s.country AND p.sku_category = s.concept\nWHERE p.country IN ('CA')\nORDER BY p.country, p.sku, s.period",
       "rows": 42,
-      "ms": 363
+      "ms": 1003
     }
   ]
 }
