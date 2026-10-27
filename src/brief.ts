@@ -57,6 +57,8 @@ export interface Narrative {
   removed?: RemovedSentence[];
   /** The draft's headline was removed, so the brief shows the headline computed in code. */
   headlineByCode?: boolean;
+  /** The reply was cut off mid-JSON; only its complete fields are shown (after the same fact check). */
+  cutOff?: boolean;
 }
 export interface RemovedSentence { field: string; sentence: string; problems: string[] }
 

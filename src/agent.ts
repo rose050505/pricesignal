@@ -700,7 +700,7 @@ Reply with JSON only.`;
       }
       const cats = [...grouped.values()];
       if (!cats.length) {
-        notes.push("No usable SKU category information was returned; SKU prices are omitted.");
+        notes.push(catRes.rows.length ? "No usable SKU category information was returned; SKU prices are omitted." : `Your price list has no products in ${req.countries.join(", ")}; SKU prices are omitted.`);
         return undefined;
       }
       allowLegacyFallback = cats.every(c => c.products.length === 0);
@@ -1006,6 +1006,7 @@ Reply with JSON only.`;
     let issue: NarrativeIssue | undefined; // why the last attempt failed, so the brief states the real reason
     const drafts: Narrative[] = []; // drafts that failed the fact check, for sentence-level salvage
     let maxTokens = 8000; // Nemotron's hidden reasoning counts against it; raised once if a reply is cut off
+    let cutOffBest: Narrative | undefined; // the best checked part of a cut-off reply, used if no full reply passes
     let lastReply: { reply: string; finishReason?: string } | undefined; // the raw reply of an unusable attempt, kept in the trace
     const withMarketKeys = (n: Narrative): Narrative => ({ ...n, markets: Object.fromEntries(Object.entries(n.markets ?? {}).map(([k, v]) => [marketKey(k), v])) });
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -1021,9 +1022,10 @@ Reply with JSON only.`;
         if (!n?.headline) {
           // A reply cut off mid-JSON keeps its finished fields; they go through the same fact check below.
           const kept = completedFields(r.text) as Narrative | null;
-          if (kept?.headline && Object.keys(kept.markets ?? {}).length) {
-            n = kept;
-            this.log("warn", `narrative reply was cut off - keeping its complete fields (${Object.keys(kept.markets).length} market paragraph(s)) for the fact check`, { reply: r.text.slice(0, 4000) });
+          if (kept?.headline) {
+            n = { ...kept, markets: kept.markets ?? {}, cutOff: true };
+            if (r.finishReason === "length") maxTokens = 16_000;
+            this.log("warn", `narrative reply was cut off - keeping its complete fields (${Object.keys(n.markets).length} market paragraph(s)) for the fact check`, { reply: r.text.slice(0, 4000) });
           }
         }
         if (!n?.headline && r.finishReason === "length") {
@@ -1033,7 +1035,14 @@ Reply with JSON only.`;
         if (!n?.headline) { lastReply = { reply: r.text.slice(0, 4000), finishReason: r.finishReason }; throw new Error(`no headline in reply: ${r.text.replace(/\s+/g, " ").slice(0, 160)}`); }
         const bad = checkNarrative(n, allowed, facts, req, policy, noteNumbers);
         this.log("llm", `narrative (${r.model}, ${r.ms} ms${via(r)})${bad.length ? ` - does not match the facts: ${bad.join(", ")}` : " - numbers and verdicts match the facts"}`, bad.length ? { model: r.model, ms: r.ms, draft: n, problems: bad } : undefined);
-        if (!bad.length) return { narrative: withMarketKeys(n) };
+        if (!bad.length) {
+          // A cut-off reply missing market paragraphs is kept in reserve while the budget allows one more full reply.
+          const covered = facts.filter((f) => f.category ?? f.allItems).length;
+          if (!n.cutOff || Object.keys(n.markets).length >= covered) return { narrative: withMarketKeys(n) };
+          if (!cutOffBest || Object.keys(n.markets).length > Object.keys(cutOffBest.markets).length) cutOffBest = n;
+          issue = "unusable";
+          continue;
+        }
         drafts.push(n);
         issue = "grounding";
         ask.push({ role: "assistant", content: r.text }, { role: "user", content: `These numbers, ranges or verdicts do not match the facts for that market: ${bad.join(", ")}. Rewrite using only that market's numbers; the benchmark range must be exactly benchmark_range_pct low to high, and each market's verdict must be exactly its verdict field. JSON only.` });
@@ -1049,6 +1058,10 @@ Reply with JSON only.`;
       .map((d) => salvageNarrative(d, allowed, facts, req, policy, noteNumbers))
       .filter((x): x is Narrative => !!x)
       .sort((a, b) => Object.keys(b.markets).length - Object.keys(a.markets).length || a.removed!.length - b.removed!.length)[0];
+    if (cutOffBest && (!salvaged || Object.keys(cutOffBest.markets).length >= Object.keys(salvaged.markets).length)) {
+      this.log("llm", `narrative kept: the reply was cut off; its complete part (headline${Object.keys(cutOffBest.markets).length ? ` and ${Object.keys(cutOffBest.markets).length} market paragraph(s)` : ""}) matches the facts`);
+      return { narrative: withMarketKeys(cutOffBest) };
+    }
     if (salvaged) {
       const k = salvaged.removed!.length;
       this.log("llm", `narrative kept: the fact check removed ${k} sentence${k === 1 ? "" : "s"} that contradicted the computed facts${salvaged.headlineByCode ? " (headline computed in code)" : ""}`, { removed: salvaged.removed });

@@ -38,3 +38,37 @@ test("a cut-off narrative reply is shown with its complete, fact-checked paragra
   assert.deepEqual(out.narrative?.markets, { DE: "German food CPI was 0.4% YoY in September 2026." });
   assert.ok(agent.trace.some((e) => /narrative reply was cut off - keeping its complete fields \(1 market paragraph/.test(e.title)));
 });
+
+test("a reply cut off inside its first paragraph still shows Nemotron's checked headline, marked as cut off", async () => {
+  // The live case of 27 Oct 12:08: '{"headline":"+5% proposed: above market benchmarks in DE, CA, and AU","markets":{"DE":"Germ'
+  const fs = await import("node:fs"), os = await import("node:os"), path = await import("node:path"), vm = await import("node:vm");
+  const { PriceSignalAgent } = await import("../src/agent.ts");
+  const { AgentMemory } = await import("../src/memory.ts");
+  const { buildFacts } = await import("../src/brief.ts");
+  process.env.PSIG_VERBOSE = "0";
+  const rows = [["DE", 0.6, 0.4], ["CA", 2.6, 2.2], ["AU", 3.1, 3.0]].flatMap(([country, prior, latest]) => [
+    { country, concept: "food", category_label: "Food", frequency: "M", period: "2026-08", yoy_pct: prior, source_id: `${country}:food` },
+    { country, concept: "food", category_label: "Food", frequency: "M", period: "2026-09", yoy_pct: latest, source_id: `${country}:food` },
+  ]);
+  const req: any = { raw: "DE CA AU food: +5%?", countries: ["DE", "CA", "AU"], concept: "food", conceptWords: ["food"], proposedChangePct: 5, passThrough: 0.7, unknownCountries: [] };
+  const facts = buildFacts(rows, req, "Q1", 0.7, new Date("2026-10-27"));
+  const agent = new PriceSignalAgent({
+    llm: (async () => ({ text: '{"headline":"+5% proposed: above market benchmarks in DE, CA, and AU","markets":{"DE":"Germ', model: "f", provider: "f", ms: 1 })) as any,
+    sql: { run: async () => { throw new Error("no SQL"); } } as any,
+    memory: new AgentMemory(fs.mkdtempSync(path.join(os.tmpdir(), "psig-cut-h-"))), hedgeMs: Infinity,
+  });
+  const out = await (agent as any).narrate(req, facts, [], 0.7);
+  assert.equal(out.narrative?.headline, "+5% proposed: above market benchmarks in DE, CA, and AU");
+  assert.deepEqual(out.narrative?.markets, {});
+  assert.equal(out.narrative?.cutOff, true);
+  // A false headline in a cut-off reply is still rejected.
+  const wrong = new PriceSignalAgent({
+    llm: (async () => ({ text: '{"headline":"+5% is within the benchmark in all three markets","markets":{"DE":"Germ', model: "f", provider: "f", ms: 1 })) as any,
+    sql: { run: async () => { throw new Error("no SQL"); } } as any,
+    memory: new AgentMemory(fs.mkdtempSync(path.join(os.tmpdir(), "psig-cut-w-"))), hedgeMs: Infinity,
+  });
+  assert.equal((await (wrong as any).narrate(req, facts, [], 0.7)).narrative, undefined);
+  // The UI says the reply was cut off instead of claiming a full summary.
+  const html = fs.readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
+  assert.match(html, /Nemotron's reply was cut off; its complete part \(the headline\) is shown and was checked against the computed facts\./);
+});
