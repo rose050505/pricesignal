@@ -245,7 +245,7 @@ $("#go").onclick=async()=>{
     es.onerror=()=>{if(!runActive||reconnectTimer!==null)return;setRunStage("Connection interrupted; reconnecting");reconnectTimer=setTimeout(()=>{es.close();clearReconnect();finishRun("Connection lost. You can investigate again; any figures above are from the interrupted run.")},10000)};
     es.onmessage=m=>addTrace(JSON.parse(m.data));
     es.addEventListener("partial",m=>{clearReconnect();hasPartial=true;render(JSON.parse(m.data),q)});
-    es.addEventListener("result",m=>{clearReconnect();es.close();const r=JSON.parse(m.data);render(r,q);finishRun(`Run complete — ${coverage(r).title}. ${(r.ms/1000).toFixed(1)} s.`)});
+    es.addEventListener("result",m=>{clearReconnect();es.close();const r=JSON.parse(m.data);render(r,q);finishRun(`Run complete — ${coverage(r).title}. ${(r.ms/1000).toFixed(1)} s.${r.record?` Activity log saved: ${r.record}/trace.json`:""}`)});
     es.addEventListener("failure",m=>{clearReconnect();es.close();const error=JSON.parse(m.data).error;if(!hasPartial)$("#out").innerHTML=`<div class="card"><b>The investigation could not finish</b><pre>${esc(error)}</pre></div>`;finishRun(`Investigation stopped: ${error}. ${hasPartial?"Available figures are preserved. ":""}You can investigate again.`)});
   }catch(e){clearReconnect();if(!hasPartial)$("#out").innerHTML=`<div class="card"><b>The investigation could not start</b><pre>${esc(e)}</pre></div>`;finishRun("The request failed. Check the runtime status, then investigate again.")}
 };

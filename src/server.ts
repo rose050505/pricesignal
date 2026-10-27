@@ -13,6 +13,7 @@ import { ZetarisClient } from "./zetaris.ts";
 import { providerConfig, providerStatus } from "./llm.ts";
 import { COMPARE_COLUMNS } from "./sources/index.ts";
 import { publishRun, subscribeRun, type Run } from "./run-stream.ts";
+import { saveRunRecord } from "./run-record.ts";
 
 loadEnv();
 const PORT = Number(env("PSIG_PORT", "5177"));
@@ -61,7 +62,14 @@ const server = http.createServer(async (req, res) => {
       agent
         .run(question)
         .then((b) => {
-          run.result = toResult(b);
+          // Keep the activity log of every finished UI run, like the CLI does; a failed write never fails the run.
+          let record: string | null = null;
+          try {
+            record = path.relative(ROOT, saveRunRecord(path.join(ROOT, "out"), question, b));
+          } catch (e) {
+            console.error(`[pricesignal] could not save the run record: ${String(e)}`);
+          }
+          run.result = { ...toResult(b), record };
           run.done = true;
           publishRun(run, run.result, "result");
         })

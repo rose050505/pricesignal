@@ -121,7 +121,7 @@ Verbatim questions from the six recorded CLI runs (27 Oct 2026 KST, Nemotron via
 
 ## Agent activity logs
 
-Each `examples/*/trace.json` is the agent's activity log for that run: request parsing, planning, discovery, onboarding into Zetaris, memory reads and writes, every SQL statement with its id, row count and time, the federated comparison and the narrative check, with the model that answered each call. `npm run ask` writes the same `trace.json`, `brief.md` and `evidence.json` for every new run under `out/<timestamp>/`, and the UI shows the same events live in "What the agent is doing".
+Each `examples/*/trace.json` is the agent's activity log for that run: request parsing, planning, discovery, onboarding into Zetaris, memory reads and writes, every SQL statement with its id, row count and time, the federated comparison and the narrative check, with the model that answered each call. `npm run ask` writes the same `trace.json`, `brief.md` and `evidence.json` for every new run under `out/<timestamp>/`. The UI shows the same events live in "What the agent is doing" and saves `trace.json` and `brief.md` for each finished run under `out/ui-<UTC time>/` (the path appears in the run status).
 
 ## Recorded runs in `examples/` (27 Oct 2026 KST, Nemotron via Nightshift)
 
