@@ -1,5 +1,7 @@
 # PriceSignal
 
+[![ci](https://github.com/rose050505/pricesignal/actions/workflows/ci.yml/badge.svg)](https://github.com/rose050505/pricesignal/actions/workflows/ci.yml)
+
 **An agent that compares an exporter's proposed price changes with official inflation and a separate cost recovery target, with the data and SQL behind each result.**
 
 Open Agent Hackathon 2026 · Track 01 — Solving Fragmented Intelligence · built with **Zetaris**, **Meterless** (Nightshift runtime + H-MEM engine) and **NVIDIA Nemotron** (via Nightshift).
@@ -13,11 +15,12 @@ Open Agent Hackathon 2026 · Track 01 — Solving Fragmented Intelligence · bui
 | **Meterless Nightshift** | The AI runtime behind every model call (provider contract, hedged calls, thinking switch) | "via Meterless Nightshift" in the trace |
 | **Meterless H-MEM** | Remembers policies, requests, verified mappings and last results, so a follow-up can skip planning and discovery | "Remembered with Meterless H-MEM" card; [02_same_as_last_time](examples/02_same_as_last_time/brief.md) |
 
-Check a recorded result in about a minute, with no Zetaris, Nightshift or keys:
+**See it without Zetaris, Nightshift or keys:** open the [replay of the recorded runs](https://rose050505.github.io/pricesignal/) (the real UI, fed by six recorded traces and results; no live calls), or run it locally:
 
 ```bash
 npm install
-npm run verify -- examples/01_cold_start/evidence.json   # VERIFIED: saved SQL rows and derived calculations (579 checks)
+npm run demo                                              # http://localhost:5179: the same replay
+npm run verify -- examples/01_cold_start/evidence.json    # re-derives the benchmarks, verdicts and SKU prices from the saved SQL rows
 ```
 
 ![PriceSignal: the question and live trace on the left; the verdict, how far, what would fit, the cost scenario and Nemotron's checked headline on the right](docs/img/ui.png)
@@ -71,31 +74,24 @@ The sample price list in `data/price_list.json` is illustrative data for a ficti
 
 ## Architecture
 
+```mermaid
+flowchart TB
+  Q["Messy question<br/>typos · Korean · +5% · 70% pass-through"] --> P["1 · Read the request<br/>NVIDIA Nemotron via Meterless Nightshift, checked by rules"]
+  P --> M{"2 · Mappings remembered<br/>in Meterless H-MEM?"}
+  M -- no --> PL["3 · Plan<br/>Nemotron proposes discovery actions;<br/>code validates and completes them"]
+  PL --> D["4 · Discover official series<br/>Eurostat · Statistics Canada · ABS"]
+  D --> O["5 · Onboard into Zetaris<br/>Lightning REST table + decoding view + CACHE TABLE"]
+  M -- yes --> V["Verify the remembered Zetaris views<br/>live rows · freshness"]
+  O --> C["6 · One federated Zetaris query<br/>over a schemastore view"]
+  V --> C
+  C --> F["7 · Facts in code<br/>benchmark · verdict · how far · what fits · cost target"]
+  F --> S["8 · SKU prices<br/>Nemotron picks official categories;<br/>price list joined in Zetaris"]
+  F --> N["9 · Narrative<br/>Nemotron writes; code checks<br/>numbers · verdicts · trends"]
+  S --> B["Brief with cited SQL + evidence.json<br/>results remembered in H-MEM"]
+  N --> B
 ```
-messy question
-     │
-     ▼
-┌──────────────── PriceSignal agent (TypeScript) ─────────────────┐
-│ planner: Nemotron proposes a batch of JSON actions; code checks  │
-│ and completes it                                                 │
-│   recall_memory · use_memory_mapping · discover_and_onboard      │
-│   compare · finish   (code guardrails + deterministic fallback)  │
-│                                                                  │
-│  LLM ──► Meterless Nightshift runtime (OpenAI-compatible /v1)    │
-│          meterless/fast → pinned lane: NVIDIA Nemotron 3.5        │
-│  Memory ► Meterless H-MEM engine (reference impl, conformance ✔) │
-│  Data ──► Zetaris REST API  /sql-editor/sqls/run                 │
-│            ├─ PSIG_EUROSTAT  (REST table → psig view)            │
-│            ├─ PSIG_STATCAN   (REST table → psig view)            │
-│            ├─ PSIG_ABS       (REST table → psig view)            │
-│            └─ PSIG_INTERNAL  (company price list → psig view)    │
-│  Guardrails: SQL allowlist, number+verdict check, staleness      │
-└──────────────────────────────────────────────────────────────────┘
-     │
-     ▼
-evidence-backed brief (per market: latest rate, trend, historical benchmark,
-verdict on the proposed change, source series id, SQL behind it)
-```
+
+Guardrails in code: the SQL allowlist (one `SELECT`, onboarding DDL or `CACHE TABLE` statement at a time), validation of every planned action and model-picked category, live freshness checks before a remembered view is reused, and the per-sentence fact check. Rates, benchmarks, verdicts and prices are computed in code, never by the model.
 
 ## Sponsor technology
 
@@ -213,7 +209,9 @@ Verification replays market means and observation counts, benchmarks, proposal a
 
 ```
 src/agent.ts          request parsing, planner actions, guardrails
-src/cli.ts            npm run ask; writes out/<time>/brief.md, trace.json, evidence.json
+src/cli.ts            npm run ask; writes out/<time>/brief.md, trace.json, evidence.json, result.json
+src/result.ts         the result payload the UI renders (live and replayed)
+src/demo.ts           npm run demo: the UI replaying examples/ with no live calls; --build writes the static site
 src/alignment.ts      same-period comparison table
 src/narrative-policy.ts checks on how model prose may use the cost policy
 src/selection.ts      bounded product-aware official-series selection and validation
@@ -221,7 +219,7 @@ src/brief.ts          facts computed from Zetaris rows, number and verdict check
 src/sources/          one adapter per agency: discover() + Lightning SQL onboarding templates;
                       pricelist.ts registers the internal price list and joins it with the rates
 data/price_list.json  sample internal price list (fictional exporter)
-examples/             real runs: brief.md, trace.json, recording.json and evidence.json
+examples/             real runs: brief.md, trace.json, recording.json, evidence.json and result.json
 src/evidence.ts       versioned SQL-row snapshots and offline calculation verification
 src/verify.ts         local evidence verification command
 src/zetaris.ts        Zetaris REST client
@@ -237,12 +235,14 @@ src/sources/validation.ts  decoder versions and freshness checks
 public/index.html     single-page UI
 public/scenario.js    pure local proposal comparisons and SKU price calculations
 public/preview-panel.js separate preview panel; no network or memory writes
+public/replay.js      replay mode: feeds the same page from a recorded trace and result
+.github/workflows/    offline CI (typecheck, tests, conformance, example verification) and the replay site
 tests/                offline tests
 ```
 
 ## Built during the window; pre-existing components
 
-Everything in this repository was written during the build window (22–27 October 2026) with AI coding assistants (Claude Code and Codex; Cursor was not used). Pre-existing components that we did not build and do not commit: the Meterless H-MEM reference engine and conformance suite (Apache-2.0, © Meterless, downloaded by `npm run setup` and used unchanged), the Zetaris platform (Docker) and the Lightning SQL decoding patterns documented in its getting-started recipes, Meterless Nightshift, NVIDIA Nemotron (served through Nightshift via OpenRouter), and the dev tools `tsx`, `typescript`, `@types/node` and `degit`.
+Everything in this repository was written during the build window (22–27 October 2026) with AI coding assistants (Claude Code and Codex; Cursor was not used). Pre-existing components that we did not build and do not commit: the Meterless H-MEM reference engine and conformance suite (Apache-2.0, © Meterless, downloaded by `npm run setup` and used unchanged), the Zetaris platform (Docker) and the Lightning SQL decoding patterns documented in its getting-started recipes, Meterless Nightshift, NVIDIA Nemotron (served through Nightshift's NVIDIA API and OpenRouter lanes), and the dev tools `tsx`, `typescript`, `@types/node` and `degit`.
 
 **Dependencies.** The app has no runtime npm dependencies (at run time it imports the Meterless H-MEM reference source that `npm run setup` places in `vendor/hmem`); dev dependencies are `tsx`, `typescript` and `@types/node`. It needs Node 20+, a running Zetaris with REST API credentials, Meterless Nightshift with a runtime token, and network access to Eurostat, Statistics Canada, ABS and GitHub raw (price list). This project is licensed under Apache-2.0 (see `LICENSE`).
 
