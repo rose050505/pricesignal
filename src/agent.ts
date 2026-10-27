@@ -1013,6 +1013,7 @@ Reply with JSON only.`;
     let cutOffBest: Narrative | undefined; // the best checked part of a cut-off reply, used if no full reply passes
     let lastReply: { reply: string; finishReason?: string } | undefined; // the raw reply of an unusable attempt, kept in the trace
     const withMarketKeys = (n: Narrative): Narrative => ({ ...n, markets: Object.fromEntries(Object.entries(n.markets ?? {}).map(([k, v]) => [marketKey(k), v])) });
+    let headlineFor: Narrative | undefined; // a draft whose only error is its headline, awaiting a new headline
     for (let attempt = 0; attempt < 2; attempt++) {
       const left = deadline - Date.now();
       if (left < 8_000) {
@@ -1023,6 +1024,8 @@ Reply with JSON only.`;
       try {
         const r = await this.hedged("narrative", (signal) => this.llm(ask, { lane: (process.env.PSIG_NARRATIVE_LANE as "fast" | "deep") || "fast", temperature: 0.2, maxTokens, attempts: 1, timeoutMs: Math.max(1_000, deadline - Date.now()), signal }));
         let n = extractJson(r.text) as Narrative | null;
+        // A headline-only rewrite is merged with the paragraphs that already passed the check.
+        if (headlineFor && n?.headline && n.markets === undefined) n = { ...headlineFor, headline: n.headline };
         if (!n?.headline) {
           // A reply cut off mid-JSON keeps its finished fields; they go through the same fact check below.
           const kept = completedFields(r.text) as Narrative | null;
@@ -1050,6 +1053,13 @@ Reply with JSON only.`;
         }
         drafts.push(n);
         issue = "grounding";
+        // Only the headline is wrong: ask for a new headline alone, so the checked paragraphs cannot pick up new errors.
+        const kept = headlineFor ? undefined : salvageNarrative(n, allowed, facts, req, policy, noteNumbers);
+        if (kept?.removed?.length && kept.removed.every((x) => x.field === "headline") && Object.keys(kept.markets).length === Object.keys(n.markets ?? {}).length && (kept.watch ?? "") === (n.watch ?? "")) {
+          headlineFor = n;
+          ask.push({ role: "assistant", content: r.text }, { role: "user", content: `Only the headline is wrong: ${bad.join(", ")}. Reply with JSON only: {"headline": str (<= 20 words)}. State each market's verdict exactly as given, and describe a trend only as that market's own trend field.` });
+          continue;
+        }
         ask.push({ role: "assistant", content: r.text }, { role: "user", content: `These numbers, ranges or verdicts do not match the facts for that market: ${bad.join(", ")}. Rewrite using only that market's numbers; the benchmark range must be exactly benchmark_range_pct low to high, and each market's verdict must be exactly its verdict field. JSON only.` });
       } catch (e) {
         this.log("warn", `narrative attempt failed: ${String(e).slice(0, 120)}`, lastReply);
