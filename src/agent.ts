@@ -7,7 +7,7 @@ import { EventEmitter } from "node:events";
 import { chat, ChatMessage, ChatResult } from "./llm.ts";
 import { AgentMemory, type SeriesMapping } from "./memory.ts";
 import { SqlResult, SqlRunner, rowsAsObjects, isIncompleteResultError } from "./zetaris.ts";
-import { AGENCY_FOR, COMPARE_COLUMNS, Candidate, Concept, Country, COUNTRY_ALIASES, CONCEPT_WORDS, compareSql, discover, monthsBack, normalizeCountry, onboard, skuSearchWords, isBroadFoodLabel, ensureCached, rawTableRef, sourceAnswers } from "./sources/index.ts";
+import { AGENCY_FOR, COMPARE_COLUMNS, Candidate, Concept, Country, COUNTRY_ALIASES, CONCEPT_WORDS, compareSql, marketSemanticView, semanticCompareSql, discover, monthsBack, normalizeCountry, onboard, skuSearchWords, isBroadFoodLabel, ensureCached, rawTableRef, sourceAnswers } from "./sources/index.ts";
 import { MarketFacts, Brief, RunMetrics, SkuLine, buildFacts, renderBrief, signedPct, marketKey, allowedNumbers, checkNarrative, salvageNarrative, factsForNarrative, BENCHMARK_BASIS, costShareBasisDescription, seriesFacts, marketBenchmark, Narrative, NarrativeIssue } from "./brief.ts";
 import { buildAlignment } from "./alignment.ts";
 import { PRICE_DB, PRICING_COLUMNS, SKU_RATE_COLUMNS, ensurePriceList, priceTable, priceView, pricingSql, skuCategoriesSql, skuRatesSql } from "./sources/pricelist.ts";
@@ -78,6 +78,7 @@ export class PriceSignalAgent extends EventEmitter {
   private cite = 0;
   private metrics: RunMetrics = { modelCalls: 0, plannerCalls: 0, discoveries: 0, reusedViews: 0 };
   private cached = new Set<string>(); // raw REST tables served from the Zetaris cache in this run
+  private semantic?: { name: string; sql: string; members: string[] }; // the semantic view the comparison read
   readonly trace: TraceEvent[] = [];
   readonly sqlLog: SqlResult[] = [];
 
@@ -108,7 +109,7 @@ export class PriceSignalAgent extends EventEmitter {
     this.sql = { run: async (sql, opts) => {
       // One statement per call, and only SELECT, onboarding DDL or caching a source table (quoted text may contain anything).
       const bare = sqlOutsideQuotes(sql);
-      if (!/^\s*(SELECT\b|CREATE\s+(LIGHTNING\s+(DATABASE|REST\s+TABLE)|SCHEMASTORE\s+(CONTAINER|VIEW))\b|(?:UN)?CACHE\s+(?:LAZY\s+)?TABLE\b)/i.test(sql) || bare === undefined || /;\s*\S/.test(bare)) {
+      if (!/^\s*(SELECT\b|CREATE\s+(LIGHTNING\s+(DATABASE|REST\s+TABLE)|SCHEMASTORE\s+(CONTAINER|VIEW)|OR\s+REPLACE\s+SCHEMASTORE\s+VIEW)\b|(?:UN)?CACHE\s+(?:LAZY\s+)?TABLE\b)/i.test(sql) || bare === undefined || /;\s*\S/.test(bare)) {
         this.log("error", `blocked statement (only SELECT and onboarding DDL are allowed): ${sql.split("\n")[0].slice(0, 80)}`);
         throw new Error("statement blocked by the SQL allowlist");
       }
@@ -421,7 +422,7 @@ Reply with JSON only.`;
     const snapshotMetrics = (): RunMetrics => ({ ...this.metrics, reusedViews: [...views.values()].filter((v) => v.via === "memory").length, cachedTables: this.cached.size });
     // Market facts are useful immediately; do not hide them behind slower SKU discovery and pricing.
     this.metrics.numbersMs = Date.now() - t0;
-    const marketPartial: Brief = { request: req, startedAt, calculatedAt, facts, alignment, notes: [...notes], passThrough: policy, policySource, compared, sqlLog: [...this.sqlLog], views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: this.metrics.numbersMs, trace: [...this.trace], metrics: snapshotMetrics(), partialStage: "markets" };
+    const marketPartial: Brief = { request: req, startedAt, calculatedAt, facts, alignment, notes: [...notes], passThrough: policy, policySource, compared, semanticView: this.semantic, sqlLog: [...this.sqlLog], views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: this.metrics.numbersMs, trace: [...this.trace], metrics: snapshotMetrics(), partialStage: "markets" };
     this.log("progress", `market numbers ready in ${(this.metrics.numbersMs / 1000).toFixed(1)} s - pricing SKUs and writing the summary`);
     this.emit("partial", marketPartial);
     // The narrative only needs the market facts, so the model writes it while Zetaris prices the SKUs.
@@ -429,11 +430,11 @@ Reply with JSON only.`;
     const pricing = await this.priceList(req, views, facts, policy, ensureView, notes);
     const sinceLast = this.compareWithLastBrief(facts, req, policy);
     // Everything in the brief except the prose is ready: let the UI show it while the model finishes writing.
-    const partial: Brief = { request: req, startedAt, calculatedAt, facts, alignment, notes, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, sinceLast, compared, sqlLog: [...this.sqlLog], views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: [...this.trace], metrics: snapshotMetrics(), partialStage: "pricing" };
+    const partial: Brief = { request: req, startedAt, calculatedAt, facts, alignment, notes, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, sinceLast, compared, semanticView: this.semantic, sqlLog: [...this.sqlLog], views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: [...this.trace], metrics: snapshotMetrics(), partialStage: "pricing" };
     this.emit("partial", partial);
     const { narrative, issue: narrativeIssue } = await narrativeP;
     memory.rememberRequest(req);
-    const brief: Brief = { request: req, startedAt, calculatedAt, facts, alignment, notes, narrative, narrativeIssue, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, sinceLast, compared, sqlLog: this.sqlLog, views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: this.trace, metrics: snapshotMetrics() };
+    const brief: Brief = { request: req, startedAt, calculatedAt, facts, alignment, notes, narrative, narrativeIssue, passThrough: policy, policySource, skus: pricing?.skus, pricingQuery: pricing?.query, sinceLast, compared, semanticView: this.semantic, sqlLog: this.sqlLog, views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: Date.now() - t0, trace: this.trace, metrics: snapshotMetrics() };
     brief.markdown = renderBrief(brief);
     this.log("done", `brief ready in ${Math.round(brief.ms / 1000)} s (${this.sqlLog.length} SQL statements, ${[...views.values()].filter((v) => v.via === "memory").length} views reused from memory; ${this.metrics.modelCalls} model calls, ${this.metrics.plannerCalls} planner calls, ${this.metrics.discoveries} discoveries)`);
     return brief;
@@ -616,9 +617,21 @@ Reply with JSON only.`;
           }
           const vs = [...s.views.values()].map((v) => v.view);
           if (!vs.length) return { error: "no views yet" };
-          const res = await this.sql.run(compareSql(vs, monthsBack(15)));
+          // One business-facing Zetaris view over this run's agency views (the semantic layer); if it cannot be
+          // created, the same comparison runs as a direct UNION ALL over the agency views.
+          const sem = marketSemanticView(vs);
+          let viaSemantic = false;
+          try {
+            await this.sql.run(sem.sql);
+            this.semantic = sem;
+            viaSemantic = true;
+          } catch (e) {
+            this.semantic = undefined;
+            this.log("warn", `semantic view psig.${sem.name} could not be created (${String(e).slice(0, 120)}) - querying the agency views directly`);
+          }
+          const res = await this.sql.run(viaSemantic ? semanticCompareSql(sem.name, monthsBack(15)) : compareSql(vs, monthsBack(15)));
           s.setCompared(res);
-          this.log("compare", `federated query ${res.id} over ${vs.length} views -> ${res.rows.length} rows`);
+          this.log("compare", `federated query ${res.id} ${viaSemantic ? `on the semantic view psig.${sem.name} (${vs.length} agency views)` : `over ${vs.length} views`} -> ${res.rows.length} rows`);
           const latest = latestByKey(rowsAsObjects(res, COMPARE_COLUMNS));
           return { id: res.id, rows: res.rows.length, latest };
         }

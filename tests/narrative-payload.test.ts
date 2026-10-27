@@ -137,3 +137,12 @@ test("a reply cut off at the token limit is retried with a larger limit", async 
   assert.ok(calls[1].maxTokens >= 16000, String(calls[1].maxTokens));
   assert.ok(agent.trace.some((e) => /cut off at the token limit/.test(e.title)), agent.trace.map((e) => e.title).join("\n"));
 });
+
+test("a market whose requested series is really missing may say so, even while mentioning its all-items context", () => {
+  // Real CA sentence on 27 Oct 10:48 (StatCan's food series unavailable, all-items present) - it was wrongly removed.
+  const facts = buildFacts(rows, base, "Q1", 0.7, new Date("2026-10-27"));
+  const caMissing = facts.map((f) => f.country === "CA" ? { ...f, category: undefined, suggested: undefined, verdict: undefined, allItems: { ...f.category!, label: "All-items", concept: "all_items" } } : f) as any;
+  const sentence = "No usable official series was found, and any all-items observations are context only and do not provide a food benchmark, so no verdict can be assigned for the proposed +5% change.";
+  const errors = checkNarrative({ headline: "Historical market comparison", markets: { CA: sentence } }, allowedNumbers(caMissing, base, 0.7), caMissing, base, 0.7);
+  assert.deepEqual(errors.filter((e) => /missing/.test(e)), []);
+});

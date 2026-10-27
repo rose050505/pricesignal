@@ -82,6 +82,8 @@ export interface RunMetrics {
 
 export interface Brief {
   request: Request;
+  /** The Zetaris semantic view the market comparison read (absent when the direct UNION ALL query was used). */
+  semanticView?: { name: string; sql: string; members: string[] };
   /** UTC start of this run, kept stable across partial and final snapshots. */
   startedAt?: string;
   /** UTC calculation time shared by facts, alignment, and offline evidence replay. */
@@ -352,6 +354,8 @@ function availableDataDenialErrors(text: string, f: MarketFacts, req: Request, f
     // "CA data unavailable" next to DE and AU is about CA: a sentence naming another market is not this market's claim.
     if (countryMentions(sentence, facts).some((m) => m.country !== f.country)) continue;
     if (!/\b(?:data|CPI|HICP|inflation|series|benchmark|verdict|figures?|statistics|release)\b/i.test(sentence)) continue;
+    // Where the requested series really is missing, a "no series" sentence is about it, even when it mentions all-items.
+    if (!requestedSeries(f, req)) continue;
     const series = /all[ -]items|headline inflation/i.test(sentence) ? f.allItems : requestedSeries(f, req);
     if (!series) continue;
     const m = sentence.match(/\b(?:unavailable|not available|absent|missing|failed to respond|did not respond|no\s+(?:\w+\s+){0,2}(?:data|figures?|series|benchmark|verdict|release))\b/i);

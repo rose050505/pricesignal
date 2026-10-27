@@ -88,7 +88,8 @@ test("a federated query that keeps failing stops after a few attempts with an ac
   class CompareDown extends FakeZ {
     compares = 0;
     async run(sql: string) {
-      if (/UNION ALL/.test(sql)) { this.compares++; throw new Error("Zetaris HTTP 500: REST source PSIG_ABS request timed out"); }
+      // Defining the semantic view does not call ABS; reading it (or the direct UNION ALL) does.
+      if (/^SELECT country/.test(sql) && /UNION ALL|v_market_inflation/.test(sql)) { this.compares++; throw new Error("Zetaris HTTP 500: REST source PSIG_ABS request timed out"); }
       return super.run(sql);
     }
   }

@@ -163,9 +163,10 @@ test("compare can use another verified view after review rediscovery fails witho
   const compared = await f.execute("compare");
   assert.ok(compared.id);
   assert.equal(f.ctx.views.has("DE:food"), false);
-  assert.equal(f.state.probes.length, 1);
-  assert.match(f.state.probes[0], /healthy_view/);
-  assert.doesNotMatch(f.state.probes[0], /reviewed_view/);
+  // The semantic view is defined over the healthy view only, and the comparison reads it.
+  assert.equal(f.state.probes.length, 2);
+  assert.match(f.state.probes[0], /^CREATE OR REPLACE SCHEMASTORE VIEW v_market_inflation_\S+ WITH CONTAINER psig AS\nSELECT .* FROM psig\.healthy_view WHERE/);
+  assert.ok(!f.state.probes.some(sql => sql.includes("reviewed_view")));
   assert.deepEqual(f.state.feedback, []);
   assert.equal(f.memory.hmem.store.get(f.old).confidence, f.confidence);
   assert.equal(f.memory.findMapping("DE", "food")!.id, f.old);

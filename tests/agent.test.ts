@@ -141,7 +141,9 @@ test("a finish over a stale comparison is not accepted; empty-memory reuse falls
   const b = await agent.run("food DE CA +5% we pass on 70%");
   assert.ok(b.views.some((v) => v.key === "DE:food"), "DE food was discovered although the planner asked memory for it");
   const lastCompare = z.sqls.filter((q) => /^SELECT country, concept/.test(q)).at(-1)!;
-  assert.match(lastCompare, /v_ca_food/, "the comparison the brief uses covers every onboarded series");
+  // The comparison reads the semantic view of this run; its members are every onboarded series.
+  assert.ok(b.semanticView?.members.includes("v_ca_food"), "the comparison the brief uses covers every onboarded series");
+  assert.match(lastCompare, new RegExp(`FROM psig\\.${b.semanticView!.name} `));
   assert.equal(b.compared.sql, lastCompare);
 });
 

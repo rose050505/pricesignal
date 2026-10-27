@@ -1,8 +1,9 @@
 // Source registry: which agency serves which market, plus Zetaris onboarding.
+import { createHash } from "node:crypto";
 import * as eurostat from "./eurostat.ts";
 import * as abs from "./abs.ts";
 import * as statcan from "./statcan.ts";
-import { Candidate, Concept, Country, DiscoverResult, EU_CODES, OnboardPlan, getJson } from "./types.ts";
+import { Candidate, Concept, Country, DiscoverResult, EU_CODES, OnboardPlan, getJson, zetarisName } from "./types.ts";
 import { SqlRunner, runDdl } from "../zetaris.ts";
 import { hasFreshPeriod, isUsableObservationCount } from "./validation.ts";
 
@@ -158,6 +159,22 @@ export async function onboard(z: SqlRunner, c: Candidate, concept: Concept, now 
 }
 
 export const COMPARE_COLUMNS = ["country", "concept", "category_label", "frequency", "period", "yoy_pct", "source_id"];
+
+/**
+ * Zetaris's semantic layer is built from schemastore views: one business-facing view, in the common schema, over the
+ * agency views of a run. Its name depends only on the set of member views, so the same markets reuse the same view.
+ */
+export function marketSemanticView(views: string[]): { name: string; sql: string; members: string[] } {
+  const members = [...new Set(views)].sort();
+  const name = zetarisName("v", "market", "inflation", createHash("sha256").update(members.join(",")).digest("hex").slice(0, 8));
+  const body = members.map((v) => `SELECT ${COMPARE_COLUMNS.join(", ")} FROM psig.${v} WHERE yoy_pct IS NOT NULL`).join("\nUNION ALL\n");
+  return { name, sql: `CREATE OR REPLACE SCHEMASTORE VIEW ${name} WITH CONTAINER psig AS\n${body}`, members };
+}
+
+/** The federated comparison read through the semantic view. */
+export function semanticCompareSql(view: string, sincePeriod: string): string {
+  return `SELECT ${COMPARE_COLUMNS.join(", ")} FROM psig.${view} WHERE period >= '${sincePeriod}'\nORDER BY country, concept, period`;
+}
 
 /** One federated query across every onboarded market: the fragmented sources answered as one table. */
 export function compareSql(views: string[], sincePeriod: string): string {
