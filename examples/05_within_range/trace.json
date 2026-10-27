@@ -2,9 +2,9 @@
   "question": "canada & australia food: costs rose 8%, unit costs are 60% of our selling price; we pass on 70%; what about +3%?",
   "trace": [
     {
-      "t": 1793113080687,
+      "t": 1793115643662,
       "kind": "llm",
-      "title": "parsed request (nvidia/nemotron-3.5-lightning-30b-a3b, 2106 ms via Meterless Nightshift)",
+      "title": "parsed request (nvidia/nemotron-3.5-lightning-30b-a3b, 1818 ms via Meterless Nightshift)",
       "detail": {
         "countries": [
           "canada",
@@ -20,7 +20,7 @@
       }
     },
     {
-      "t": 1793113080739,
+      "t": 1793115643718,
       "kind": "request",
       "title": "markets CA, AU | category \"food\" | proposed +3% | costs +8%",
       "detail": {
@@ -43,172 +43,172 @@
       }
     },
     {
-      "t": 1793113080740,
+      "t": 1793115643719,
       "kind": "memory",
       "title": "policy changed: 60% (mem-22) -> 70%; the old preference is superseded, not deleted"
     },
     {
-      "t": 1793113080750,
+      "t": 1793115643740,
       "kind": "memory",
       "title": "stored pricing policy mem-28"
     },
     {
-      "t": 1793113080750,
+      "t": 1793115643741,
       "kind": "plan",
       "title": "all needed series have remembered mappings - skipping the planner; verifying the live Zetaris views"
     },
     {
-      "t": 1793113080912,
+      "t": 1793115643912,
       "kind": "sql",
-      "title": "Q1: CACHE TABLE psig_abs.abs_au_cpi_20001_m_ex20261027_235644_2343121",
+      "title": "Q1: CACHE TABLE psig_abs.abs_au_cpi_20001_m_ex20261028_003921_2475718",
       "detail": {
         "id": "Q1",
-        "sql": "CACHE TABLE psig_abs.abs_au_cpi_20001_m_ex20261027_235644_2343121",
+        "sql": "CACHE TABLE psig_abs.abs_au_cpi_20001_m_ex20261028_003921_2475718",
         "rows": 0,
-        "ms": 159
+        "ms": 166
       }
     },
     {
-      "t": 1793113080915,
+      "t": 1793115643915,
       "kind": "sql",
-      "title": "Q2: CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_235644_2343121",
+      "title": "Q2: CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261028_003921_2475718",
       "detail": {
         "id": "Q2",
-        "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_235644_2343121",
+        "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261028_003921_2475718",
         "rows": 0,
-        "ms": 163
+        "ms": 171
       }
     },
     {
-      "t": 1793113081226,
+      "t": 1793115644178,
       "kind": "sql",
       "title": "Q3: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_food_v41690974_live_yoyv2_ex202",
       "detail": {
         "id": "Q3",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL",
         "rows": 1,
-        "ms": 310
+        "ms": 263
       }
     },
     {
-      "t": 1793113081228,
+      "t": 1793115644180,
       "kind": "memory",
-      "title": "reused mem-3: CA food -> psig.v_ca_food_v41690974_live_yoyv2_ex20261027_235644_2343121 (14 rows, latest 2026-09)"
+      "title": "reused mem-2: CA food -> psig.v_ca_food_v41690974_live_yoyv2_ex20261028_003921_2475718 (14 rows, latest 2026-09)"
     },
     {
-      "t": 1793113081374,
+      "t": 1793115644277,
       "kind": "sql",
-      "title": "Q4: CACHE TABLE psig_statcan.statcan_ca_v41690973_live_ex20261027_235644_2343121",
+      "title": "Q4: CACHE TABLE psig_statcan.statcan_ca_v41690973_live_ex20261028_003921_2475718",
       "detail": {
         "id": "Q4",
-        "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690973_live_ex20261027_235644_2343121",
+        "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690973_live_ex20261028_003921_2475718",
         "rows": 0,
-        "ms": 145
+        "ms": 97
       }
     },
     {
-      "t": 1793113081456,
+      "t": 1793115644448,
       "kind": "sql",
-      "title": "Q5: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_food_20001_m_yoyv2_ex20261027_2",
+      "title": "Q5: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_food_20001_m_yoyv2_ex20261028_0",
       "detail": {
         "id": "Q5",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_food_20001_m_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_food_20001_m_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL",
         "rows": 1,
-        "ms": 544
+        "ms": 535
       }
     },
     {
-      "t": 1793113081457,
+      "t": 1793115644450,
       "kind": "memory",
-      "title": "reused mem-2: AU food -> psig.v_au_food_20001_m_yoyv2_ex20261027_235644_2343121 (13 rows, latest 2026-08)"
+      "title": "reused mem-3: AU food -> psig.v_au_food_20001_m_yoyv2_ex20261028_003921_2475718 (13 rows, latest 2026-08)"
     },
     {
-      "t": 1793113081633,
+      "t": 1793115644573,
       "kind": "sql",
-      "title": "Q6: CACHE TABLE psig_abs.abs_au_cpi_10001_m_ex20261027_235644_2343121",
+      "title": "Q6: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_all_items_v41690973_live_yoyv2_",
       "detail": {
         "id": "Q6",
-        "sql": "CACHE TABLE psig_abs.abs_au_cpi_10001_m_ex20261027_235644_2343121",
-        "rows": 0,
-        "ms": 176
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_all_items_v41690973_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL",
+        "rows": 1,
+        "ms": 295
       }
     },
     {
-      "t": 1793113081715,
+      "t": 1793115644574,
+      "kind": "memory",
+      "title": "reused mem-4: CA all_items -> psig.v_ca_all_items_v41690973_live_yoyv2_ex20261028_003921_2475718 (14 rows, latest 2026-09)"
+    },
+    {
+      "t": 1793115644595,
       "kind": "sql",
-      "title": "Q7: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_all_items_v41690973_live_yoyv2_",
+      "title": "Q7: CACHE TABLE psig_abs.abs_au_cpi_10001_m_ex20261028_003921_2475718",
       "detail": {
         "id": "Q7",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_all_items_v41690973_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL",
-        "rows": 1,
-        "ms": 341
+        "sql": "CACHE TABLE psig_abs.abs_au_cpi_10001_m_ex20261028_003921_2475718",
+        "rows": 0,
+        "ms": 144
       }
     },
     {
-      "t": 1793113081716,
-      "kind": "memory",
-      "title": "reused mem-6: CA all_items -> psig.v_ca_all_items_v41690973_live_yoyv2_ex20261027_235644_2343121 (14 rows, latest 2026-09)"
-    },
-    {
-      "t": 1793113082188,
+      "t": 1793115645181,
       "kind": "sql",
       "title": "Q8: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_all_items_10001_m_yoyv2_ex20261",
       "detail": {
         "id": "Q8",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_all_items_10001_m_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_all_items_10001_m_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL",
         "rows": 1,
-        "ms": 555
+        "ms": 585
       }
     },
     {
-      "t": 1793113082189,
+      "t": 1793115645182,
       "kind": "memory",
-      "title": "reused mem-5: AU all_items -> psig.v_au_all_items_10001_m_yoyv2_ex20261027_235644_2343121 (13 rows, latest 2026-08)"
+      "title": "reused mem-6: AU all_items -> psig.v_au_all_items_10001_m_yoyv2_ex20261028_003921_2475718 (13 rows, latest 2026-08)"
     },
     {
-      "t": 1793113082189,
+      "t": 1793115645183,
       "kind": "plan",
       "title": "all needed series are ready - running the federated comparison"
     },
     {
-      "t": 1793113082909,
+      "t": 1793115645678,
       "kind": "sql",
-      "title": "Q9: CREATE OR REPLACE SCHEMASTORE VIEW v_market_inflation_977085a1_ex20261027_235644_2343121 W",
+      "title": "Q9: CREATE OR REPLACE SCHEMASTORE VIEW v_market_inflation_e5dafa37_ex20261028_003921_2475718 W",
       "detail": {
         "id": "Q9",
-        "sql": "CREATE OR REPLACE SCHEMASTORE VIEW v_market_inflation_977085a1_ex20261027_235644_2343121 WITH CONTAINER psig AS\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_all_items_10001_m_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_food_20001_m_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_all_items_v41690973_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL",
+        "sql": "CREATE OR REPLACE SCHEMASTORE VIEW v_market_inflation_e5dafa37_ex20261028_003921_2475718 WITH CONTAINER psig AS\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_all_items_10001_m_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_food_20001_m_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_all_items_v41690973_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL",
         "rows": 0,
-        "ms": 719
+        "ms": 494
       }
     },
     {
-      "t": 1793113085735,
+      "t": 1793115648045,
       "kind": "sql",
       "title": "Q10: SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v",
       "detail": {
         "id": "Q10",
-        "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_market_inflation_977085a1_ex20261027_235644_2343121 WHERE period >= '2025-07'\nORDER BY country, concept, period",
+        "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_market_inflation_e5dafa37_ex20261028_003921_2475718 WHERE period >= '2025-07'\nORDER BY country, concept, period",
         "rows": 54,
-        "ms": 2826
+        "ms": 2366
       }
     },
     {
-      "t": 1793113085735,
+      "t": 1793115648046,
       "kind": "compare",
-      "title": "federated query Q10 on the semantic view psig.v_market_inflation_977085a1_ex20261027_235644_2343121 (4 agency views) -> 54 rows"
+      "title": "federated query Q10 on the semantic view psig.v_market_inflation_e5dafa37_ex20261028_003921_2475718 (4 agency views) -> 54 rows"
     },
     {
-      "t": 1793113085736,
+      "t": 1793115648046,
       "kind": "plan",
       "title": "all markets compared - finishing without another planner turn"
     },
     {
-      "t": 1793113085739,
+      "t": 1793115648047,
       "kind": "progress",
-      "title": "market numbers ready in 7.2 s - pricing SKUs and writing the summary"
+      "title": "market numbers ready in 6.2 s - pricing SKUs and writing the summary"
     },
     {
-      "t": 1793113085807,
+      "t": 1793115648083,
       "kind": "sql",
       "title": "already in Zetaris (not created again): CREATE LIGHTNING DATABASE PSIG_INTERNAL DESCRIBE BY \"PriceSignal-internal-price-list\"",
       "detail": {
@@ -217,87 +217,87 @@
       }
     },
     {
-      "t": 1793113085872,
+      "t": 1793115648123,
       "kind": "sql",
-      "title": "already in Zetaris (not created again): CREATE LIGHTNING REST TABLE internal_price_list_ex20261027_235644_2343121 FROM PSIG_INTERN",
+      "title": "already in Zetaris (not created again): CREATE LIGHTNING REST TABLE internal_price_list_ex20261028_003921_2475718 FROM PSIG_INTERN",
       "detail": {
-        "sql": "CREATE LIGHTNING REST TABLE internal_price_list_ex20261027_235644_2343121 FROM PSIG_INTERNAL REQUEST(\n    endpoint \"https://raw.githubusercontent.com/rose050505/pricesignal/main/data/price_list.json\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
+        "sql": "CREATE LIGHTNING REST TABLE internal_price_list_ex20261028_003921_2475718 FROM PSIG_INTERNAL REQUEST(\n    endpoint \"https://raw.githubusercontent.com/rose050505/pricesignal/main/data/price_list.json\",\n    method \"get\",\n    response_type \"json\",\n    http_encoding \"URLENCODED\"\n) HEADER (\n) BODY ()",
         "existed": true
       }
     },
     {
-      "t": 1793113085929,
+      "t": 1793115648160,
       "kind": "sql",
-      "title": "already in Zetaris (not created again): CREATE SCHEMASTORE VIEW v_price_list_ex20261027_235644_2343121 WITH CONTAINER psig AS",
+      "title": "already in Zetaris (not created again): CREATE SCHEMASTORE VIEW v_price_list_ex20261028_003921_2475718 WITH CONTAINER psig AS",
       "detail": {
-        "sql": "CREATE SCHEMASTORE VIEW v_price_list_ex20261027_235644_2343121 WITH CONTAINER psig AS\nSELECT sku, product, market AS country, category AS sku_category, currency, CAST(current_price AS DOUBLE) AS current_price\nFROM psig_internal.internal_price_list_ex20261027_235644_2343121",
+        "sql": "CREATE SCHEMASTORE VIEW v_price_list_ex20261028_003921_2475718 WITH CONTAINER psig AS\nSELECT sku, product, market AS country, category AS sku_category, currency, CAST(current_price AS DOUBLE) AS current_price\nFROM psig_internal.internal_price_list_ex20261028_003921_2475718",
         "existed": true
       }
     },
     {
-      "t": 1793113086047,
+      "t": 1793115648305,
       "kind": "sql",
-      "title": "Q11: CACHE TABLE psig_internal.internal_price_list_ex20261027_235644_2343121",
+      "title": "Q11: CACHE TABLE psig_internal.internal_price_list_ex20261028_003921_2475718",
       "detail": {
         "id": "Q11",
-        "sql": "CACHE TABLE psig_internal.internal_price_list_ex20261027_235644_2343121",
+        "sql": "CACHE TABLE psig_internal.internal_price_list_ex20261028_003921_2475718",
         "rows": 0,
-        "ms": 117
+        "ms": 145
       }
     },
     {
-      "t": 1793113086424,
+      "t": 1793115648608,
       "kind": "sql",
-      "title": "Q12: SELECT DISTINCT country, sku_category, product FROM psig.v_price_list_ex20261027_235644_23",
+      "title": "Q12: SELECT DISTINCT country, sku_category, product FROM psig.v_price_list_ex20261028_003921_24",
       "detail": {
         "id": "Q12",
-        "sql": "SELECT DISTINCT country, sku_category, product FROM psig.v_price_list_ex20261027_235644_2343121 WHERE country IN ('CA', 'AU') ORDER BY country, sku_category, product",
+        "sql": "SELECT DISTINCT country, sku_category, product FROM psig.v_price_list_ex20261028_003921_2475718 WHERE country IN ('CA', 'AU') ORDER BY country, sku_category, product",
         "rows": 6,
-        "ms": 377
+        "ms": 302
       }
     },
     {
-      "t": 1793113086425,
+      "t": 1793115648608,
       "kind": "pricing",
       "title": "the price list sells condiments, food, snacks in AU, CA - checking official category coverage for its products"
     },
     {
-      "t": 1793113086564,
+      "t": 1793115648753,
       "kind": "sql",
-      "title": "Q13: CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_235644_2343121",
+      "title": "Q13: CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261028_003921_2475718",
       "detail": {
         "id": "Q13",
-        "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_235644_2343121",
+        "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261028_003921_2475718",
         "rows": 0,
-        "ms": 136
+        "ms": 143
       }
     },
     {
-      "t": 1793113086579,
+      "t": 1793115648771,
       "kind": "sql",
-      "title": "Q14: CACHE TABLE psig_abs.abs_au_cpi_97549_m_ex20261027_235644_2343121",
+      "title": "Q14: CACHE TABLE psig_abs.abs_au_cpi_97549_m_ex20261028_003921_2475718",
       "detail": {
         "id": "Q14",
-        "sql": "CACHE TABLE psig_abs.abs_au_cpi_97549_m_ex20261027_235644_2343121",
+        "sql": "CACHE TABLE psig_abs.abs_au_cpi_97549_m_ex20261028_003921_2475718",
         "rows": 0,
-        "ms": 152
+        "ms": 161
       }
     },
     {
-      "t": 1793113086919,
+      "t": 1793115649135,
       "kind": "sql",
       "title": "Q15: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_condiments_v41690974_live_yoyv2",
       "detail": {
         "id": "Q15",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL",
         "rows": 1,
-        "ms": 355
+        "ms": 381
       }
     },
     {
-      "t": 1793113086920,
+      "t": 1793115649136,
       "kind": "memory",
-      "title": "reused product-checked SKU mapping mem-8: CA:condiments -> psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_235644_2343121",
+      "title": "reused product-checked SKU mapping mem-8: CA:condiments -> psig.v_ca_condiments_v41690974_live_yoyv2_ex20261028_003921_2475718",
       "detail": {
         "products": [
           "Gochujang 500 g"
@@ -312,31 +312,31 @@
       }
     },
     {
-      "t": 1793113087030,
+      "t": 1793115649259,
       "kind": "sql",
-      "title": "Q16: CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_235644_2343121",
+      "title": "Q16: CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261028_003921_2475718",
       "detail": {
         "id": "Q16",
-        "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_235644_2343121",
+        "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261028_003921_2475718",
         "rows": 0,
-        "ms": 110
+        "ms": 123
       }
     },
     {
-      "t": 1793113087067,
+      "t": 1793115649417,
       "kind": "sql",
       "title": "Q17: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_condiments_97549_m_yoyv2_ex2026",
       "detail": {
         "id": "Q17",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_condiments_97549_m_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_condiments_97549_m_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL",
         "rows": 1,
-        "ms": 487
+        "ms": 646
       }
     },
     {
-      "t": 1793113087068,
+      "t": 1793115649418,
       "kind": "memory",
-      "title": "reused product-checked SKU mapping mem-9: AU:condiments -> psig.v_au_condiments_97549_m_yoyv2_ex20261027_235644_2343121",
+      "title": "reused product-checked SKU mapping mem-9: AU:condiments -> psig.v_au_condiments_97549_m_yoyv2_ex20261028_003921_2475718",
       "detail": {
         "products": [
           "Gochujang 500 g"
@@ -351,31 +351,31 @@
       }
     },
     {
-      "t": 1793113087242,
+      "t": 1793115649520,
       "kind": "sql",
-      "title": "Q18: CACHE TABLE psig_abs.abs_au_cpi_115501_m_ex20261027_235644_2343121",
+      "title": "Q18: CACHE TABLE psig_abs.abs_au_cpi_115501_m_ex20261028_003921_2475718",
       "detail": {
         "id": "Q18",
-        "sql": "CACHE TABLE psig_abs.abs_au_cpi_115501_m_ex20261027_235644_2343121",
+        "sql": "CACHE TABLE psig_abs.abs_au_cpi_115501_m_ex20261028_003921_2475718",
         "rows": 0,
-        "ms": 173
+        "ms": 102
       }
     },
     {
-      "t": 1793113087347,
+      "t": 1793115649587,
       "kind": "sql",
       "title": "Q19: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex2",
       "detail": {
         "id": "Q19",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL",
         "rows": 1,
-        "ms": 317
+        "ms": 328
       }
     },
     {
-      "t": 1793113087348,
+      "t": 1793115649588,
       "kind": "memory",
-      "title": "reused product-checked SKU mapping mem-10: CA:snacks -> psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_235644_2343121",
+      "title": "reused product-checked SKU mapping mem-10: CA:snacks -> psig.v_ca_snacks_v41690974_live_yoyv2_ex20261028_003921_2475718",
       "detail": {
         "products": [
           "Honey butter chips 60 g"
@@ -390,20 +390,20 @@
       }
     },
     {
-      "t": 1793113087882,
+      "t": 1793115649974,
       "kind": "sql",
       "title": "Q20: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_snacks_115501_m_yoyv2_ex2026102",
       "detail": {
         "id": "Q20",
-        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_snacks_115501_m_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL",
+        "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_snacks_115501_m_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL",
         "rows": 1,
-        "ms": 640
+        "ms": 454
       }
     },
     {
-      "t": 1793113087882,
+      "t": 1793115649975,
       "kind": "memory",
-      "title": "reused product-checked SKU mapping mem-12: AU:snacks -> psig.v_au_snacks_115501_m_yoyv2_ex20261027_235644_2343121",
+      "title": "reused product-checked SKU mapping mem-12: AU:snacks -> psig.v_au_snacks_115501_m_yoyv2_ex20261028_003921_2475718",
       "detail": {
         "products": [
           "Honey butter chips 60 g"
@@ -418,23 +418,23 @@
       }
     },
     {
-      "t": 1793113089781,
+      "t": 1793115651861,
       "kind": "sql",
       "title": "Q21: SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept",
       "detail": {
         "id": "Q21",
-        "sql": "SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept AS rate_concept, s.category_label, s.frequency, s.period, s.yoy_pct, s.source_id\nFROM psig.v_price_list_ex20261027_235644_2343121 p\nJOIN (\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_condiments_97549_m_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_snacks_115501_m_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_food_20001_m_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n) s ON p.country = s.country AND p.sku_category = s.concept\nWHERE p.country IN ('CA', 'AU')\nORDER BY p.country, p.sku, s.period",
+        "sql": "SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept AS rate_concept, s.category_label, s.frequency, s.period, s.yoy_pct, s.source_id\nFROM psig.v_price_list_ex20261028_003921_2475718 p\nJOIN (\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_condiments_97549_m_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_snacks_115501_m_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_food_20001_m_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n) s ON p.country = s.country AND p.sku_category = s.concept\nWHERE p.country IN ('CA', 'AU')\nORDER BY p.country, p.sku, s.period",
         "rows": 81,
-        "ms": 1898
+        "ms": 1885
       }
     },
     {
-      "t": 1793113089782,
+      "t": 1793115651863,
       "kind": "pricing",
       "title": "federated query Q21 joined 6 SKUs with official category series (2 broader proxies) -> 6 SKUs priced"
     },
     {
-      "t": 1793113089788,
+      "t": 1793115651867,
       "kind": "memory",
       "title": "compared with 2 remembered brief outcome(s): CA Food, AU Food and non-alcoholic beverages",
       "detail": [
@@ -443,142 +443,142 @@
       ]
     },
     {
-      "t": 1793113091118,
+      "t": 1793115656474,
       "kind": "llm",
-      "title": "narrative (nvidia/nemotron-3.5-lightning-30b-a3b, 5354 ms via Meterless Nightshift) - numbers and verdicts match the facts"
+      "title": "narrative (nvidia/nemotron-3.5-lightning-30b-a3b, 8404 ms via Meterless Nightshift) - numbers and verdicts match the facts"
     },
     {
-      "t": 1793113091134,
+      "t": 1793115656488,
       "kind": "done",
-      "title": "brief ready in 13 s (21 SQL statements, 8 views reused from memory; 2 model calls, 0 planner calls, 0 discoveries)"
+      "title": "brief ready in 15 s (21 SQL statements, 8 views reused from memory; 2 model calls, 0 planner calls, 0 discoveries)"
     }
   ],
   "sql": [
     {
       "id": "Q1",
-      "sql": "CACHE TABLE psig_abs.abs_au_cpi_20001_m_ex20261027_235644_2343121",
+      "sql": "CACHE TABLE psig_abs.abs_au_cpi_20001_m_ex20261028_003921_2475718",
       "rows": 0,
-      "ms": 159
+      "ms": 166
     },
     {
       "id": "Q2",
-      "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_235644_2343121",
+      "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261028_003921_2475718",
       "rows": 0,
-      "ms": 163
+      "ms": 171
     },
     {
       "id": "Q3",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL",
       "rows": 1,
-      "ms": 310
+      "ms": 263
     },
     {
       "id": "Q4",
-      "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690973_live_ex20261027_235644_2343121",
+      "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690973_live_ex20261028_003921_2475718",
+      "rows": 0,
+      "ms": 97
+    },
+    {
+      "id": "Q5",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_food_20001_m_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL",
+      "rows": 1,
+      "ms": 535
+    },
+    {
+      "id": "Q6",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_all_items_v41690973_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL",
+      "rows": 1,
+      "ms": 295
+    },
+    {
+      "id": "Q7",
+      "sql": "CACHE TABLE psig_abs.abs_au_cpi_10001_m_ex20261028_003921_2475718",
+      "rows": 0,
+      "ms": 144
+    },
+    {
+      "id": "Q8",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_all_items_10001_m_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL",
+      "rows": 1,
+      "ms": 585
+    },
+    {
+      "id": "Q9",
+      "sql": "CREATE OR REPLACE SCHEMASTORE VIEW v_market_inflation_e5dafa37_ex20261028_003921_2475718 WITH CONTAINER psig AS\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_all_items_10001_m_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_food_20001_m_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_all_items_v41690973_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL",
+      "rows": 0,
+      "ms": 494
+    },
+    {
+      "id": "Q10",
+      "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_market_inflation_e5dafa37_ex20261028_003921_2475718 WHERE period >= '2025-07'\nORDER BY country, concept, period",
+      "rows": 54,
+      "ms": 2366
+    },
+    {
+      "id": "Q11",
+      "sql": "CACHE TABLE psig_internal.internal_price_list_ex20261028_003921_2475718",
       "rows": 0,
       "ms": 145
     },
     {
-      "id": "Q5",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_food_20001_m_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL",
-      "rows": 1,
-      "ms": 544
-    },
-    {
-      "id": "Q6",
-      "sql": "CACHE TABLE psig_abs.abs_au_cpi_10001_m_ex20261027_235644_2343121",
-      "rows": 0,
-      "ms": 176
-    },
-    {
-      "id": "Q7",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_all_items_v41690973_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL",
-      "rows": 1,
-      "ms": 341
-    },
-    {
-      "id": "Q8",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_all_items_10001_m_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL",
-      "rows": 1,
-      "ms": 555
-    },
-    {
-      "id": "Q9",
-      "sql": "CREATE OR REPLACE SCHEMASTORE VIEW v_market_inflation_977085a1_ex20261027_235644_2343121 WITH CONTAINER psig AS\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_all_items_10001_m_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_food_20001_m_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_all_items_v41690973_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL",
-      "rows": 0,
-      "ms": 719
-    },
-    {
-      "id": "Q10",
-      "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_market_inflation_977085a1_ex20261027_235644_2343121 WHERE period >= '2025-07'\nORDER BY country, concept, period",
-      "rows": 54,
-      "ms": 2826
-    },
-    {
-      "id": "Q11",
-      "sql": "CACHE TABLE psig_internal.internal_price_list_ex20261027_235644_2343121",
-      "rows": 0,
-      "ms": 117
-    },
-    {
       "id": "Q12",
-      "sql": "SELECT DISTINCT country, sku_category, product FROM psig.v_price_list_ex20261027_235644_2343121 WHERE country IN ('CA', 'AU') ORDER BY country, sku_category, product",
+      "sql": "SELECT DISTINCT country, sku_category, product FROM psig.v_price_list_ex20261028_003921_2475718 WHERE country IN ('CA', 'AU') ORDER BY country, sku_category, product",
       "rows": 6,
-      "ms": 377
+      "ms": 302
     },
     {
       "id": "Q13",
-      "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_235644_2343121",
+      "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261028_003921_2475718",
       "rows": 0,
-      "ms": 136
+      "ms": 143
     },
     {
       "id": "Q14",
-      "sql": "CACHE TABLE psig_abs.abs_au_cpi_97549_m_ex20261027_235644_2343121",
+      "sql": "CACHE TABLE psig_abs.abs_au_cpi_97549_m_ex20261028_003921_2475718",
       "rows": 0,
-      "ms": 152
+      "ms": 161
     },
     {
       "id": "Q15",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL",
       "rows": 1,
-      "ms": 355
+      "ms": 381
     },
     {
       "id": "Q16",
-      "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261027_235644_2343121",
+      "sql": "CACHE TABLE psig_statcan.statcan_ca_v41690974_live_ex20261028_003921_2475718",
       "rows": 0,
-      "ms": 110
+      "ms": 123
     },
     {
       "id": "Q17",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_condiments_97549_m_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_condiments_97549_m_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL",
       "rows": 1,
-      "ms": 487
+      "ms": 646
     },
     {
       "id": "Q18",
-      "sql": "CACHE TABLE psig_abs.abs_au_cpi_115501_m_ex20261027_235644_2343121",
+      "sql": "CACHE TABLE psig_abs.abs_au_cpi_115501_m_ex20261028_003921_2475718",
       "rows": 0,
-      "ms": 173
+      "ms": 102
     },
     {
       "id": "Q19",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL",
       "rows": 1,
-      "ms": 317
+      "ms": 328
     },
     {
       "id": "Q20",
-      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_snacks_115501_m_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL",
+      "sql": "SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_snacks_115501_m_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL",
       "rows": 1,
-      "ms": 640
+      "ms": 454
     },
     {
       "id": "Q21",
-      "sql": "SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept AS rate_concept, s.category_label, s.frequency, s.period, s.yoy_pct, s.source_id\nFROM psig.v_price_list_ex20261027_235644_2343121 p\nJOIN (\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_condiments_97549_m_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_snacks_115501_m_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_food_20001_m_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n) s ON p.country = s.country AND p.sku_category = s.concept\nWHERE p.country IN ('CA', 'AU')\nORDER BY p.country, p.sku, s.period",
+      "sql": "SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept AS rate_concept, s.category_label, s.frequency, s.period, s.yoy_pct, s.source_id\nFROM psig.v_price_list_ex20261028_003921_2475718 p\nJOIN (\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_condiments_97549_m_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_snacks_115501_m_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_food_20001_m_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n) s ON p.country = s.country AND p.sku_category = s.concept\nWHERE p.country IN ('CA', 'AU')\nORDER BY p.country, p.sku, s.period",
       "rows": 81,
-      "ms": 1898
+      "ms": 1885
     }
   ]
 }

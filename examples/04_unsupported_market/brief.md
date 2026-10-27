@@ -5,7 +5,7 @@
 
 How far: +5% is 0.9 pp above the CA benchmark top (4.1%).
 
-> Nemotron: +5% is above the market benchmark in CA
+> Nemotron: +5% above benchmark in CA; JP data unavailable
 
 Cost policy: recover 60% of incremental unit cost (remembered from an earlier request (mem-22)) · proposed change: +5%. Add your cost change and unit-cost share (for example “costs rose 8%, unit costs are 60% of our selling price”) to turn this policy into a cost-recovery target.
 
@@ -18,7 +18,7 @@ The historical market benchmark spans the latest YoY rate and the mean of availa
 Every rate above comes from Zetaris query **Q6** (one federated SQL over the onboarded sources); market benchmarks and comparisons are computed in code from those rates.
 
 ## Your price list
-Internal SKUs (Zetaris view `psig.v_price_list_ex20261027_235644_2343121`) joined in query **Q13** with official category series for the products in each market; broader proxies are marked. Each SKU's benchmark price scenario applies its selected series' historical rates to its current price, computed in code.
+Internal SKUs (Zetaris view `psig.v_price_list_ex20261028_003921_2475718`) joined in query **Q13** with official category series for the products in each market; broader proxies are marked. Each SKU's benchmark price scenario applies its selected series' historical rates to its current price, computed in code.
 
 | SKU | Product | Market | Current price | Benchmark price scenario | At +5% | Rate used |
 |---|---|---|---|---|---|---|
@@ -42,50 +42,50 @@ Food inflation is 2.2% YoY in September 2026, with a 12-month average of 4.1% ac
 **Watch:** Re-check next month's food prints for any change in trend.
 
 ## Evidence
-Views: `psig.v_ca_food_v41690974_live_yoyv2_ex20261027_235644_2343121` (memory), `psig.v_ca_all_items_v41690973_live_yoyv2_ex20261027_235644_2343121` (memory), `psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_235644_2343121` (memory), `psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_235644_2343121` (memory)
+Views: `psig.v_ca_food_v41690974_live_yoyv2_ex20261028_003921_2475718` (memory), `psig.v_ca_all_items_v41690973_live_yoyv2_ex20261028_003921_2475718` (memory), `psig.v_ca_condiments_v41690974_live_yoyv2_ex20261028_003921_2475718` (memory), `psig.v_ca_snacks_v41690974_live_yoyv2_ex20261028_003921_2475718` (memory)
 
-<details><summary>Q2 · 1 row · 293 ms</summary>
+<details><summary>Q2 · 1 row · 347 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q4 · 1 row · 385 ms</summary>
+<details><summary>Q4 · 1 row · 271 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_all_items_v41690973_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_all_items_v41690973_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q6 · 28 rows · 1261 ms</summary>
+<details><summary>Q6 · 28 rows · 1122 ms</summary>
 
 ```sql
-SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_market_inflation_50d37608_ex20261027_235644_2343121 WHERE period >= '2025-07'
+SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_market_inflation_e5eebabb_ex20261028_003921_2475718 WHERE period >= '2025-07'
 ORDER BY country, concept, period
 ```
 </details>
-<details><summary>Q10 · 1 row · 368 ms</summary>
+<details><summary>Q10 · 1 row · 339 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q12 · 1 row · 321 ms</summary>
+<details><summary>Q12 · 1 row · 354 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q13 · 42 rows · 851 ms</summary>
+<details><summary>Q13 · 42 rows · 737 ms</summary>
 
 ```sql
 SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept AS rate_concept, s.category_label, s.frequency, s.period, s.yoy_pct, s.source_id
-FROM psig.v_price_list_ex20261027_235644_2343121 p
+FROM psig.v_price_list_ex20261028_003921_2475718 p
 JOIN (
-    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
+    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
     UNION ALL
-    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
+    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
     UNION ALL
-    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261027_235644_2343121 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
+    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'
 ) s ON p.country = s.country AND p.sku_category = s.concept
 WHERE p.country IN ('CA')
 ORDER BY p.country, p.sku, s.period
