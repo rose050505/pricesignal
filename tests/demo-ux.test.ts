@@ -131,3 +131,23 @@ test("while waiting for numbers, the answer area shows the agent's steps filled 
   b.run('addTrace({kind:"pricing",title:"the price list sells condiments"})');
   assert.doesNotMatch(b.node("#out").innerHTML, /class="steps"/);
 });
+
+test("the federated query and its result rows are shown right under the market cards", () => {
+  const rows = [["DE", "food", "Food and non-alcoholic beverages", "M", "2026-08", 0.2, "eurostat:prc_hicp_minr:CP01:RCH_A"], ["DE", "food", "Food and non-alcoholic beverages", "M", "2026-09", 0.4, "eurostat:prc_hicp_minr:CP01:RCH_A"], ["CA", "food", "Food", "M", "2026-09", 2.2, "statcan:18100004:v41690974"], ["AU", "food", "Food and non-alcoholic beverages", "M", "2026-08", 3.0, "abs:CPI:1.20001.10.50.M"], ["AU", "all_items", "All groups CPI", "M", "2026-08", 4.0, "abs:CPI:1.10001.10.50.M"]];
+  const b = browser();
+  b.context.sample = { ...resultWith(nemotron), compared: { id: "Q11", sql: "SELECT country, concept FROM psig.v_de_food UNION ALL SELECT country, concept FROM psig.v_ca_food", columns: ["country", "concept", "category_label", "frequency", "period", "yoy_pct", "source_id"], rows }, sql: [{ id: "Q11", sql: "SELECT ...", rows: 5, ms: 1292 }] };
+  b.run('render(sample,"demo question 1")');
+  const out = b.node("#out").innerHTML;
+  const card = out.indexOf('id="federated"');
+  assert.ok(card > out.indexOf('class="markets"'), "below the market cards");
+  assert.match(out, /One federated SQL query across 3 agencies/);
+  assert.match(out, /Zetaris Q11 · 5 rows · 1\.3 s/);
+  // The latest row of each series: DE food 2026-09 (not 2026-08), CA food, AU food and AU all-items.
+  const table = out.slice(card, out.indexOf("</table>", card));
+  assert.match(table, /2026-09<\/td><td class="num">\+0\.4%/);
+  assert.doesNotMatch(table, /\+0\.2%/);
+  assert.match(table, /statcan:18100004:v41690974/);
+  assert.equal((table.match(/<tr>/g) ?? []).length, 1 + 4);
+  assert.match(out.slice(card), /<details><summary>SQL<\/summary><pre>SELECT country, concept FROM psig\.v_de_food UNION ALL/);
+  assert.match(out.slice(card), /<details><summary>All 5 rows<\/summary>/);
+});
