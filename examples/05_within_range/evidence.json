@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "methodVersion": 2,
-  "calculatedAt": "2026-10-26T18:40:45.338Z",
-  "startedAt": "2026-10-26T18:40:32.361Z",
+  "methodVersion": 3,
+  "calculatedAt": "2026-10-27T09:55:58.089Z",
+  "startedAt": "2026-10-27T09:55:54.384Z",
   "request": {
     "raw": "canada & australia food: costs rose 8%, unit costs are 60% of our selling price; we pass on 70%; what about +3%?",
     "countries": [
@@ -17,14 +17,15 @@
     "proposedChangePct": 3,
     "costIncreasePct": 8,
     "costSharePct": 60,
+    "costShareBasis": "after_change",
     "passThrough": 0.7,
     "unknownCountries": []
   },
   "passThrough": 0.7,
   "queries": {
     "market": {
-      "id": "Q5",
-      "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_food_20001_m_yoyv2_night1027c12 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_night1027c12 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_all_items_v41690973_live_yoyv2_night1027c12 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_all_items_10001_m_yoyv2_night1027c12 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nORDER BY country, concept, period",
+      "id": "Q10",
+      "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_market_inflation_c2ec856d_ex20261027_185440_1840793 WHERE period >= '2025-07'\nORDER BY country, concept, period",
       "columns": [
         "country",
         "concept",
@@ -533,8 +534,8 @@
       ]
     },
     "pricing": {
-      "id": "Q11",
-      "sql": "SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept AS rate_concept, s.category_label, s.frequency, s.period, s.yoy_pct, s.source_id\nFROM psig.v_price_list_night1027c12 p\nJOIN (\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_condiments_v41690974_live_yoyv2_night1027c12 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_condiments_97549_m_yoyv2_night1027c12 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_night1027c12 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_snacks_115501_m_yoyv2_night1027c12 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_food_20001_m_yoyv2_night1027c12 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_night1027c12 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n) s ON p.country = s.country AND p.sku_category = s.concept\nWHERE p.country IN ('CA', 'AU')\nORDER BY p.country, p.sku, s.period",
+      "id": "Q21",
+      "sql": "SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept AS rate_concept, s.category_label, s.frequency, s.period, s.yoy_pct, s.source_id\nFROM psig.v_price_list_ex20261027_185440_1840793 p\nJOIN (\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_condiments_97549_m_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_snacks_115501_m_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_au_food_20001_m_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n) s ON p.country = s.country AND p.sku_category = s.concept\nWHERE p.country IN ('CA', 'AU')\nORDER BY p.country, p.sku, s.period",
       "columns": [
         "sku",
         "product",
@@ -1858,9 +1859,9 @@
           "basis": "Food historical market benchmark: latest 2.2% and average 4.1% (12 of 12 monthly observations)"
         },
         "verdict": "within the market benchmark",
-        "costNeed": 3.4,
+        "costNeed": 3.1,
         "costVsMarket": "within the market benchmark",
-        "cite": "Q5"
+        "cite": "Q10"
       },
       {
         "country": "AU",
@@ -2008,9 +2009,9 @@
           "basis": "Food and non-alcoholic beverages historical market benchmark: latest 3% and average 3.2% (12 of 12 monthly observations)"
         },
         "verdict": "within the market benchmark",
-        "costNeed": 3.4,
-        "costVsMarket": "above the market benchmark",
-        "cite": "Q5"
+        "costNeed": 3.1,
+        "costVsMarket": "within the market benchmark",
+        "cite": "Q10"
       }
     ],
     "alignment": {
@@ -2041,7 +2042,7 @@
           "latestYoy": 3
         }
       ],
-      "cite": "Q5",
+      "cite": "Q10",
       "note": "Only observation dates are aligned. National baskets and category coverage can still differ, so equal dates do not make these series identical measures."
     },
     "skus": [
@@ -2059,13 +2060,13 @@
         "high": 8.62,
         "atProposed": 8.76,
         "verdict": "above the market benchmark",
-        "cite": "Q11",
+        "cite": "Q21",
         "rateLabel": "Food additives and condiments",
         "avg12": 1.4,
         "rangeLow": 1.3,
         "rangeHigh": 1.4,
         "coarser": false,
-        "selectionReason": "covers condiment products",
+        "selectionReason": "Covers condiment and sauce products.",
         "selectionSource": "memory",
         "selectionFit": "specific"
       },
@@ -2083,13 +2084,13 @@
         "high": 4.19,
         "atProposed": 4.11,
         "verdict": "within the market benchmark",
-        "cite": "Q11",
+        "cite": "Q21",
         "rateLabel": "Snacks and confectionery",
         "avg12": 4.9,
         "rangeLow": 0.6,
         "rangeHigh": 4.9,
         "coarser": false,
-        "selectionReason": "covers snack products",
+        "selectionReason": "Covers savoury snack and beverage items.",
         "selectionSource": "memory",
         "selectionFit": "specific"
       },
@@ -2107,7 +2108,7 @@
         "high": 10.84,
         "atProposed": 10.82,
         "verdict": "within the market benchmark",
-        "cite": "Q11",
+        "cite": "Q21",
         "rateLabel": "Food and non-alcoholic beverages",
         "avg12": 3.2,
         "rangeLow": 3,
@@ -2128,7 +2129,7 @@
         "high": 7.8,
         "atProposed": 7.71,
         "verdict": "within the market benchmark",
-        "cite": "Q11",
+        "cite": "Q21",
         "rateLabel": "Food",
         "avg12": 4.1,
         "rangeLow": 2.2,
@@ -2152,7 +2153,7 @@
         "high": 3.95,
         "atProposed": 3.9,
         "verdict": "within the market benchmark",
-        "cite": "Q11",
+        "cite": "Q21",
         "rateLabel": "Food",
         "avg12": 4.1,
         "rangeLow": 2.2,
@@ -2176,7 +2177,7 @@
         "high": 10.4,
         "atProposed": 10.29,
         "verdict": "within the market benchmark",
-        "cite": "Q11",
+        "cite": "Q21",
         "rateLabel": "Food",
         "avg12": 4.1,
         "rangeLow": 2.2,

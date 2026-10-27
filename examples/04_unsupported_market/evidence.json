@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
-  "methodVersion": 2,
-  "calculatedAt": "2026-10-26T18:40:20.301Z",
-  "startedAt": "2026-10-26T18:40:11.246Z",
+  "methodVersion": 3,
+  "calculatedAt": "2026-10-27T09:55:48.540Z",
+  "startedAt": "2026-10-27T09:55:45.351Z",
   "request": {
     "raw": "japan + canada food prices, ok to raise 5%?",
     "countries": [
@@ -21,8 +21,8 @@
   "passThrough": 0.6,
   "queries": {
     "market": {
-      "id": "Q3",
-      "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_night1027c12 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_all_items_v41690973_live_yoyv2_night1027c12 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nORDER BY country, concept, period",
+      "id": "Q6",
+      "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_market_inflation_ded1b012_ex20261027_185440_1840793 WHERE period >= '2025-07'\nORDER BY country, concept, period",
       "columns": [
         "country",
         "concept",
@@ -297,8 +297,8 @@
       ]
     },
     "pricing": {
-      "id": "Q7",
-      "sql": "SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept AS rate_concept, s.category_label, s.frequency, s.period, s.yoy_pct, s.source_id\nFROM psig.v_price_list_night1027c12 p\nJOIN (\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_condiments_v41690974_live_yoyv2_night1027c12 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_night1027c12 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_night1027c12 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n) s ON p.country = s.country AND p.sku_category = s.concept\nWHERE p.country IN ('CA')\nORDER BY p.country, p.sku, s.period",
+      "id": "Q13",
+      "sql": "SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept AS rate_concept, s.category_label, s.frequency, s.period, s.yoy_pct, s.source_id\nFROM psig.v_price_list_ex20261027_185440_1840793 p\nJOIN (\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261027_185440_1840793 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n) s ON p.country = s.country AND p.sku_category = s.concept\nWHERE p.country IN ('CA')\nORDER BY p.country, p.sku, s.period",
       "columns": [
         "sku",
         "product",
@@ -1076,7 +1076,7 @@
           "basis": "Food historical market benchmark: latest 2.2% and average 4.1% (12 of 12 monthly observations)"
         },
         "verdict": "above the market benchmark",
-        "cite": "Q3"
+        "cite": "Q6"
       }
     ],
     "alignment": {
@@ -1085,7 +1085,7 @@
       "requestedCountries": [
         "CA"
       ],
-      "cite": "Q3",
+      "cite": "Q6",
       "reason": "At least two distinct requested markets are needed for a common-period comparison."
     },
     "skus": [
@@ -1103,7 +1103,7 @@
         "high": 7.8,
         "atProposed": 7.86,
         "verdict": "above the market benchmark",
-        "cite": "Q7",
+        "cite": "Q13",
         "rateLabel": "Food",
         "avg12": 4.1,
         "rangeLow": 2.2,
@@ -1127,7 +1127,7 @@
         "high": 3.95,
         "atProposed": 3.98,
         "verdict": "above the market benchmark",
-        "cite": "Q7",
+        "cite": "Q13",
         "rateLabel": "Food",
         "avg12": 4.1,
         "rangeLow": 2.2,
@@ -1151,7 +1151,7 @@
         "high": 10.4,
         "atProposed": 10.49,
         "verdict": "above the market benchmark",
-        "cite": "Q7",
+        "cite": "Q13",
         "rateLabel": "Food",
         "avg12": 4.1,
         "rangeLow": 2.2,

@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "methodVersion": 2,
-  "calculatedAt": "2026-10-26T18:42:24.874Z",
-  "startedAt": "2026-10-26T18:41:40.696Z",
+  "methodVersion": 3,
+  "calculatedAt": "2026-10-27T09:56:19.288Z",
+  "startedAt": "2026-10-27T09:56:03.409Z",
   "request": {
-    "raw": "france, italy and spain food prices: can we go +3%? we pass on about 70%",
+    "raw": "france, italy and spain food prices: can we raise prices +3%? we pass on about 70%",
     "countries": [
       "FR",
       "IT",
@@ -22,8 +22,8 @@
   "passThrough": 0.7,
   "queries": {
     "market": {
-      "id": "Q19",
-      "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_fr_food_prc_hicp_minr_cp01_night1027c12 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_fr_all_items_prc_hicp_minr_total_night1027c12 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_it_food_prc_hicp_minr_cp01_night1027c12 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_it_all_items_prc_hicp_minr_total_night1027c12 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_es_food_prc_hicp_minr_cp01_night1027c12 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nUNION ALL\nSELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_es_all_items_prc_hicp_minr_total_night1027c12 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\nORDER BY country, concept, period",
+      "id": "Q26",
+      "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_market_inflation_6ad2cf6d_ex20261027_185440_1840793 WHERE period >= '2025-07'\nORDER BY country, concept, period",
       "columns": [
         "country",
         "concept",
@@ -1020,7 +1020,7 @@
           "basis": "Food and non-alcoholic beverages historical market benchmark: latest 1.5% and average 1.5% (12 of 12 monthly observations)"
         },
         "verdict": "above the market benchmark",
-        "cite": "Q19"
+        "cite": "Q26"
       },
       {
         "country": "IT",
@@ -1184,7 +1184,7 @@
           "basis": "Food and non-alcoholic beverages historical market benchmark: latest 1.7% and average 2.1% (12 of 12 monthly observations)"
         },
         "verdict": "above the market benchmark",
-        "cite": "Q19"
+        "cite": "Q26"
       },
       {
         "country": "ES",
@@ -1348,7 +1348,7 @@
           "basis": "Food and non-alcoholic beverages historical market benchmark: latest 2.7% and average 2.5% (12 of 12 monthly observations)"
         },
         "verdict": "above the market benchmark",
-        "cite": "Q19"
+        "cite": "Q26"
       }
     ],
     "alignment": {
@@ -1388,7 +1388,7 @@
           "latestYoy": 2.7
         }
       ],
-      "cite": "Q19",
+      "cite": "Q26",
       "note": "Only observation dates are aligned. National baskets and category coverage can still differ, so equal dates do not make these series identical measures."
     },
     "skus": []
