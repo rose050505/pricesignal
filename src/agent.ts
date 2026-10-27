@@ -216,8 +216,11 @@ export class PriceSignalAgent extends EventEmitter {
     if (last) {
       const changed = requestMarkets(raw, [...named, ...(last.request.unknownCountries ?? [])]);
       const changedMarkets = changed.countries.length || changed.unknown.length;
-      countries.splice(0, countries.length, ...(changedMarkets ? changed.countries : last.request.countries as Country[]));
-      unknown.splice(0, unknown.length, ...(changedMarkets ? changed.unknown : last.request.unknownCountries ?? []));
+      // A market remembered as not covered may be covered now (the US since 28 Oct): read it again by name.
+      const lastUnknown = last.request.unknownCountries ?? [];
+      const nowCovered = lastUnknown.flatMap((u) => { const c = normalizeCountry(u, false); return c ? [c] : []; });
+      countries.splice(0, countries.length, ...(changedMarkets ? changed.countries : [...new Set([...(last.request.countries as Country[]), ...nowCovered])]));
+      unknown.splice(0, unknown.length, ...(changedMarkets ? changed.unknown : lastUnknown.filter((u) => !normalizeCountry(u, false))));
       this.log("memory", `recalled last request ${last.id}: markets ${last.request.countries.join(", ")}${last.request.unknownCountries?.length ? `; not covered: ${last.request.unknownCountries.join(", ")}` : ""}, category "${last.request.concept}"${last.request.proposedChangePct !== undefined ? `, ${signedPct(last.request.proposedChangePct)}` : ""}`);
     }
     // Nothing named and nothing remembered: the demo markets, said in the brief. Only unsupported markets named: none.
@@ -273,7 +276,7 @@ export class PriceSignalAgent extends EventEmitter {
     const views = new Map<string, { view: string; label: string; via: "memory" | "onboarded"; note?: string; memoryId?: string }>();
     const candidates = new Map<string, Candidate[]>();
     const notes: string[] = [...(req.inputIssues ?? [])];
-    for (const u of req.unknownCountries) notes.push(`${u}: not covered yet - PriceSignal currently reads Eurostat (EU markets), Statistics Canada (CA) and ABS (AU).`);
+    for (const u of req.unknownCountries) notes.push(`${u}: not covered yet - PriceSignal currently reads Eurostat (EU markets), Statistics Canada (CA), ABS (AU) and the US BLS (US).`);
     if (req.defaultMarkets) notes.push(this.requestReadByRules
       ? `No supported market was recognised in the question (the model could not read it, so only exact market names were matched); the brief covers the default markets ${req.countries.join(", ")}.`
       : `No market was named in the question, so the brief covers the default markets ${req.countries.join(", ")}.`);

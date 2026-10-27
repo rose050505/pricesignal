@@ -172,3 +172,12 @@ test("compare can use another verified view after review rediscovery fails witho
   assert.equal(f.memory.hmem.store.get(f.old).confidence, f.confidence);
   assert.equal(f.memory.findMapping("DE", "food")!.id, f.old);
 });
+
+test("a market remembered as not covered is covered on the next 'same as last time' once it is supported (US, 28 Oct)", async () => {
+  const memory = memoryOnly();
+  // A request remembered before the US was supported: US stored under unknownCountries.
+  memory.rememberRequest({ raw: "united states + canada food prices, ok to raise 5%?", countries: ["CA"], concept: "food", conceptWords: ["food"], proposedChangePct: 5, unknownCountries: ["United States"] } as any);
+  const req = await parser(memory, { countries: [], concept: null, proposed_change_pct: 4 }).parse("same as last time, but +4%");
+  assert.deepEqual(req.countries, ["CA", "US"]);
+  assert.deepEqual(req.unknownCountries, []);
+});

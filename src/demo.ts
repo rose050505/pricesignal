@@ -5,6 +5,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { zetarisSuffix } from "./sources/types.ts";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const REPO = "https://github.com/rose050505/pricesignal";
@@ -44,7 +45,7 @@ export function buildDemoSite(outDir: string, examplesDir = path.join(ROOT, "exa
       if (m) models.add(m[1]);
     }
     // recordedAt is written when a run ends; the session started elapsedSeconds earlier.
-    namespace ??= typeof recording.namespace === "string" ? recording.namespace : null;
+    namespace ??= typeof recording.namespace === "string" ? zetarisSuffix(recording.namespace) : null;
     if (recording.recordedAt) recorded.push(new Date(Date.parse(recording.recordedAt) - (recording.elapsedSeconds ?? 0) * 1000).toISOString());
   }
   const first = recorded.sort()[0];

@@ -75,5 +75,5 @@ test("the live trace leaves out the run's Zetaris suffix; the status endpoint na
   assert.match(row, /psig\.v_us_food_cuur0000saf1_yoyv2 \(verified: 20 rows\)/);
   assert.doesNotMatch(row, /ex20261027/);
   const server = fs.readFileSync(new URL("../src/server.ts", import.meta.url), "utf8");
-  assert.match(server, /namespace: process\.env\.PSIG_ZETARIS_NS \|\| null/);
+  assert.match(server, /namespace: zetarisSuffix\(\)/);
 });

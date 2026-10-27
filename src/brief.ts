@@ -696,14 +696,19 @@ function unsupportedClaims(text: string): string[] {
 // Narrative adjectives supplement the request parser's names and ISO codes.
 const NARRATIVE_COUNTRY_ADJECTIVES: Record<string, Country> = {
   german: "DE", australian: "AU", aussie: "AU", canadian: "CA", french: "FR", italian: "IT", spanish: "ES", belgian: "BE",
-  austrian: "AT", irish: "IE", portuguese: "PT", finnish: "FI", swedish: "SE", danish: "DK", polish: "PL",
+  austrian: "AT", irish: "IE", portuguese: "PT", finnish: "FI", swedish: "SE", danish: "DK", polish: "PL", american: "US",
 };
+// Names a single-word scan cannot see: "the United States", "the U.S.", "the U.S.A.".
+const NARRATIVE_COUNTRY_PHRASES: [RegExp, Country][] = [[/\bUnited\s+States\b|\bU\.S\.(?:A\.)?/g, "US"]];
 
 function countryMentions(text: string, facts: MarketFacts[]): { at: number; end: number; country: Country }[] {
-  return [...text.matchAll(/\p{L}+/gu)].flatMap((m) => {
+  const phrases = NARRATIVE_COUNTRY_PHRASES.flatMap(([re, country]) => facts.some((f) => f.country === country) ? [...text.matchAll(re)].map((m) => ({ at: m.index!, end: m.index! + m[0].length, country })) : []);
+  const words = [...text.matchAll(/\p{L}+/gu)].flatMap((m) => {
+    if (phrases.some((p) => m.index! >= p.at && m.index! < p.end)) return [];
     const country = normalizeCountry(m[0], false) ?? NARRATIVE_COUNTRY_ADJECTIVES[m[0].toLowerCase()];
     return country && facts.some((f) => f.country === country) ? [{ at: m.index!, end: m.index! + m[0].length, country }] : [];
   });
+  return [...phrases, ...words].sort((a, b) => a.at - b.at);
 }
 
 /** Scope explicit country claims only. Countryless aggregate prose keeps the existing checks. */
@@ -761,6 +766,9 @@ function internalPayloadErrors(text: string): string[] {
  * without facts (unit tests), the flat allowed list is used.
  */
 export function checkNarrative(n: Narrative, allowed: number[], facts?: MarketFacts[], req?: Request, policy?: number, extra: number[] = []): string[] {
+  // "the U.S. is at 3.4%" must not be split into two sentences at "U.S." before its number is matched to the US.
+  const abbrev = (t: unknown) => (typeof t === "string" ? t.replace(/\bU\.S\.(?:A\.)?(?=\s|$|[,;:)])/g, "US") : t) as string;
+  n = { ...n, headline: abbrev(n.headline), watch: n.watch === undefined ? undefined : abbrev(n.watch), markets: Object.fromEntries(Object.entries(n.markets ?? {}).map(([k, v]) => [k, abbrev(v)])) };
   const bad = [n.headline, n.watch, ...Object.values(n.markets ?? {})]
     .filter((text): text is string => typeof text === "string")
     .flatMap(internalPayloadErrors);

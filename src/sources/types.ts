@@ -43,8 +43,9 @@ export const COUNTRY_ALIASES: Record<string, Country> = {
   de: "DE", ger: "DE", germany: "DE", deutschland: "DE", "독일": "DE",
   ca: "CA", canada: "CA", canadian: "CA", "캐나다": "CA",
   au: "AU", aus: "AU", australia: "AU", oz: "AU", "호주": "AU",
-  // Not lower-case "us" (an ordinary word); upper-case "US" is read as the ISO code.
-  usa: "US", "u.s.": "US", "u.s.a.": "US", "united states": "US", america: "US", american: "US", "미국": "US",
+  // Not lower-case "us" (an ordinary word) or "America(n)" (Latin America; an American company); upper-case "US" is
+  // read as the ISO code.
+  usa: "US", "u.s.": "US", "u.s": "US", "u.s.a.": "US", "united states": "US", "미국": "US",
   france: "FR", frankreich: "FR", "프랑스": "FR",
   italy: "IT", italia: "IT", "이탈리아": "IT",
   spain: "ES", espana: "ES", "españa": "ES", "스페인": "ES",
@@ -90,6 +91,11 @@ export function safeIdent(...parts: string[]): string {
 /** Name of a Zetaris table or view. PSIG_ZETARIS_NS (optional) suffixes every name, so a run can register a fresh set of objects (a true cold start). */
 export function zetarisName(...parts: string[]): string {
   return safeIdent(...parts, process.env.PSIG_ZETARIS_NS ?? "");
+}
+
+/** The suffix every Zetaris name of this run ends with (PSIG_ZETARIS_NS as names spell it), or null. */
+export function zetarisSuffix(ns = process.env.PSIG_ZETARIS_NS): string | null {
+  return ns ? safeIdent(ns) || null : null;
 }
 
 export function monthsBack(n: number, from = new Date()): string {

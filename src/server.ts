@@ -9,6 +9,7 @@ import { ROOT, loadEnv, env } from "./env.ts";
 import { PriceSignalAgent, TraceEvent } from "./agent.ts";
 import type { Brief } from "./brief.ts";
 import { toResult } from "./result.ts";
+import { zetarisSuffix } from "./sources/types.ts";
 import { AgentMemory } from "./memory.ts";
 import { ZetarisClient } from "./zetaris.ts";
 import { providerConfig, providerStatus } from "./llm.ts";
@@ -40,7 +41,7 @@ const server = http.createServer(async (req, res) => {
       } catch {
         zetaris = "offline";
       }
-      return send(res, 200, { zetaris, provider: cfg.provider, baseUrl: cfg.baseUrl.replace(/\/\/[^/]*@/, "//"), fast: cfg.fast, deep: cfg.deep, state: st.state, models: st.models.slice(0, 20), memoryRecords: memory.hmem.store.all().length, namespace: process.env.PSIG_ZETARIS_NS || null });
+      return send(res, 200, { zetaris, provider: cfg.provider, baseUrl: cfg.baseUrl.replace(/\/\/[^/]*@/, "//"), fast: cfg.fast, deep: cfg.deep, state: st.state, models: st.models.slice(0, 20), memoryRecords: memory.hmem.store.all().length, namespace: zetarisSuffix() });
     }
     if (req.method === "GET" && url.pathname === "/api/memory") {
       return send(res, 200, memory.hmem.store.all().map((r: any) => ({ id: r.id, layer: r.layer, type: r.type, content: r.content, confidence: r.confidence, accessCount: r.accessCount })));

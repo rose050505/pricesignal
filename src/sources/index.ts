@@ -88,8 +88,9 @@ export async function ensureCached(z: SqlRunner, ref: string, opts: { now?: numb
 /** Whether an agency endpoint answers with JSON right now (used before refreshing a cached copy), asked as its REST table asks. */
 export async function sourceAnswers(url: string, agency?: string): Promise<boolean> {
   try {
-    await getJson(url, agency === "abs" ? abs.REQUEST_HEADERS : {}, 500);
-    return true;
+    const j = await getJson(url, agency === "abs" ? abs.REQUEST_HEADERS : {}, 500);
+    // BLS answers its daily limit with HTTP 200 and an error status: that must not replace a good cached copy.
+    return agency !== "bls" || j?.status === "REQUEST_SUCCEEDED";
   } catch {
     return false;
   }

@@ -27,10 +27,16 @@ export function requestMarkets(raw: string, modelNames: string[]): { countries: 
   const hits: { country: Country; at: number }[] = [];
   const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   for (const [alias, country] of Object.entries(COUNTRY_ALIASES)) {
-    const suffix = /[가-힣]/.test(alias) ? "(?=$|[^\\p{L}]|(?:에서|에서는|에는|으로|와|과|은|는|을|를|에|의|만|이랑|랑|하고|이나|나|및|도|까지)(?=$|[^\\p{L}]))" : "(?![\\p{L}])";
-    for (const match of raw.matchAll(new RegExp(`(?<![\\p{L}])${escape(alias)}${suffix}`, "giu"))) hits.push({ country, at: match.index! });
+    const suffix = /[가-힣]/.test(alias) ? "(?=$|[^\\p{L}]|(?:에서|에서는|에서의|에는|으로|와|과|은|는|이|가|을|를|에|의|만|이랑|랑|하고|이나|나|및|도|까지|시장)(?=$|[^\\p{L}]))" : "(?![\\p{L}])";
+    for (const match of raw.matchAll(new RegExp(`(?<![\\p{L}])${escape(alias)}${suffix}`, "giu"))) {
+      // "a Germany-based exporter" describes the company, not a market.
+      if (/^-?\s?(?:based|made)\b/i.test(raw.slice(match.index! + match[0].length))) continue;
+      hits.push({ country, at: match.index! });
+    }
   }
   for (const match of raw.matchAll(/\b[A-Z]{2}\b/g)) {
+    // "US$12.50", "a US-based exporter": a currency or the company, not a market.
+    if (/^(?:\$|-?\s?(?:based|made)\b|\s+dollars?\b)/i.test(raw.slice(match.index! + 2))) continue;
     const country = normalizeCountry(match[0], false);
     if (country) hits.push({ country, at: match.index! });
   }
