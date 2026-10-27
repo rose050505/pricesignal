@@ -99,7 +99,7 @@ export function stripThinking(text: string): string {
   return text.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
 }
 
-export async function chat(messages: ChatMessage[], opts: { lane?: "fast" | "deep"; temperature?: number; maxTokens?: number; attempts?: number; timeoutMs?: number; signal?: AbortSignal } = {}): Promise<ChatResult> {
+export async function chat(messages: ChatMessage[], opts: { lane?: "fast" | "deep"; temperature?: number; maxTokens?: number; attempts?: number; timeoutMs?: number; signal?: AbortSignal; /** send without the thinking switch (and keep room for reasoning) */ thinking?: boolean } = {}): Promise<ChatResult> {
   const cfg = providerConfig();
   const model = opts.lane === "deep" ? cfg.deep : cfg.fast;
   const headers: Record<string, string> = { "Content-Type": "application/json", Authorization: `Bearer ${cfg.token}`, ...cfg.headers };
@@ -108,7 +108,7 @@ export async function chat(messages: ChatMessage[], opts: { lane?: "fast" | "dee
   let lastErr: unknown;
   // Nemotron models accept "/no_think" in the system prompt to skip the hidden reasoning pass,
   // which otherwise costs 1-4k tokens (30-60 s on slower upstreams) per call.
-  const noThink = (process.env.PSIG_NO_THINK ?? "1") !== "0";
+  const noThink = !opts.thinking && (process.env.PSIG_NO_THINK ?? "1") !== "0";
   if (noThink) {
     messages = messages[0]?.role === "system"
       ? [{ ...messages[0], content: `/no_think\n${messages[0].content}` }, ...messages.slice(1)]

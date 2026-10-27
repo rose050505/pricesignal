@@ -370,6 +370,27 @@ test("the losing hedged request is cancelled and leaves no warning in the trace"
   assert.ok(agent.trace.some((e) => /the second request answered first/.test(e.title)));
 });
 
+test("the hedged second request goes without the thinking switch, so another Nightshift lane can answer", async () => {
+  // 27 Oct 18:39-18:41: with the switch, Nightshift sent requests to its NVIDIA lane only and twice returned
+  // "All candidate providers failed" after ~30 s; requests without the switch were served by the OpenRouter lane.
+  const seen: any[] = [];
+  const agent = new PriceSignalAgent({
+    hedgeMs: 20,
+    llm: (_m: any, opts: any = {}) => {
+      seen.push(opts);
+      if (seen.length === 1) return new Promise((_, rej) => opts.signal?.addEventListener("abort", () => rej(opts.signal.reason)));
+      return Promise.resolve({ text: '{"countries":["DE"],"concept":"food","proposed_change_pct":2}', model: "openrouter/nvidia/nemotron-3.5-lightning", provider: "f", ms: 1 });
+    },
+    sql: new FakeZ(),
+    memory: new AgentMemory(fs.mkdtempSync(path.join(os.tmpdir(), "psig-"))),
+  });
+  const r = await agent.parse("DE food +2%");
+  assert.equal(r.proposedChangePct, 2);
+  assert.equal(seen[0].thinking, undefined);
+  assert.equal(seen[1].thinking, true);
+  assert.ok(agent.trace.some((e) => /sent the same request again without the thinking switch/.test(e.title)), agent.trace.map((e) => e.title).join("\n"));
+});
+
 test("ordinary words in the question are not read as markets ('inland' is not Finland, 'pain' is not Spain)", async () => {
   const memory = new AgentMemory(fs.mkdtempSync(path.join(os.tmpdir(), "psig-")));
   memory.rememberRequest({ countries: ["FR", "IT", "ES"], concept: "food", conceptWords: ["food"], proposedChangePct: 5, raw: "first" });

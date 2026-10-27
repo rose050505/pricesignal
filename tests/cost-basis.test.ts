@@ -88,8 +88,8 @@ test("evidence preserves and checks the declared basis while old saved runs reta
   assert.equal(verifyEvidence(e).ok, false, "changing basis without changing the computed target is detected");
   (e.request as any).costShareBasis = "unknown";
   assert.equal(verifyEvidence(e).ok, false);
-  for (const dir of fs.readdirSync(new URL("../examples/", import.meta.url)).filter(s => /^\d/.test(s))) {
-    const saved = JSON.parse(fs.readFileSync(new URL(`../examples/${dir}/evidence.json`, import.meta.url), "utf8"));
+  for (const dir of fs.readdirSync(new URL("./fixtures/method2-examples/", import.meta.url))) {
+    const saved = JSON.parse(fs.readFileSync(new URL(`./fixtures/method2-examples/${dir}`, import.meta.url), "utf8"));
     assert.equal(saved.request.costShareBasis, undefined);
     const v = verifyEvidence(saved); assert.equal(v.ok, true, `${dir}: ${v.errors.join("; ")}`);
   }

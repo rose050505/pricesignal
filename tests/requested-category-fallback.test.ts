@@ -194,10 +194,11 @@ test("method 2 with no market rows preserves its omitted cost output while metho
 });
 
 test("all six preserved method-2 evidence packets retain their 2343 recorded checks", () => {
+  // The 27 Oct afternoon recordings (method 2), kept as fixtures after examples/ was re-recorded with method 3.
   let checks = 0, packets = 0;
-  for (const entry of readdirSync(new URL("../examples/", import.meta.url), { withFileTypes: true })) {
-    if (!entry.isDirectory() || !/^0[1-6]_/.test(entry.name)) continue;
-    const e = JSON.parse(readFileSync(new URL(`../examples/${entry.name}/evidence.json`, import.meta.url), "utf8"));
+  for (const name of readdirSync(new URL("./fixtures/method2-examples/", import.meta.url))) {
+    const e = JSON.parse(readFileSync(new URL(`./fixtures/method2-examples/${name}`, import.meta.url), "utf8"));
+    const entry = { name };
     assert.equal(e.methodVersion, 2);
     const v = verifyEvidence(e);
     assert.equal(v.ok, true, `${entry.name}: ${v.errors.join("\n")}`);
@@ -205,6 +206,19 @@ test("all six preserved method-2 evidence packets retain their 2343 recorded che
   }
   assert.equal(packets, 6);
   assert.equal(checks, 2343);
+});
+
+test("the six current example packets use method 3 and verify offline", () => {
+  let packets = 0;
+  for (const entry of readdirSync(new URL("../examples/", import.meta.url), { withFileTypes: true })) {
+    if (!entry.isDirectory() || !/^0[1-6]_/.test(entry.name)) continue;
+    const e = JSON.parse(readFileSync(new URL(`../examples/${entry.name}/evidence.json`, import.meta.url), "utf8"));
+    assert.equal(e.methodVersion, 3, entry.name);
+    const v = verifyEvidence(e);
+    assert.equal(v.ok, true, `${entry.name}: ${v.errors.join("\n")}`);
+    packets++;
+  }
+  assert.equal(packets, 6);
 });
 
 test("method-2 outcomes are not compared as a data revision and new outcomes record method 3", () => {

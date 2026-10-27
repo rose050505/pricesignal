@@ -132,8 +132,11 @@ export class PriceSignalAgent extends EventEmitter {
    * consecutive calls, so if no reply has come after hedgeMs (or the first request fails early), the same
    * request is sent once more and the first reply wins. Fast calls never send the second request.
    */
-  private hedged(what: string, call: (signal: AbortSignal) => Promise<ChatResult>): Promise<ChatResult> {
-    if (!Number.isFinite(this.hedgeMs)) return call(new AbortController().signal);
+  // The second request goes without the thinking switch: through Nightshift, switched requests went to its NVIDIA lane
+  // only, and when that lane failed ("All candidate providers failed", 27 Oct 18:39) nothing else could answer.
+  private hedged(what: string, call: (signal: AbortSignal, opts: { thinking?: boolean }) => Promise<ChatResult>): Promise<ChatResult> {
+    if (!Number.isFinite(this.hedgeMs)) return call(new AbortController().signal, {});
+    const otherLane = thinkingOff();
     return new Promise<ChatResult>((resolve, reject) => {
       let launched = 0;
       let failed = 0;
@@ -143,14 +146,14 @@ export class PriceSignalAgent extends EventEmitter {
       const hedge = (why: string) => {
         if (done || launched > 1) return;
         clearTimeout(timer);
-        this.log("warn", `${what}: ${why} - sent the same request again; the first reply wins`);
+        this.log("warn", `${what}: ${why} - sent the same request again${otherLane ? " without the thinking switch (another Nightshift lane can answer)" : ""}; the first reply wins`);
         launch();
       };
       const launch = () => {
         const n = ++launched;
         const ctl = new AbortController();
         inFlight.push(ctl);
-        call(ctl.signal).then(
+        call(ctl.signal, n === 2 && otherLane ? { thinking: true } : {}).then(
           (r) => {
             if (done) return;
             done = true;
@@ -200,7 +203,7 @@ Reply with JSON only.`;
     let j: any = {};
     this.requestReadByRules = true;
     try {
-      const r = await this.hedged("request parsing", (signal) => this.llm([{ role: "user", content: prompt }], { lane: "fast", temperature: 0, attempts: 1, timeoutMs: 60_000, signal }));
+      const r = await this.hedged("request parsing", (signal, o) => this.llm([{ role: "user", content: prompt }], { lane: "fast", temperature: 0, attempts: 1, timeoutMs: 60_000, signal, ...o }));
       const parsed = extractJson(r.text);
       if (parsed) this.requestReadByRules = false;
       j = parsed ?? {};
@@ -322,7 +325,7 @@ Reply with JSON only.`;
         batch = [{ action: "compare", args: {} }];
       } else if (!autopilot) {
         try {
-          const r = await this.hedged("planner", (signal) => this.llm(messages, { lane: "fast", temperature: 0.1, maxTokens: thinkingOff() ? 1500 : 6000, attempts: 1, timeoutMs: 75_000, signal }));
+          const r = await this.hedged("planner", (signal, o) => this.llm(messages, { lane: "fast", temperature: 0.1, maxTokens: thinkingOff() ? 1500 : 6000, attempts: 1, timeoutMs: 75_000, signal, ...o }));
           const j = extractJson(r.text);
           batch = Array.isArray(j?.actions) ? j.actions.filter((a: any) => a?.action).slice(0, 8) : j?.action ? [j] : [];
           if (!batch.length) throw new Error(`no action in: ${r.text.slice(0, 120)}`);
@@ -1022,7 +1025,7 @@ Reply with JSON only.`;
         break;
       }
       try {
-        const r = await this.hedged("narrative", (signal) => this.llm(ask, { lane: (process.env.PSIG_NARRATIVE_LANE as "fast" | "deep") || "fast", temperature: 0.2, maxTokens, attempts: 1, timeoutMs: Math.max(1_000, deadline - Date.now()), signal }));
+        const r = await this.hedged("narrative", (signal, o) => this.llm(ask, { lane: (process.env.PSIG_NARRATIVE_LANE as "fast" | "deep") || "fast", temperature: 0.2, maxTokens, attempts: 1, timeoutMs: Math.max(1_000, deadline - Date.now()), signal, ...o }));
         let n = extractJson(r.text) as Narrative | null;
         // A headline-only rewrite is merged with the paragraphs that already passed the check.
         if (headlineFor && n?.headline && n.markets === undefined) n = { ...headlineFor, headline: n.headline };
