@@ -77,3 +77,12 @@ test("the live trace leaves out the run's Zetaris suffix; the status endpoint na
   const server = fs.readFileSync(new URL("../src/server.ts", import.meta.url), "utf8");
   assert.match(server, /namespace: zetarisSuffix\(\)/);
 });
+
+test("a SQL line cut inside the run suffix loses the fragment too (QA, 28 Oct 01:25)", () => {
+  const b = browser();
+  b.run('runSuffix="ex20261028_005844_2524371"');
+  b.run(`addTrace(${JSON.stringify({ kind: "sql", title: "Q19: SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_au_food_20001_m_yoyv2_ex20261028_0" })})`);
+  const row = b.node("#trace").children.at(-1)!.innerHTML;
+  assert.match(row, /psig\.v_au_food_20001_m_yoyv2…/);
+  assert.doesNotMatch(row, /ex2026/);
+});

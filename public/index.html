@@ -102,7 +102,8 @@ EX.forEach(t=>{const b=document.createElement("button");b.textContent=t;b.onclic
 let servedModel=null,modelRunStarted=false;
 // Every Zetaris object of a run carries the run's suffix (PSIG_ZETARIS_NS); the live trace leaves it out, the SQL keeps it.
 let runSuffix=null;
-const shortNames=t=>runSuffix?String(t).split("_"+runSuffix).join(""):t;
+// A SQL line cut at 90 characters can end inside the suffix ("..._yoyv2_ex2026"): that fragment goes too.
+const shortNames=t=>{if(!runSuffix)return t;let s=String(t).split("_"+runSuffix).join("");const tail="_"+runSuffix;for(let k=tail.length-1;k>=2;k--)if(s.endsWith(tail.slice(0,k))){s=s.slice(0,-k)+"…";break}return s};
 function showModel(){const p=$("#modelpill");if(!p)return;if(servedModel){p.textContent=servedModel.t;p.className=servedModel.c}else if(modelRunStarted){p.textContent=runActive?"model: awaiting a successful response":"model: no successful response this run";p.className="pill"}}
 async function status(){try{const s=await (await fetch("/api/status")).json();runSuffix=s.namespace||null;
   if(s.replay){$("#status").innerHTML=`<span class="pill ok">Replay of recorded runs · no live calls</span><span class="pill" id="modelpill">recorded model: ${esc(s.fast)}</span><span class="pill">Zetaris · recorded SQL results</span><span class="pill">H-MEM · recorded</span>`;showModel();return}
