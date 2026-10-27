@@ -117,6 +117,9 @@ export interface Brief {
 const r1 = (x: number) => Math.round(x * 10 + (x >= 0 ? 1e-9 : -1e-9)) / 10;
 /** A proposed change as the user would write it: "+5%", "-2%". */
 export const signedPct = (x: number) => `${x > 0 ? "+" : ""}${x}%`;
+/** A market benchmark as text: "0.4–1.4%", or one value when both ends round to the same figure. */
+export const benchmarkText = (r: { low: number; high: number }) => (r.low.toFixed(1) === r.high.toFixed(1) ? `${r.low.toFixed(1)}% (single value)` : `${r.low.toFixed(1)}–${r.high.toFixed(1)}%`);
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 function periodIndex(p: string): number {
   const m = p.match(/^(\d{4})-(0[1-9]|1[0-2])$/);
@@ -853,7 +856,7 @@ export function gapSummary(b: Brief): string | undefined {
     const name = first ? `the ${f.country} benchmark` : f.country;
     if (f.verdict === "above the market benchmark") parts.push(`${pp(p - high)} pp above ${name}${first ? " top" : ""} (${high.toFixed(1)}%)`);
     else if (f.verdict === "below the market benchmark") parts.push(`${pp(low - p)} pp below ${name}${first ? " bottom" : ""} (${low.toFixed(1)}%)`);
-    else parts.push(`within ${name} (${low.toFixed(1)}–${high.toFixed(1)}%)`);
+    else parts.push(`within ${name} (${benchmarkText({ low, high })})`);
   }
   if (!parts.length) return undefined;
   const need = b.facts.find((f) => f.costNeed !== undefined)?.costNeed;
@@ -938,7 +941,7 @@ export function renderBrief(b: Brief): string {
     const s = requestedSeries(f, req);
     const context = f.allItems && req.concept !== "all_items" ? `${fmt(f.allItems.latestYoy)} (All-items context only; ${f.allItems.latestPeriod})` : fmt(f.allItems?.latestYoy);
     L.push(
-      `| ${f.country} (${f.agency}) | ${s?.label ?? `${req.concept} unavailable`} | ${s?.latestPeriod ?? "-"}${f.monthsStale !== undefined && f.monthsStale > 2 ? ` ⚠ ${f.monthsStale} mo old` : ""} | ${fmt(s?.latestYoy)} | ${fmt(s?.avg12)}${s ? ` (${s.averageLabel ?? "available observations"})` : ""} | ${s?.trend ?? "-"} | ${context} | ${f.suggested ? `${f.suggested.low.toFixed(1)}–${f.suggested.high.toFixed(1)}%` : "-"} | ${f.verdict ?? "-"} |`,
+      `| ${f.country} (${f.agency}) | ${s?.label ?? `${req.concept} unavailable`} | ${s?.latestPeriod ?? "-"}${f.monthsStale !== undefined && f.monthsStale > 2 ? ` ⚠ ${f.monthsStale} mo old` : ""} | ${fmt(s?.latestYoy)} | ${fmt(s?.avg12)}${s ? ` (${s.averageLabel ?? "available observations"})` : ""} | ${s?.trend ?? "-"} | ${context} | ${f.suggested ? benchmarkText(f.suggested) : "-"} | ${f.verdict ?? "-"} |`,
     );
   }
   L.push("", `Every rate above comes from Zetaris query **${b.compared.id}** (one federated SQL over the onboarded sources); market benchmarks and comparisons are computed in code from those rates.`, "");
@@ -948,7 +951,7 @@ export function renderBrief(b: Brief): string {
     if (a.status === "unavailable") L.push(a.reason, "");
     else {
       const cell = (s: string) => s.replace(/[\r\n]+/g, " ").replace(/\|/g, "\\|").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/`/g, "\\`");
-      L.push(`Latest common observation: **${a.period}** (${a.frequency === "Q" ? "quarterly" : "monthly"}; ${a.monthsOld} months before this brief). ${a.note}`, "");
+      L.push(`Latest common observation: **${a.period}** (${a.frequency === "Q" ? "quarterly" : "monthly"}; ${plural(a.monthsOld, "month")} before this brief). ${a.note}`, "");
       L.push("| Market | Selected official category | Common-period YoY | Latest observation | Source |", "|---|---|---|---|---|");
       for (const row of a.rows) L.push(`| ${row.country} | ${cell(row.label)} | ${fmt(r1(row.yoy))} | ${row.latestPeriod}: ${fmt(row.latestYoy)} | ${cell(row.sourceId)} · ${a.cite} |`);
       L.push("", "The latest-period market benchmarks and SKU price scenarios remain unchanged. This table aligns observation dates only.", "");
@@ -971,7 +974,7 @@ export function renderBrief(b: Brief): string {
     const s = requestedSeries(f, req);
     const prose = b.narrative?.markets?.[f.country];
     L.push(`### ${f.country} — ${f.agency}`);
-    L.push(prose ?? (s ? `${s.label}: ${fmt(s.latestYoy)} year on year in ${s.latestPeriod} (${s.trend} vs. six months ago; average ${fmt(s.avg12)}, ${s.averageLabel ?? "available observations"}). Historical market benchmark ${f.suggested?.low.toFixed(1)}–${f.suggested?.high.toFixed(1)}%.` : `Requested category (${req.concept}) unavailable; no market benchmark or proposal/cost comparison is available.`));
+    L.push(prose ?? (s ? `${s.label}: ${fmt(s.latestYoy)} year on year in ${s.latestPeriod} (${s.trend} vs. six months ago; average ${fmt(s.avg12)}, ${s.averageLabel ?? "available observations"}). Historical market benchmark ${f.suggested ? benchmarkText(f.suggested) : "unavailable"}.` : `Requested category (${req.concept}) unavailable; no market benchmark or proposal/cost comparison is available.`));
     if (s) L.push(`<sub>source: \`${s.sourceId}\` · ${s.frequency === "Q" ? "quarterly" : "monthly"} · cite ${f.cite}</sub>`);
     else if (f.allItems) {
       const context = f.allItems;
@@ -986,7 +989,7 @@ export function renderBrief(b: Brief): string {
     L.push(`Compare the cost-recovery price scenario with the historical movement of consumer prices. Neither establishes demand, competitor responses or a profit-maximizing price.`, "");
     for (const f of costed) {
       const s = (f.category ?? f.allItems)!;
-      const range = `${f.suggested!.low.toFixed(1)}–${f.suggested!.high.toFixed(1)}%`;
+      const range = benchmarkText(f.suggested!);
       const need = signedPct(f.costNeed!);
       L.push(`- ${f.country}: the ${need} cost-recovery price scenario is ${f.costVsMarket} (${s.label}: ${range}).`);
     }
@@ -1012,7 +1015,7 @@ export function renderBrief(b: Brief): string {
   L.push(`## Evidence`);
   L.push(`Views: ${b.views.map((v) => `\`psig.${v.view}\` (${v.via})`).join(", ")}`, "");
   for (const q of b.sqlLog.filter((q) => q.id === b.compared.id || q.id === b.pricingQuery?.id || /^SELECT COUNT/.test(q.sql))) {
-    L.push(`<details><summary>${q.id} · ${q.rows.length} rows · ${q.ms} ms</summary>\n\n\`\`\`sql\n${q.sql}\n\`\`\`\n</details>`);
+    L.push(`<details><summary>${q.id} · ${plural(q.rows.length, "row")} · ${q.ms} ms</summary>\n\n\`\`\`sql\n${q.sql}\n\`\`\`\n</details>`);
   }
   if (!b.narrative) L.push("", `_Narrative omitted: ${b.narrativeIssue ? NARRATIVE_ISSUE[b.narrativeIssue] : "the model's text was not available"}, so only computed facts are shown._`);
   return L.join("\n");
