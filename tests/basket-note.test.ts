@@ -31,7 +31,7 @@ test("no note when every series has the same scope, for other categories, or for
 test("the brief and the result card carry the note", () => {
   const b: any = { request: req, facts: [DE, CA, AU], notes: [], passThrough: 0.7, compared: { id: "Q1", sql: "", columns: [], rows: [], ms: 0 }, sqlLog: [], views: [], ms: 1, trace: [] };
   assert.match(renderBrief(b), /^Basket note: the CA \(StatCan Food\) and AU/m);
-  const server = fs.readFileSync(new URL("../src/server.ts", import.meta.url), "utf8");
+  const server = fs.readFileSync(new URL("../src/result.ts", import.meta.url), "utf8");
   assert.match(server, /basket: b\.facts\.length \? basketNote\(b\.facts, b\.request\) \?\? null : null/);
   const html = fs.readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
   // At the decision point, beside the interpreted category - not folded into the method details.

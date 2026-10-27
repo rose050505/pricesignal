@@ -347,7 +347,7 @@ test('the comparison table has its own horizontal scroll region for narrow scree
 test('the shared server serializer preserves alignment in partial and final payloads and uses null when absent', () => {
   // Execute the actual serializer body without starting the server, loading env,
   // opening memory, or contacting any service.
-  const server = fs.readFileSync(new URL('../src/server.ts', import.meta.url), 'utf8');
+  const server = fs.readFileSync(new URL('../src/result.ts', import.meta.url), 'utf8');
   const body = server.match(/function toResult\(b: Brief\) \{([\s\S]*?)\n\}/)?.[1];
   assert.ok(body);
   const serialize = vm.runInNewContext(`(function(b) { ${body} })`, { COMPARE_COLUMNS: [], mergeNotes });

@@ -5,7 +5,7 @@ import vm from "node:vm";
 import { COMPARE_COLUMNS } from "../src/sources/index.ts";
 import { basketNote, fallbackHeadline, fitSummary, gapSummary, mergeNotes } from "../src/brief.ts";
 
-const source = fs.readFileSync(new URL("../src/server.ts", import.meta.url), "utf8");
+const source = fs.readFileSync(new URL("../src/result.ts", import.meta.url), "utf8");
 const body = source.match(/function toResult\(b: Brief\) \{([\s\S]*?)\n\}/)![1];
 const toResult = vm.runInNewContext(`(b) => {${body}}`, { COMPARE_COLUMNS, basketNote, fallbackHeadline, fitSummary, gapSummary, mergeNotes });
 

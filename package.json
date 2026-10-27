@@ -14,6 +14,7 @@
     "ask": "tsx src/cli.ts",
     "verify": "tsx src/verify.ts",
     "ui": "tsx src/server.ts",
+    "demo": "tsx src/demo.ts",
     "typecheck": "tsc -p ."
   },
   "devDependencies": {

@@ -48,6 +48,6 @@ test("the brief and the result card show the line under How far", () => {
 });
 
 test("the server sends the line with the result", () => {
-  const server = fs.readFileSync(new URL("../src/server.ts", import.meta.url), "utf8");
+  const server = fs.readFileSync(new URL("../src/result.ts", import.meta.url), "utf8");
   assert.match(server, /fit: b\.facts\.length \? fitSummary\(b\) \?\? null : null/);
 });

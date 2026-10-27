@@ -34,7 +34,7 @@ run() { # $1 folder name, $2 question
   CODE=$?
   T1=$(date +%s)
   OUT=$(sed -n 's/^\[pricesignal\] saved \(out\/[^ ]*\)\/brief\.md$/\1/p' "$LOG" | tail -n 1)
-  if [ "$CODE" -ne 0 ] || [ -z "$OUT" ] || [ ! -s "$OUT/brief.md" ] || [ ! -s "$OUT/trace.json" ] || [ ! -s "$OUT/evidence.json" ]; then
+  if [ "$CODE" -ne 0 ] || [ -z "$OUT" ] || [ ! -s "$OUT/brief.md" ] || [ ! -s "$OUT/trace.json" ] || [ ! -s "$OUT/evidence.json" ] || [ ! -s "$OUT/result.json" ]; then
     printf 'FAIL %s (%s s, exit %s) - see %s; previous examples preserved\n' "$NAME" "$((T1-T0))" "$CODE" "$LOG" | tee -a "$SUM"
     return 1
   fi
@@ -43,7 +43,7 @@ run() { # $1 folder name, $2 question
     return 1
   fi
   mkdir -p "$BUNDLE/staged/$NAME" || return 1
-  cp "$OUT/brief.md" "$OUT/trace.json" "$OUT/evidence.json" "$BUNDLE/staged/$NAME/" || return 1
+  cp "$OUT/brief.md" "$OUT/trace.json" "$OUT/evidence.json" "$OUT/result.json" "$BUNDLE/staged/$NAME/" || return 1
   node -e 'const fs=require("node:fs");fs.writeFileSync(process.argv[1],JSON.stringify({recordedAt:new Date().toISOString(),elapsedSeconds:Number(process.argv[2]),exitCode:0,namespace:process.env.PSIG_ZETARIS_NS},null,2)+"\n")' "$BUNDLE/staged/$NAME/recording.json" "$((T1-T0))" || return 1
   NAMES+=("$NAME")
   printf 'OK   %s (%s s, exit %s)\n' "$NAME" "$((T1-T0))" "$CODE" | tee -a "$SUM"

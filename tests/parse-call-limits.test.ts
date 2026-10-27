@@ -28,7 +28,7 @@ test("the parse call asks for a small reply with a short timeout when thinking i
 
 test("the UI example questions avoid the wording that failed through Nightshift", () => {
   const html = fs.readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
-  const ex = html.match(/const EX=\[([\s\S]*?)\];/)![1];
+  const ex = html.match(/const EX=REPLAY\?REPLAY\.examples\.map\(e=>e\.question\):\[([\s\S]*?)\];/)![1];
   assert.doesNotMatch(ex, /\bgo\s+[+-]?\d/i);
   assert.match(ex, /same as last time, but what about \+3%\?/);
   assert.match(ex, /can we raise prices \+3%\?/);

@@ -128,7 +128,7 @@ test("UI renders the before/after basis and a concrete unavailable-cost reason w
 });
 
 test("the actual server serializer supplies basis and cost diagnostics to both partial and final UI payloads", () => {
-  const server = fs.readFileSync(new URL("../src/server.ts", import.meta.url), "utf8");
+  const server = fs.readFileSync(new URL("../src/result.ts", import.meta.url), "utf8");
   const body = server.match(/function toResult\(b: Brief\) \{([\s\S]*?)\n\}/)![1];
   const serialize = vm.runInNewContext(`(function(b) { ${body} })`, { COMPARE_COLUMNS, basketNote, costInputNeeded, fallbackHeadline, fitSummary, gapSummary, mergeNotes });
   for (const partialStage of ["markets", "pricing", undefined]) {

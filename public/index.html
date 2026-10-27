@@ -53,6 +53,7 @@ button{border:0;border-radius:8px;padding:10px 16px;font:inherit;font-weight:600
 pre{font:12px/1.45 var(--mono);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;max-height:260px;white-space:pre}
 details summary{cursor:pointer;color:var(--muted);font-size:13px}
 details.method{margin-top:6px}
+.replay-banner{margin:12px 28px 0;padding:10px 14px;border-radius:10px;background:var(--accent-soft);color:var(--ink);font-size:13px}.replay-banner a{color:var(--accent)}
 .right{display:flex;flex-direction:column;gap:16px;min-width:0}
 .empty{color:var(--muted);text-align:center;padding:60px 20px}
 .src{font:11px var(--mono);color:var(--muted);word-break:break-all}
@@ -84,7 +85,9 @@ details.method{margin-top:6px}
 <script src="/scenario.js"></script>
 <script src="/preview-panel.js"></script>
 <script>
-const EX=[
+// Replay mode (npm run demo) offers the recorded questions instead.
+const REPLAY=typeof PSIG_REPLAY==="object"?PSIG_REPLAY:null;
+const EX=REPLAY?REPLAY.examples.map(e=>e.question):[
   "our gochujang & snacks: is food inflation in deutschland, canada & aus still running hot?? our costs rose 8%, unit costs are 60% of our selling price. we pass on ~70% of cost increases. thinking +5% for Q1, too much?",
   "독일 캐나다 호주 식품 물가 요즘 어때? 내년 1분기에 가격 4% 올려도 될까",
   "france, italy and spain food prices: can we raise prices +3%? we pass on about 70%",
@@ -99,6 +102,7 @@ EX.forEach(t=>{const b=document.createElement("button");b.textContent=t;b.onclic
 let servedModel=null,modelRunStarted=false;
 function showModel(){const p=$("#modelpill");if(!p)return;if(servedModel){p.textContent=servedModel.t;p.className=servedModel.c}else if(modelRunStarted){p.textContent=runActive?"model: awaiting a successful response":"model: no successful response this run";p.className="pill"}}
 async function status(){try{const s=await (await fetch("/api/status")).json();
+  if(s.replay){$("#status").innerHTML=`<span class="pill ok">Replay of recorded runs · no live calls</span><span class="pill" id="modelpill">recorded model: ${esc(s.fast)}</span><span class="pill">Zetaris · recorded SQL results</span><span class="pill">H-MEM · recorded</span>`;showModel();return}
   $("#status").innerHTML=`<span class="pill ${s.state==="online"?"ok":"bad"}">${esc(s.provider==="meterless"?"Meterless Nightshift":s.provider)} · ${esc(s.state)}</span><span class="pill" id="modelpill">configured model: ${esc(s.fast)}</span><span class="pill ${s.zetaris==="online"?"ok":"bad"}">Zetaris · ${esc(s.zetaris||"unknown")}</span><span class="pill">H-MEM · ${s.memoryRecords} memories</span>`;showModel();
 }catch(e){$("#status").innerHTML=`<span class="pill bad">server unreachable</span>`}}
 status();

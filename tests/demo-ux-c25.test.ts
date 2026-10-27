@@ -24,7 +24,7 @@ function browser() {
   return { context, node, run: (c: string) => vm.runInContext(c, context) };
 }
 
-const serverSrc = fs.readFileSync(new URL("../src/server.ts", import.meta.url), "utf8");
+const serverSrc = fs.readFileSync(new URL("../src/result.ts", import.meta.url), "utf8");
 const toResult = vm.runInNewContext(`(b) => {${serverSrc.match(/function toResult\(b: Brief\) \{([\s\S]*?)\n\}/)![1]}}`, { COMPARE_COLUMNS, basketNote, costInputNeeded, fallbackHeadline, fitSummary, gapSummary, mergeNotes });
 const partialBrief: any = { request: req, facts: fx.facts, notes: fx.notes, passThrough: fx.passThrough, compared: { id: "Q7", sql: "", columns: [], rows: [] }, sqlLog: [], views: [], ms: 36000, trace: [], partialStage: "markets" };
 

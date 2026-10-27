@@ -19,6 +19,7 @@ const n=calls.length,dir='out/run-'+n;fs.mkdirSync(dir,{recursive:true});
 fs.writeFileSync(dir+'/brief.md','recording '+n);
 if(process.env.FAKE_MISSING_TRACE!=='1')fs.writeFileSync(dir+'/trace.json',JSON.stringify({question:process.argv.at(-1),trace:[],sql:[]}));
 if(process.env.FAKE_MISSING_EVIDENCE!=='1')fs.writeFileSync(dir+'/evidence.json',JSON.stringify({schemaVersion:1,methodVersion:2,queries:{market:{columns:['country'],rows:[]}}}));
+if(process.env.FAKE_MISSING_RESULT!=='1')fs.writeFileSync(dir+'/result.json',JSON.stringify({partials:[],final:{headline:'recording '+n}}));
 console.log('[done] fixture complete');console.log('[pricesignal] saved '+dir+'/brief.md');
 process.exit(Number(process.env.FAKE_FAIL_AT)===n?3:0);
 `, { mode: 0o755 });
@@ -42,6 +43,16 @@ test('the example recorder respects an isolated requested store and namespace', 
     }
     assert.equal(fs.readFileSync(path.join(f.root, 'examples/01_cold_start/brief.md'), 'utf8'), 'recording 1');
     assert.equal(JSON.parse(fs.readFileSync(path.join(f.root, 'examples/01_cold_start/evidence.json'), 'utf8')).schemaVersion, 1);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(f.root, 'examples/01_cold_start/result.json'), 'utf8')).final.headline, 'recording 1');
+  } finally { f.dispose(); }
+});
+
+test('a missing UI result (needed by npm run demo) prevents promotion', () => {
+  const f = fixture();
+  try {
+    const result = f.run({ FAKE_MISSING_RESULT: '1' });
+    assert.notEqual(result.status, 0);
+    assert.equal(fs.readFileSync(path.join(f.root, 'examples/01_cold_start/brief.md'), 'utf8'), 'previous recording');
   } finally { f.dispose(); }
 });
 
