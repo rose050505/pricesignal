@@ -5,6 +5,7 @@
 // agency inflation views, so internal and external data meet in the same SQL.
 import { SqlRunner, runDdl } from "../zetaris.ts";
 import { zetarisName } from "./types.ts";
+import { ensureCached } from "./index.ts";
 
 export const PRICE_DB = "PSIG_INTERNAL";
 export const priceTable = () => zetarisName("internal_price_list");
@@ -56,8 +57,11 @@ FROM ${PRICE_DB.toLowerCase()}.${priceTable()}`,
 }
 
 let ready = false;
-export async function ensurePriceList(z: SqlRunner): Promise<{ ok: boolean; created: boolean; error?: string }> {
-  if (ready) return { ok: true, created: false };
+export async function ensurePriceList(z: SqlRunner): Promise<{ ok: boolean; created: boolean; cached?: boolean; rawTable?: string; error?: string }> {
+  const rawTable = `${PRICE_DB.toLowerCase()}.${priceTable()}`;
+  // The price list is cached like the agency tables, so SKU queries do not refetch it.
+  const cache = async () => (await ensureCached(z, rawTable)).ok;
+  if (ready) return { ok: true, created: false, cached: await cache(), rawTable };
   let created = false;
   for (const s of priceListStatements()) {
     const r = await runDdl(z, s);
@@ -65,7 +69,7 @@ export async function ensurePriceList(z: SqlRunner): Promise<{ ok: boolean; crea
     created = created || !r.existed;
   }
   ready = true;
-  return { ok: true, created };
+  return { ok: true, created, cached: await cache(), rawTable };
 }
 
 /** One federated query: internal SKUs joined with the latest official rate of the requested category per market. */

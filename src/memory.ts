@@ -9,7 +9,7 @@ import { ROOT, env } from "./env.ts";
 import { HMEM } from "./hmem_impl.ts";
 import type { SelectionDecision } from "./selection.ts";
 
-export interface SeriesMapping { country: string; concept: string; agency: string; dataset: string; code: string; label: string; view: string; frequency: string; decoderVersion?: number; note?: string; scope?: string; selectionVersion?: number; selection?: SelectionDecision }
+export interface SeriesMapping { country: string; concept: string; agency: string; dataset: string; code: string; label: string; view: string; frequency: string; decoderVersion?: number; note?: string; scope?: string; rawTable?: string; sourceUrl?: string; selectionVersion?: number; selection?: SelectionDecision }
 
 export interface Outcome { country: string; concept: string; period: string; yoy: number; low: number; high: number; policy?: number; proposed?: number; verdict?: string; sourceId?: string; methodVersion?: number; decoderVersion?: number; at: string }
 

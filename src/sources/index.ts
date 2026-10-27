@@ -2,7 +2,7 @@
 import * as eurostat from "./eurostat.ts";
 import * as abs from "./abs.ts";
 import * as statcan from "./statcan.ts";
-import { Candidate, Concept, Country, DiscoverResult, EU_CODES, OnboardPlan } from "./types.ts";
+import { Candidate, Concept, Country, DiscoverResult, EU_CODES, OnboardPlan, getJson } from "./types.ts";
 import { SqlRunner, runDdl } from "../zetaris.ts";
 import { hasFreshPeriod, isUsableObservationCount } from "./validation.ts";
 
@@ -30,6 +30,61 @@ export function onboardPlan(c: Candidate, concept: Concept): OnboardPlan {
   if (c.agency === "eurostat") return eurostat.onboardSql(c, concept);
   if (c.agency === "abs") return abs.onboardSql(c, concept);
   return statcan.onboardSql(c, concept);
+}
+
+const DB_FOR: Record<Candidate["agency"], string> = { eurostat: eurostat.EUROSTAT_DB, abs: abs.ABS_DB, statcan: statcan.STATCAN_DB };
+
+/** The raw Lightning REST table a series view reads; CACHE TABLE goes on this table, not on the view. */
+export function rawTableRef(c: Candidate, concept: Concept): string {
+  return `${DB_FOR[c.agency].toLowerCase()}.${onboardPlan(c, concept).table}`;
+}
+
+/**
+ * Zetaris CACHE TABLE keeps a REST table's response, so later queries read the cache instead of calling the agency
+ * (measured: 0 endpoint calls after caching; CACHE TABLE on a cached table is a no-op). The cache is refreshed with
+ * UNCACHE + CACHE after PSIG_CACHE_TTL_HOURS (default 6), but only when the agency answers - the cached copy is
+ * never dropped during an outage. Cache times are tracked per process.
+ */
+const cachedAt = new Map<string, number>();
+export function resetCacheRegistry(): void {
+  cachedAt.clear();
+}
+export function cacheTimes(): Map<string, number> {
+  return new Map(cachedAt);
+}
+export type CacheAction = "cached" | "kept" | "kept-stale" | "refreshed" | "failed";
+export async function ensureCached(z: SqlRunner, ref: string, opts: { now?: number; reachable?: () => Promise<boolean> } = {}): Promise<{ ok: boolean; action: CacheAction; cachedAt?: number; error?: string }> {
+  const now = opts.now ?? Date.now();
+  const at = cachedAt.get(ref);
+  const ttl = Number(process.env.PSIG_CACHE_TTL_HOURS || 6) * 3_600_000;
+  try {
+    if (at !== undefined && now - at > ttl && opts.reachable) {
+      if (!(await opts.reachable())) {
+        await z.run(`CACHE TABLE ${ref}`); // a no-op that keeps (or restores) the cached copy
+        return { ok: true, action: "kept-stale", cachedAt: at };
+      }
+      await z.run(`UNCACHE TABLE IF EXISTS ${ref}`);
+      await z.run(`CACHE TABLE ${ref}`);
+      cachedAt.set(ref, now);
+      return { ok: true, action: "refreshed", cachedAt: now };
+    }
+    // Issued every time: after a Zetaris restart the cache is gone, and on a cached table this costs no agency call.
+    await z.run(`CACHE TABLE ${ref}`);
+    if (at === undefined) cachedAt.set(ref, now);
+    return { ok: true, action: at === undefined ? "cached" : "kept", cachedAt: cachedAt.get(ref) };
+  } catch (e) {
+    return { ok: false, action: "failed", cachedAt: at, error: String(e).slice(0, 200) };
+  }
+}
+
+/** Whether an agency endpoint answers with JSON right now (used before refreshing a cached copy). */
+export async function sourceAnswers(url: string): Promise<boolean> {
+  try {
+    await getJson(url, {}, 500);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 const BOOTSTRAP = [
@@ -60,6 +115,8 @@ export async function bootstrap(z: SqlRunner): Promise<string[]> {
 
 export interface OnboardResult {
   view: string; table: string; ok: boolean; existed: boolean; rows: number; latest?: string; error?: string; sql: string[];
+  /** The raw REST table is cached in Zetaris (CACHE TABLE), so verification and later queries read the cache. */
+  cached?: boolean; rawTable?: string;
   /** Series REST table/view counts, excluding shared database/schema bootstrap objects. */
   createdObjects?: number; existingObjects?: number;
 }
@@ -77,6 +134,9 @@ export async function onboard(z: SqlRunner, c: Candidate, concept: Concept, now 
     if (r.existed) existingObjects++;
     else createdObjects++;
   }
+  const rawTable = rawTableRef(c, concept);
+  const cache = await ensureCached(z, rawTable, { reachable: () => sourceAnswers(c.sourceUrl) });
+  const cached = cache.ok;
   try {
     const check = await z.run(`SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.${plan.view} WHERE yoy_pct IS NOT NULL`);
     const count = check.rows[0]?.[0];
@@ -85,9 +145,9 @@ export async function onboard(z: SqlRunner, c: Candidate, concept: Concept, now 
     const fresh = hasFreshPeriod(observedPeriod, c.frequency, now);
     const latest = typeof observedPeriod === "string" ? observedPeriod : undefined;
     const error = !hasRows ? "view returned no rows or an invalid observation count" : !fresh ? `view has no fresh ${c.frequency} observation period (latest ${String(observedPeriod ?? "missing")})` : undefined;
-    return { view: plan.view, table: plan.table, ok: hasRows && fresh, existed, createdObjects, existingObjects, rows: hasRows ? Number(count) : 0, latest, error, sql: plan.statements };
+    return { view: plan.view, table: plan.table, ok: hasRows && fresh, existed, createdObjects, existingObjects, rows: hasRows ? Number(count) : 0, latest, error, sql: plan.statements, cached, rawTable };
   } catch (e) {
-    return { view: plan.view, table: plan.table, ok: false, existed, createdObjects, existingObjects, rows: 0, error: String(e).slice(0, 300), sql: plan.statements };
+    return { view: plan.view, table: plan.table, ok: false, existed, createdObjects, existingObjects, rows: 0, error: String(e).slice(0, 300), sql: plan.statements, cached, rawTable };
   }
 }
 

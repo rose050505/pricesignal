@@ -21,7 +21,7 @@ function fixture() {
   const registered = new Map<string, { country: Country; concept: string; candidate: Candidate }>([
     ["legacy_de_snacks", { country: "DE", concept: "snacks", candidate: candidate("DE", "sugar", "Sugar, confectionery and desserts") }],
   ]);
-  const state = { selections: 0, discoveries: 0, reply: "valid", failSpecific: false, failAll: false, noCandidates: false, falseBroad: "", categoryFailure: "", joinError: false, staleSku: false, probePeriod: undefined as unknown, selectedPeriod: undefined as unknown, allOnboardPeriod: undefined as unknown, extraProduct: "", selectionOptions: [] as any[], prompts: [] as string[], onSelection: undefined as (() => void) | undefined };
+  const state = { onlyFoodFor: "" as string, selections: 0, discoveries: 0, reply: "valid", failSpecific: false, failAll: false, noCandidates: false, falseBroad: "", categoryFailure: "", joinError: false, staleSku: false, probePeriod: undefined as unknown, selectedPeriod: undefined as unknown, allOnboardPeriod: undefined as unknown, extraProduct: "", selectionOptions: [] as any[], prompts: [] as string[], onSelection: undefined as (() => void) | undefined };
   const sql = { async run(query: string): Promise<SqlResult> {
     let rows: unknown[][] = [];
     if (/SELECT DISTINCT country, sku_category/.test(query)) {
@@ -50,6 +50,8 @@ function fixture() {
       state.onSelection?.();
       if (state.reply === "pending") return await new Promise<never>((_, reject) => opts.signal.addEventListener("abort", () => reject(new Error("selection timeout")), { once: true }));
       if (state.reply === "error") throw new Error("selection provider unavailable");
+      if (state.reply === "partial") return { text: JSON.stringify({ selections: [{ id: "DE:snacks", candidate: 1, fit: "specific", reason: "Potato crisps cover the named chips and crisps." }, { id: "AU:condiments", candidate: 99, fit: "specific", reason: "invented" }] }), model: "nemotron-test", provider: "meterless", ms: 1 };
+      if (state.reply === "foodSpecific") return { text: JSON.stringify({ selections: [{ id: "AU:condiments", candidate: 1, fit: "specific", reason: "Food covers the sauce." }, { id: "DE:snacks", candidate: 1, fit: "specific", reason: "Potato crisps cover the named chips and crisps." }] }), model: "nemotron-test", provider: "meterless", ms: 1 };
       if (state.reply === "invalid") return { text: '{"selections":[{"id":"DE:snacks","candidate":99,"fit":"specific","reason":"invented"}]}', model: "nemotron-test", provider: "meterless", ms: 1 };
       const groups = JSON.parse(last).groups;
       return { text: JSON.stringify({ selections: groups.map((g: any) => ({ id: g.id, candidate: g.concept === "snacks" ? 1 : 0, fit: "specific", reason: g.concept === "snacks" ? "Potato crisps cover the named chips and crisps." : "Condiments cover the named sauce." })) }), model: "nemotron-test", provider: "meterless", ms: 1 };
@@ -61,6 +63,7 @@ function fixture() {
         const wrong = { ...candidate(country, "narrow", state.falseBroad === "wrongCode" ? "Food" : "Food additives and condiments"), ...(state.falseBroad === "flagged" || state.falseBroad === "wrongCode" ? { isBroadFallback: true } : {}) };
         return { country, concept, candidates: concept === "food" || state.falseBroad !== "extra" ? [wrong] : [candidate(country, "sugar", "Sugar, confectionery and desserts")], notes: [] };
       }
+      if (state.onlyFoodFor === country && concept !== "food") return { country, concept, candidates: [candidate(country, "food", "Food", true)], notes: [] };
       const candidates = concept === "snacks" ? [candidate(country, "sugar", "Sugar, confectionery and desserts"), candidate(country, "crisps", "Potato crisps"), candidate(country, "food", "Food", true)] : concept === "condiments" ? [candidate(country, "sauce", "Food additives and condiments"), candidate(country, "food", "Food", true)] : [candidate(country, concept, "Food", true)];
       return { country, concept, candidates, notes: [] };
     },
@@ -250,4 +253,51 @@ test("failed or empty SKU category discovery cannot authorize unmarked market-ca
     assert.ok(!brief.trace.some(e => /pricing on the requested category instead/.test(e.title)));
     assert.equal(brief.facts.length, 2);
   }
+});
+
+test("one invalid product group falls back alone; the model's valid choices for other groups are kept", async () => {
+  const f = fixture();
+  f.state.reply = "partial";
+  const agent = new PriceSignalAgent(f.deps());
+  const brief = await agent.run("DE and AU food +3%, pass through 70%");
+  const de = brief.skus!.find(s => s.country === "DE")!;
+  const au = brief.skus!.find(s => s.country === "AU")!;
+  assert.equal(de.rateLabel, "Potato crisps");
+  assert.equal((de as any).selectionSource, "model");
+  assert.equal(au.rateLabel, "Food");
+  assert.equal((au as any).selectionSource, "fallback");
+  assert.ok(agent.trace.some(e => /accepted 1 of 2 product groups/.test(e.title)), agent.trace.map(e => e.title).join("\n"));
+  assert.ok(agent.trace.some(e => /AU:condiments.*outside the official shortlist/.test(e.title)));
+});
+
+test("a Food alternative the model calls specific is kept as the model's choice but labelled broader", async () => {
+  const f = fixture();
+  f.state.reply = "foodSpecific";
+  const brief = await new PriceSignalAgent(f.deps()).run("DE and AU food +3%, pass through 70%");
+  const au = brief.skus!.find(s => s.country === "AU")!;
+  assert.equal(au.rateLabel, "Food");
+  assert.equal((au as any).selectionSource, "model");
+  assert.equal((au as any).selectionFit, "broader");
+});
+
+test("a product group whose only official candidate is the Food series is not sent to the model", async () => {
+  const f = fixture();
+  f.state.onlyFoodFor = "AU";
+  const agent = new PriceSignalAgent(f.deps());
+  const brief = await agent.run("DE and AU food +3%, pass through 70%");
+  assert.equal(f.state.selections, 1);
+  assert.doesNotMatch(f.state.prompts[0], /AU:condiments/);
+  const au = brief.skus!.find(s => s.country === "AU")!;
+  assert.equal(au.rateLabel, "Food");
+  assert.notEqual((au as any).selectionSource, "model", "a forced single choice is not presented as the model's judgement");
+  assert.equal((brief.skus!.find(s => s.country === "DE") as any).selectionSource, "model");
+});
+
+test("the raw selection reply is kept in the trace when a group is rejected", async () => {
+  const f = fixture();
+  f.state.reply = "partial";
+  const agent = new PriceSignalAgent(f.deps());
+  await agent.run("DE and AU food +3%, pass through 70%");
+  const ev = agent.trace.find(e => /SKU category selection/.test(e.title))!;
+  assert.match(String((ev.detail as any)?.reply), /"candidate":99/);
 });

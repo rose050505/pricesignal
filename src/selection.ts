@@ -39,6 +39,24 @@ function conflictsWithProducts(products: readonly string[], label: string): bool
     && !/snack|potato|crisp|chip|savoury|savory/i.test(label);
 }
 
+/** Checks one model choice against its group's official shortlist; throws the reason when it cannot be used. */
+function validateItem(item: unknown, group: SelectionGroup, model: string, correctBroadFit = false): SelectionDecision {
+  if (!item || typeof item !== 'object') throw new Error('Selection is not an object');
+  const {candidate,fit,reason} = item as {candidate?:unknown;fit?:unknown;reason?:unknown};
+  if (typeof candidate !== 'number' || !Number.isInteger(candidate) || candidate < 0 || candidate >= group.candidates.length) throw new Error('Candidate index is outside the official shortlist');
+  if (fit !== 'specific' && fit !== 'broader') throw new Error('Selection fit must be specific or broader');
+  if (typeof reason !== 'string' || !reason.trim() || reason.trim().length > 300) throw new Error('Selection needs a concise text reason');
+  // Reasons explain product coverage, not market facts or commercial advice.
+  if (/[\d%‰$€£¥]|\b(?:inflation|percent(?:age)?|per cent|basis points?|forecast|predict|recommend|justif\w*|margin|pass(?:ing)?[ -]?through)\b|\b(?:rais\w*|increas\w*|reduc\w*|cut|lower\w*)\s+(?:the\s+)?prices?\b|\bprices?\s+(?:rise|increas\w*|decreas\w*|cut|reduc\w*)\b/i.test(reason)) throw new Error('Selection reason must only describe product coverage');
+  const chosen = group.candidates[candidate];
+  if (chosen.status === 'discontinued') throw new Error('Selected series is discontinued');
+  // The code knows which candidate is the broad Food alternative; calling it "specific" is a label slip, not a different choice.
+  const finalFit = chosen.isBroadFallback && correctBroadFit ? 'broader' : fit;
+  if (chosen.isBroadFallback && finalFit !== 'broader') throw new Error('Food alternative must be marked broader');
+  if (conflictsWithProducts(group.products,chosen.label)) throw new Error('Selected label conflicts with chips or crisps');
+  return {candidate,fit:finalFit,reason:finalFit === 'broader' ? BROADER_COVERAGE_REASON : reason.trim(),by:'model',model};
+}
+
 export function validateSelections(value: unknown, groups: SelectionGroup[], model: string): Map<string,SelectionDecision> {
   const selections = (value as {selections?:unknown} | null)?.selections;
   if (!Array.isArray(selections) || selections.length !== groups.length) throw new Error('Selection must include every product group exactly once');
@@ -46,23 +64,34 @@ export function validateSelections(value: unknown, groups: SelectionGroup[], mod
   if (byId.size !== groups.length) throw new Error('Duplicate product group IDs');
   const decisions = new Map<string,SelectionDecision>();
   for (const item of selections) {
-    if (!item || typeof item !== 'object') throw new Error('Selection is not an object');
-    const {id,candidate,fit,reason} = item;
+    const id = (item as {id?:unknown} | null)?.id as string;
     const group = byId.get(id);
     if (!group || decisions.has(id)) throw new Error('Unknown or duplicate selection group');
-    if (typeof candidate !== 'number' || !Number.isInteger(candidate) || candidate < 0 || candidate >= group.candidates.length) throw new Error('Candidate index is outside the official shortlist');
-    if (fit !== 'specific' && fit !== 'broader') throw new Error('Selection fit must be specific or broader');
-    if (typeof reason !== 'string' || !reason.trim() || reason.trim().length > 300) throw new Error('Selection needs a concise text reason');
-    // Reasons explain product coverage, not market facts or commercial advice.
-    // Keep them number-free: product weights and classification codes are already shown in the inputs.
-    if (/[\d%‰$€£¥]|\b(?:inflation|percent(?:age)?|per cent|basis points?|forecast|predict|recommend|justif\w*|margin|pass(?:ing)?[ -]?through)\b|\b(?:rais\w*|increas\w*|reduc\w*|cut|lower\w*)\s+(?:the\s+)?prices?\b|\bprices?\s+(?:rise|increas\w*|decreas\w*|cut|reduc\w*)\b/i.test(reason)) throw new Error('Selection reason must only describe product coverage');
-    const chosen = group.candidates[candidate];
-    if (chosen.status === 'discontinued') throw new Error('Selected series is discontinued');
-    if (chosen.isBroadFallback && fit !== 'broader') throw new Error('Food alternative must be marked broader');
-    if (conflictsWithProducts(group.products,chosen.label)) throw new Error('Selected label conflicts with chips or crisps');
-    decisions.set(id,{candidate,fit,reason:fit === 'broader' ? BROADER_COVERAGE_REASON : reason.trim(),by:'model',model});
+    decisions.set(id, validateItem(item, group, model));
   }
   return decisions;
+}
+
+/**
+ * The same checks per product group: valid choices are kept, and only the groups whose choice is missing or
+ * invalid fall back (each with its reason). A Food alternative labelled "specific" is kept as broader.
+ */
+export function validateSelectionsPerGroup(value: unknown, groups: SelectionGroup[], model: string): { decisions: Map<string,SelectionDecision>; rejected: {id: string; reason: string}[] } {
+  const decisions = new Map<string,SelectionDecision>();
+  const rejected: {id: string; reason: string}[] = [];
+  const selections = (value as {selections?:unknown} | null)?.selections;
+  const items = Array.isArray(selections) ? selections : [];
+  for (const group of groups) {
+    const mine = items.filter(item => (item as {id?:unknown} | null)?.id === group.id);
+    if (!mine.length) { rejected.push({id: group.id, reason: Array.isArray(selections) ? 'no choice was returned for this group' : 'the reply had no selections list'}); continue; }
+    if (mine.length > 1) { rejected.push({id: group.id, reason: 'more than one choice was returned for this group'}); continue; }
+    try {
+      decisions.set(group.id, validateItem(mine[0], group, model, true));
+    } catch (e) {
+      rejected.push({id: group.id, reason: e instanceof Error ? e.message : String(e)});
+    }
+  }
+  return {decisions, rejected};
 }
 
 export function fallbackSelection(group: SelectionGroup): SelectionDecision | undefined {

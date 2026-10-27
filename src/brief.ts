@@ -75,6 +75,8 @@ export interface RunMetrics {
   plannerCalls: number;
   discoveries: number;
   reusedViews: number;
+  /** Raw agency REST tables served from the Zetaris cache (CACHE TABLE) in this run. */
+  cachedTables?: number;
   numbersMs?: number;
 }
 

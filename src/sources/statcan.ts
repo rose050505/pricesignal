@@ -28,7 +28,14 @@ export async function discover(country: Country, concept: Concept): Promise<Disc
   if (!key) return { country, concept, candidates: [], notes: [`No StatCan CPI vector mapped for "${concept}".`] };
   const entry = CATALOG[key];
   const now = monthsBack(0);
-  const j = await getJson(rangeUrl(entry.vector, monthsBack(8), now));
+  let j: any;
+  try {
+    j = await getJson(rangeUrl(entry.vector, monthsBack(8), now));
+  } catch (e) {
+    // The vector is catalogued, so it is still offered: a copy already registered and cached in Zetaris can pass
+    // the same row and freshness verification; without one, onboarding fails as before.
+    notes.push(`StatCan's API did not answer during discovery (${String(e).replace(/^Error: /, "").slice(0, 120)}); the catalogued ${entry.label} vector is checked against its registered Zetaris copy instead.`);
+  }
   const obj = Array.isArray(j) ? j[0]?.object : j?.object;
   const pts: { refPer: string }[] = obj?.vectorDataPoint ?? [];
   const last = pts.map((p) => p.refPer.slice(0, 7)).sort().at(-1);

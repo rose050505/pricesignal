@@ -5,13 +5,13 @@
 // every number that reaches the user.
 import { EventEmitter } from "node:events";
 import { chat, ChatMessage, ChatResult } from "./llm.ts";
-import { AgentMemory } from "./memory.ts";
+import { AgentMemory, type SeriesMapping } from "./memory.ts";
 import { SqlResult, SqlRunner, rowsAsObjects, isIncompleteResultError } from "./zetaris.ts";
-import { AGENCY_FOR, COMPARE_COLUMNS, Candidate, Concept, Country, COUNTRY_ALIASES, CONCEPT_WORDS, compareSql, discover, monthsBack, normalizeCountry, onboard, skuSearchWords, isBroadFoodLabel } from "./sources/index.ts";
+import { AGENCY_FOR, COMPARE_COLUMNS, Candidate, Concept, Country, COUNTRY_ALIASES, CONCEPT_WORDS, compareSql, discover, monthsBack, normalizeCountry, onboard, skuSearchWords, isBroadFoodLabel, ensureCached, rawTableRef, sourceAnswers } from "./sources/index.ts";
 import { MarketFacts, Brief, RunMetrics, SkuLine, buildFacts, renderBrief, signedPct, marketKey, allowedNumbers, checkNarrative, salvageNarrative, factsForNarrative, costShareBasisDescription, seriesFacts, marketBenchmark, Narrative, NarrativeIssue } from "./brief.ts";
 import { buildAlignment } from "./alignment.ts";
 import { PRICE_DB, PRICING_COLUMNS, SKU_RATE_COLUMNS, ensurePriceList, priceTable, priceView, pricingSql, skuCategoriesSql, skuRatesSql } from "./sources/pricelist.ts";
-import { BROADER_COVERAGE_REASON, SELECTION_VERSION, skuScope, selectionMessages, validateSelections, fallbackSelection, type SelectionGroup, type SelectionDecision } from "./selection.ts";
+import { BROADER_COVERAGE_REASON, SELECTION_VERSION, skuScope, selectionMessages, validateSelectionsPerGroup, fallbackSelection, type SelectionGroup, type SelectionDecision } from "./selection.ts";
 import { sourceDecoderVersion, hasFreshPeriod, isUsableObservationCount } from "./sources/validation.ts";
 
 export interface Request {
@@ -77,6 +77,7 @@ export class PriceSignalAgent extends EventEmitter {
   private sql: SqlRunner;
   private cite = 0;
   private metrics: RunMetrics = { modelCalls: 0, plannerCalls: 0, discoveries: 0, reusedViews: 0 };
+  private cached = new Set<string>(); // raw REST tables served from the Zetaris cache in this run
   readonly trace: TraceEvent[] = [];
   readonly sqlLog: SqlResult[] = [];
 
@@ -105,9 +106,9 @@ export class PriceSignalAgent extends EventEmitter {
     this.hedgeMs = deps.hedgeMs ?? (process.env.PSIG_HEDGE_MS === "off" ? Infinity : Number(process.env.PSIG_HEDGE_MS || 10_000));
     const run = deps.sql.run.bind(deps.sql);
     this.sql = { run: async (sql, opts) => {
-      // One statement per call, and only SELECT or onboarding DDL (quoted text may contain anything).
+      // One statement per call, and only SELECT, onboarding DDL or caching a source table (quoted text may contain anything).
       const bare = sqlOutsideQuotes(sql);
-      if (!/^\s*(SELECT\b|CREATE\s+(LIGHTNING\s+(DATABASE|REST\s+TABLE)|SCHEMASTORE\s+(CONTAINER|VIEW))\b)/i.test(sql) || bare === undefined || /;\s*\S/.test(bare)) {
+      if (!/^\s*(SELECT\b|CREATE\s+(LIGHTNING\s+(DATABASE|REST\s+TABLE)|SCHEMASTORE\s+(CONTAINER|VIEW))\b|(?:UN)?CACHE\s+(?:LAZY\s+)?TABLE\b)/i.test(sql) || bare === undefined || /;\s*\S/.test(bare)) {
         this.log("error", `blocked statement (only SELECT and onboarding DDL are allowed): ${sql.split("\n")[0].slice(0, 80)}`);
         throw new Error("statement blocked by the SQL allowlist");
       }
@@ -176,6 +177,15 @@ export class PriceSignalAgent extends EventEmitter {
     const ev = { t: Date.now(), kind, title, detail };
     this.trace.push(ev);
     this.emit("event", ev);
+  }
+
+  /** Cache a remembered series' raw REST table before probing it; on a table Zetaris already caches this calls no agency. */
+  private async cacheRemembered(m: SeriesMapping): Promise<void> {
+    const c = { agency: m.agency, country: m.country, dataset: m.dataset, code: m.code, label: m.label, frequency: m.frequency, measure: "index", status: "active", sourceUrl: m.sourceUrl ?? "" } as unknown as Candidate;
+    const ref = m.rawTable ?? rawTableRef(c, m.concept as Concept);
+    const r = await ensureCached(this.sql, ref, m.sourceUrl ? { reachable: () => sourceAnswers(m.sourceUrl!) } : {});
+    if (r.ok) this.cached.add(ref);
+    if (r.action === "kept-stale") this.log("warn", `${m.country} ${m.concept}: the agency did not answer, so its Zetaris cache from ${new Date(r.cachedAt!).toISOString().slice(0, 16)} UTC is used`);
   }
 
   // ---------- 1. understand the messy request ----------
@@ -408,7 +418,7 @@ Reply with JSON only.`;
       if (!views.has(key(country, concept))) await this.execute({ action: "discover_and_onboard", args: { country, concept } }, req, ctx);
       return views.get(key(country, concept));
     };
-    const snapshotMetrics = (): RunMetrics => ({ ...this.metrics, reusedViews: [...views.values()].filter((v) => v.via === "memory").length });
+    const snapshotMetrics = (): RunMetrics => ({ ...this.metrics, reusedViews: [...views.values()].filter((v) => v.via === "memory").length, cachedTables: this.cached.size });
     // Market facts are useful immediately; do not hide them behind slower SKU discovery and pricing.
     this.metrics.numbersMs = Date.now() - t0;
     const marketPartial: Brief = { request: req, startedAt, calculatedAt, facts, alignment, notes: [...notes], passThrough: policy, policySource, compared, sqlLog: [...this.sqlLog], views: [...views.entries()].map(([k, v]) => ({ key: k, ...v })), ms: this.metrics.numbersMs, trace: [...this.trace], metrics: snapshotMetrics(), partialStage: "markets" };
@@ -487,6 +497,7 @@ Reply with JSON only.`;
             this.log("memory", `rejected ${hit.id}: ${hit.mapping.label} does not cover the requested ${concept} category`);
             return { error: "remembered category failed the market coverage guard; discover again" };
           }
+          await this.cacheRemembered(hit.mapping);
           const probe = await this.sql.run(`SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.${hit.mapping.view} WHERE yoy_pct IS NOT NULL`);
           const count = probe.rows[0]?.[0];
           const latest = probe.rows[0]?.[1];
@@ -580,6 +591,7 @@ Reply with JSON only.`;
           if (r.ok && (!isUsableObservationCount(r.rows) || !hasFreshPeriod(r.latest, c.frequency))) {
             r = { ...r, ok: false, error: `view has no usable fresh dated rows (latest ${String(r.latest ?? "unknown")})` };
           }
+          if (r.cached && r.rawTable) this.cached.add(r.rawTable);
           const how = onboardingSummary(r);
           this.log("onboard", `${r.ok ? "onboarded" : "FAILED"} ${c.agency} ${c.code} -> psig.${r.view}${r.ok ? ` (${how}: ${r.rows} rows, latest ${r.latest})` : `: ${r.error}`}`, { candidate: c, result: { ...r, sql: r.sql } });
           if (r.ok) {
@@ -591,7 +603,7 @@ Reply with JSON only.`;
             }
             const note = own.join(" ") || undefined;
             s.views.set(s.key(country, concept), { view: r.view, label: c.label, via: "onboarded", note });
-            const id = memory.rememberMapping({ country, concept, agency: c.agency, dataset: c.dataset, code: c.code, label: c.label, view: r.view, frequency: c.frequency, decoderVersion: sourceDecoderVersion(c.agency), note });
+            const id = memory.rememberMapping({ country, concept, agency: c.agency, dataset: c.dataset, code: c.code, label: c.label, view: r.view, frequency: c.frequency, decoderVersion: sourceDecoderVersion(c.agency), note, rawTable: r.rawTable, sourceUrl: c.sourceUrl });
             this.log("memory", `stored mapping ${id}`);
           }
           return { ok: r.ok, view: r.view, rows: r.rows, latest: r.latest, error: r.error };
@@ -641,6 +653,7 @@ Reply with JSON only.`;
         return undefined;
       }
       if (ready.created) this.log("onboard", `registered the internal price list as Zetaris REST table ${PRICE_DB.toLowerCase()}.${priceTable()} + view psig.${priceView()}`);
+      if (ready.cached && ready.rawTable) this.cached.add(ready.rawTable);
     } catch (e) {
       this.log("warn", `price list registration failed: ${String(e).slice(0, 160)}`);
       return undefined;
@@ -746,6 +759,7 @@ Reply with JSON only.`;
       if (hit && mapping && !decoderCurrent) this.log("memory", `product-checked SKU mapping ${hit.id} uses an obsolete decoder - selecting and verifying again`);
       if (hit && decoderCurrent && mapping?.selectionVersion === SELECTION_VERSION && mapping.selection?.by === "model" && !memory.hmem.store.get(hit.id)?.tags.includes("review")) {
         try {
+          await this.cacheRemembered(mapping);
           const probe = await this.sql.run(`SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.${mapping.view} WHERE yoy_pct IS NOT NULL`);
           const latest = probe.rows[0]?.[1];
           if (isUsableObservationCount(probe.rows[0]?.[0]) && hasFreshPeriod(latest, mapping.frequency)) {
@@ -793,18 +807,26 @@ Reply with JSON only.`;
     if (!groups.length) return;
     groups.sort((a, b) => a.id.localeCompare(b.id));
     let decisions = new Map<string, SelectionDecision>();
+    // A group whose only candidate is the official Food alternative has nothing to judge: it is used as the marked
+    // broader proxy and not presented as the model's choice. A single narrow candidate still needs the coverage check.
+    const onlyFood = (g: SelectionGroup) => g.candidates.length === 1 && !!g.candidates[0].isBroadFallback;
+    const choices = groups.filter((g) => !onlyFood(g));
+    if (choices.length < groups.length) this.log("plan", `${groups.length - choices.length} product group(s) have only the official Food series as a candidate - no model choice needed: ${groups.filter(onlyFood).map((g) => g.id).join(", ")}`);
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
-    try {
+    if (choices.length) try {
       const expired = new Promise<never>((_, reject) => {
         timer = setTimeout(() => { controller.abort(); reject(new Error("SKU selection time budget expired")); }, 20_000);
       });
       const reply = await Promise.race([
-        this.llm(selectionMessages(groups), { lane: "fast", temperature: 0, maxTokens: 2500, attempts: 1, timeoutMs: 20_000, signal: controller.signal }),
+        this.llm(selectionMessages(choices), { lane: "fast", temperature: 0, maxTokens: 2500, attempts: 1, timeoutMs: 20_000, signal: controller.signal }),
         expired,
       ]);
-      decisions = validateSelections(extractJson(reply.text), groups, reply.model);
-      this.log("llm", `SKU category selection (${reply.model}, ${reply.ms} ms${via(reply)}) - ${groups.length} product group(s) checked in one request`);
+      const checked = validateSelectionsPerGroup(extractJson(reply.text), choices, reply.model);
+      decisions = checked.decisions;
+      this.log("llm", `SKU category selection (${reply.model}, ${reply.ms} ms${via(reply)}) - accepted ${decisions.size} of ${choices.length} product groups in one request`, checked.rejected.length ? { rejected: checked.rejected, reply: reply.text.slice(0, 2000) } : undefined);
+      // Only the groups whose choice failed the code checks fall back; the model's valid choices stand.
+      for (const r of checked.rejected) this.log("warn", `Nemotron's category choice for ${r.id} was not used (${r.reason}) - using the marked Food fallback`);
     } catch (e) {
       this.log("warn", `SKU category selection unavailable or invalid - using marked Food fallbacks where available (${String(e).slice(0, 140)})`);
     } finally {
@@ -820,6 +842,7 @@ Reply with JSON only.`;
         const candidate = group.candidates[choice.candidate];
         try {
           const result = await this.onboardFn(this.sql, candidate, group.concept);
+          if (result.cached && result.rawTable) this.cached.add(result.rawTable);
           this.log("onboard", `${result.ok ? "onboarded" : "FAILED"} SKU ${candidate.agency} ${candidate.code} -> psig.${result.view}${result.ok ? ` (${onboardingSummary(result)}: ${result.rows} rows, latest ${result.latest})` : `: ${result.error}`}`, { candidate, selection: choice, result });
           if (!result.ok) return undefined;
           if (!isUsableObservationCount(result.rows) || !hasFreshPeriod(result.latest, candidate.frequency)) {
@@ -853,7 +876,7 @@ Reply with JSON only.`;
       skuViews.set(group.id, { view: result.view, note, selectionReason: decision.reason, selectionSource: decision.by, selectionFit: decision.fit });
       let memoryId: string | undefined;
       if (decision.by === "model") {
-        memoryId = memory.rememberMapping({ country: group.country, concept: group.concept, agency: candidate.agency, dataset: candidate.dataset, code: candidate.code, label: candidate.label, view: result.view, frequency: candidate.frequency, decoderVersion: sourceDecoderVersion(candidate.agency), note, scope, selectionVersion: SELECTION_VERSION, selection: decision });
+        memoryId = memory.rememberMapping({ country: group.country, concept: group.concept, agency: candidate.agency, dataset: candidate.dataset, code: candidate.code, label: candidate.label, view: result.view, rawTable: result.rawTable, sourceUrl: candidate.sourceUrl, frequency: candidate.frequency, decoderVersion: sourceDecoderVersion(candidate.agency), note, scope, selectionVersion: SELECTION_VERSION, selection: decision });
         this.log("memory", `stored product-checked SKU mapping ${memoryId}`, { scope, products: group.products, selection: decision });
       }
       views.set(`${group.id}:${scope}`, { view: result.view, label: candidate.label, via: "onboarded", note, memoryId });
@@ -996,8 +1019,8 @@ Reply with JSON only.`;
 type ExecCtx = { views: Map<string, any>; candidates: Map<string, Candidate[]>; notes: string[]; key: (a: string, b: string) => string; pairs: { country: Country; concept: Concept }[]; getCompared: () => SqlResult | undefined; setCompared: (c: SqlResult) => void };
 type SkuView = { view: string; note?: string; selectionReason?: string; selectionSource?: "model" | "memory" | "fallback"; selectionFit?: "specific" | "broader" };
 
-function onboardingSummary(result: { existed: boolean; createdObjects?: number; existingObjects?: number }): string {
-  if (result.createdObjects !== undefined && result.existingObjects !== undefined) return `created ${result.createdObjects} SQL object${result.createdObjects === 1 ? "" : "s"}; ${result.existingObjects} already existed; verified`;
+function onboardingSummary(result: { existed: boolean; createdObjects?: number; existingObjects?: number; cached?: boolean }): string {
+  if (result.createdObjects !== undefined && result.existingObjects !== undefined) return `created ${result.createdObjects} SQL object${result.createdObjects === 1 ? "" : "s"}; ${result.existingObjects} already existed; ${result.cached ? "source cached in Zetaris; " : ""}verified`;
   return result.existed ? "Zetaris already had it - reused and verified" : "created REST table + view";
 }
 
