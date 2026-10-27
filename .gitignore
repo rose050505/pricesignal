@@ -13,8 +13,8 @@ docs/DESIGN.md
 docs/DEMO_SCRIPT.md
 docs/narration.txt
 scripts/voice.py
-scripts/11_voice_setup.sh
-scripts/12_practice.sh
+scripts/11_*
+scripts/12_*
 
 # overnight agent working files
 night/

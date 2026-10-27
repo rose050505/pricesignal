@@ -11,7 +11,7 @@ NAME="${1:-pricesignal}"
   echo "== files to be committed"; git diff --cached --name-only | head -60
   if git diff --cached --name-only | grep -E '(^|/)\.env$|\.zetaris_admin|^logs/|^out/|^vendor/|node_modules' ; then echo "STOP: ignored file staged"; exit 1; fi
   if git grep --cached -nE 'sk-or-v1-[A-Za-z0-9]{20,}|nvapi-[A-Za-z0-9_-]{20,}|ZETARIS_API_KEY=[^ ]+[A-Za-z0-9]{10}|METERLESS_RUNTIME_TOKEN=[A-Za-z0-9]{10}' ; then echo "STOP: secret-looking string tracked"; exit 1; fi
-  git -c user.name="${GIT_NAME:-Miyeong Park}" -c user.email="${GIT_EMAIL:-bmy31513151@gmail.com}" commit -qm "PriceSignal: cross-border inflation agent (Zetaris + Meterless Nightshift + H-MEM)" || echo "(nothing new to commit)"
+  git -c user.name="${GIT_NAME:-Miyeong Park}" -c user.email="${GIT_EMAIL:-$(git config user.email)}" commit -qm "PriceSignal: cross-border inflation agent (Zetaris + Meterless Nightshift + H-MEM)" || echo "(nothing new to commit)"
   if command -v gh >/dev/null && gh auth status >/dev/null 2>&1; then
     if git remote get-url origin >/dev/null 2>&1; then git push -u origin main; else gh repo create "$NAME" --public --source . --push --description "Cross-border inflation agent for exporters - Open Agent Hackathon 2026 (Zetaris + Meterless)"; fi
     echo "REPO: $(gh repo view --json url -q .url 2>/dev/null)"

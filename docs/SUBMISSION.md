@@ -19,6 +19,6 @@ NVIDIA Nemotron, through Meterless Nightshift (the app's primary AI provider), r
 
 Code calculates a historical benchmark (latest YoY and recent annual mean, with observation coverage), how far the proposal sits from it, and a cost target from cost change, unit-cost share and its timing, and pass-through. It does not forecast demand.
 
-Meterless H-MEM (reference engine, conformance 13/13) remembers policies, requests and verified mappings, so "same as last time, but +3%?" skips planning and discovery; stale mappings or changed products are rechecked.
+Meterless H-MEM (reference engine, conformance 13/13) remembers policies, requests, verified mappings and each market's last result, so "same as last time, but +3%?" skips planning and discovery and says what changed since the last brief; stale mappings or changed products are rechecked.
 
 Built with Claude Code and Codex; Cursor was not used. Integrations, limits and six recorded runs with traces and offline-verifiable SQL rows: github.com/rose050505/pricesignal

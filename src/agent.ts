@@ -110,7 +110,7 @@ export class PriceSignalAgent extends EventEmitter {
       // One statement per call, and only SELECT, onboarding DDL or caching a source table (quoted text may contain anything).
       const bare = sqlOutsideQuotes(sql);
       if (!/^\s*(SELECT\b|CREATE\s+(LIGHTNING\s+(DATABASE|REST\s+TABLE)|SCHEMASTORE\s+(CONTAINER|VIEW)|OR\s+REPLACE\s+SCHEMASTORE\s+VIEW)\b|(?:UN)?CACHE\s+(?:LAZY\s+)?TABLE\b)/i.test(sql) || bare === undefined || /;\s*\S/.test(bare)) {
-        this.log("error", `blocked statement (only SELECT and onboarding DDL are allowed): ${sql.split("\n")[0].slice(0, 80)}`);
+        this.log("error", `blocked statement (only SELECT, onboarding DDL and CACHE/UNCACHE TABLE are allowed): ${sql.split("\n")[0].slice(0, 80)}`);
         throw new Error("statement blocked by the SQL allowlist");
       }
       let res: SqlResult;
