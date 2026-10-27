@@ -481,6 +481,11 @@ Reply with JSON only.`;
     const memory = this.deps.memory;
     const country = normalizeCountry(String(a.country ?? "")) ?? undefined;
     const concept: Concept = cleanConcept(a.concept) || req.concept;
+    // A batch can name the same pair twice (27 Oct 23:43: "ES food" twice); the second must not count as memory reuse.
+    if (country && ["use_memory_mapping", "discover_and_onboard", "onboard_series"].includes(action.action) && s.views.has(s.key(country, concept))) {
+      this.log("plan", `${country} ${concept} already has a view in this run - skipped the repeated ${action.action}`);
+      return { ok: true, view: s.views.get(s.key(country, concept))!.view, note: "already ready in this run" };
+    }
     try {
       switch (action.action) {
         case "recall_memory": {

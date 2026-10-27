@@ -59,3 +59,11 @@ test("slow planner replies stop asking the planner once their total passes the b
   assert.equal(b.facts.length, 1);
   assert.ok(b.facts[0].category, "the market is still answered");
 });
+
+test("a pair named twice in one batch is onboarded once and not reported as reused from memory", async () => {
+  const { a } = agent(async () => '{"actions":[{"action":"discover_and_onboard","args":{"country":"CA","concept":"food"}},{"action":"discover_and_onboard","args":{"country":"CA","concept":"food"}},{"action":"discover_and_onboard","args":{"country":"CA","concept":"all_items"}}]}');
+  const b = await a.run("canada food prices, ok to raise 4%?");
+  assert.ok(a.trace.some((e) => /CA food already has a view in this run - skipped the repeated discover_and_onboard/.test(e.title)));
+  assert.ok(b.views.every((v) => v.via === "onboarded"), JSON.stringify(b.views));
+  assert.equal(b.metrics?.reusedViews, 0);
+});
