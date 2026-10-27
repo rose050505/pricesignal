@@ -462,8 +462,16 @@ function headlineVerdictErrors(headline: string, facts: MarketFacts[], field = "
     }
     return bad;
   }
+  // Clauses split at , ; : and contrast words: "DE above, CA and AU within" gives CA and AU the verdict after them
+  // in their own clause; "above in DE and within in CA" keeps the verdict before each country.
+  const cuts = [0, ...[...text.matchAll(/[,;:]|\b(?:but|while|whereas)\b/gi)].map((c) => c.index! + c[0].length), text.length];
+  const clauseOf = (at: number) => { let i = 0; while (i < cuts.length - 2 && cuts[i + 1] <= at) i++; return [cuts[i], cuts[i + 1]] as const; };
   for (const m of mentions) {
-    const owner = [...claims].reverse().find((c) => c.at < m.at) ?? claims[0];
+    const [cs, ce] = clauseOf(m.at);
+    const inClause = claims.filter((c) => c.at >= cs && c.at < ce);
+    const owner = inClause.length
+      ? [...inClause].reverse().find((c) => c.at < m.at) ?? inClause[0]
+      : [...claims].reverse().find((c) => c.at < m.at) ?? claims[0];
     const f = vf.find((x) => x.country === m.country)!;
     const verdict = owner.subject === "cost" ? f.costVsMarket : f.verdict;
     if (!verdict || !owner.verdicts.has(verdict)) bad.push(`${field} "${owner.words.join(" or ")}" for ${m.country} (computed: ${verdict})`);

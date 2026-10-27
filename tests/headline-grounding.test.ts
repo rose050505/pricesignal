@@ -164,3 +164,22 @@ test("a cost-recovery requirement must state the computed cost target, not anoth
     "The proposed +5% is above the market benchmark in DE and CA; recovering costs requires 3.4%.",
   ]) assert.deepEqual(check({ headline: right }), [], right);
 });
+
+test("a country named before its verdict word in its own clause gets that verdict", () => {
+  const req3: Request = { raw: "same as last time, +3%", countries: ["DE", "CA", "AU"], concept: "food", conceptWords: ["food"], proposedChangePct: 3, unknownCountries: [] };
+  const rows3 = [["DE", 0.6, 0.4], ["CA", 3.9, 2.2], ["AU", 3.1, 3.0]].flatMap(([country, prior, latest]) => [
+    { country, concept: "food", category_label: "Food", frequency: "M", period: "2026-08", yoy_pct: prior, source_id: `${country}:food` },
+    { country, concept: "food", category_label: "Food", frequency: "M", period: "2026-09", yoy_pct: latest, source_id: `${country}:food` },
+  ]);
+  const f3 = buildFacts(rows3, req3, "Q1", 1, new Date("2026-10-27"));
+  assert.deepEqual(f3.map((f) => f.verdict), ["above the market benchmark", "within the market benchmark", "within the market benchmark"]);
+  const check3 = (headline: string) => checkNarrative({ headline, markets: {} }, allowedNumbers(f3, req3, 1), f3, req3, 1);
+  // Real headline removed on 27 Oct 09:53 although it was right.
+  for (const right of ["Proposed +3% change: DE above, CA and AU within food CPI historical benchmarks", "DE above; CA and AU within the market benchmark.", "+3% is above in DE and within in CA and AU.", "+3% is above the market benchmark in DE, within it in CA and AU."])
+    assert.deepEqual(check3(right), [], right);
+  for (const [wrong, country] of [["DE and AU above the benchmark, CA within.", "AU"], ["Above in DE and CA, within in AU.", "CA"], ["DE within, CA and AU within.", "DE"]] as const) {
+    const errors = check3(wrong);
+    assert.ok(errors.some((e) => e.includes(`for ${country}`)), `${wrong} -> ${JSON.stringify(errors)}`);
+    assert.equal(errors.length, 1, `${wrong} -> ${JSON.stringify(errors)}`);
+  }
+});
