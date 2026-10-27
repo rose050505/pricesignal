@@ -198,7 +198,7 @@ export class PriceSignalAgent extends EventEmitter {
 countries (array of strings as the user wrote them), concept (one of: food, all_items, snacks, condiments, or a short noun), concept_words (2-4 lowercase words an official statistics label might use),
 proposed_change_pct (signed number or null, preserve price reductions), cost_increase_pct (signed number or null, only if the user states how much their own costs changed), cost_share_pct (0..100 or null, only if the user states unit cost / selling price as a percentage; the cost can be before or after the stated change and the selling-price denominator must stay unchanged), pass_through (0..1 or null, the share of the monetary cost increase to recover in selling prices), policy_statement (string or null).
 These percentages have different denominators: never infer cost_share_pct from a cost increase, pass-through policy, or proposed change. Tax, VAT, margin, observed inflation and past price changes are not a new proposed price change. Preserve decimal fractions and explicit signs. Countries must be named in the request; never replace a named market with another. For "same as last time", return null for values the user did not change. Do not invent a cost share or its before/after timing. The concept is the category whose inflation or prices the user asks to compare; product names introducing their business do not override an explicit comparison category.
-Request: """${raw}"""
+Request: """${forModel(raw)}"""
 Reply with JSON only.`;
     let j: any = {};
     this.requestReadByRules = true;
@@ -302,7 +302,7 @@ Reply with JSON only.`;
     const rememberedPairs = pairs.filter((p) => memory.findMapping(p.country, p.concept)?.mapping);
     const messages: ChatMessage[] = [
       { role: "system", content: SYSTEM_PLANNER },
-      { role: "user", content: `Task: ${JSON.stringify({ request: raw, needed: pairs, concept_words: req.conceptWords, in_memory: rememberedPairs })}` },
+      { role: "user", content: `Task: ${JSON.stringify({ request: forModel(raw), needed: pairs, concept_words: req.conceptWords, in_memory: rememberedPairs })}` },
     ];
     let compared: SqlResult | undefined;
     let comparedViews = -1; // views.size when the last federated query ran
@@ -1003,7 +1003,7 @@ Reply with JSON only.`;
     // Notes about other product categories ("CA snacks: ...") describe the SKU price table, not the market benchmark.
     const skuNote = (n: string) => { const m = n.match(/^[A-Z]{2} ([a-z_]+):/); return !!m && m[1] !== req.concept && m[1] !== "all_items"; };
     const costScenario = facts.some((f) => f.costNeed !== undefined) ? "computed" : req.costIncreasePct !== undefined ? "unavailable" : "none";
-    const payload = { request: req.raw, proposed_change_pct: req.proposedChangePct ?? null, cost_increase_pct: req.costIncreasePct ?? null, cost_share_pct: req.costSharePct ?? null, cost_scenario: costScenario, cost_share_basis: costScenario === "none" ? null : costShareBasisDescription(req), cost_pass_through_pct: req.invalidPassThrough ? null : Math.round(policy * 100), benchmark_basis: BENCHMARK_BASIS, facts: factsForNarrative(facts, req, policy), caveats: unique.filter((n) => !skuNote(n)), sku_price_notes: unique.filter(skuNote) };
+    const payload = { request: forModel(req.raw), proposed_change_pct: req.proposedChangePct ?? null, cost_increase_pct: req.costIncreasePct ?? null, cost_share_pct: req.costSharePct ?? null, cost_scenario: costScenario, cost_share_basis: costScenario === "none" ? null : costShareBasisDescription(req), cost_pass_through_pct: req.invalidPassThrough ? null : Math.round(policy * 100), benchmark_basis: BENCHMARK_BASIS, facts: factsForNarrative(facts, req, policy), caveats: unique.filter((n) => !skuNote(n)), sku_price_notes: unique.filter(skuNote) };
     const ask: ChatMessage[] = [
       { role: "system", content: "You write short, plain-English pricing briefs for an exporter's pricing manager. Use ONLY numbers that appear in the facts JSON, written with the same rounding. Copy benchmark_range_pct low and high exactly; never compute a range yourself. This is a historical year-on-year consumer-price benchmark, not a recommended price, willingness-to-pay estimate, or forecast. Each market's verdict field is final: say it as given (above, within or below the market benchmark), keeping every market and the headline consistent. Average coverage states how many monthly or quarterly observations were available; do not call partial coverage a complete annual average or insufficient history a flat trend. cost_need_pct, when provided, is a conditional cost-recovery scenario computed from the stated before/after-change cost basis, unchanged selling price, cost change and monetary cost pass-through. State the cost basis exactly as supplied and preserve any timing assumption. The cost policy does not scale the market benchmark; it applies only to the separate cost-recovery scenario. If no cost scenario was computed, do not say the policy was applied to the proposed change or the market benchmark. It does not assume or preserve a profit margin. If the cost scenario is unavailable, use the supplied missing-input reason and do not invent a price target from the cost change. Use cost_vs_market exactly when comparing that scenario with the historical benchmark. Never write internal JSON keys in the prose; name the cost recovery target and its explicit percentage as the subject of a cost comparison, separately from the proposed price change. No new numbers, no predictions about customers accepting a price. Mention the caveats supplied in the facts JSON and do not invent other source or methodology claims. If cost_scenario is \"none\", the request states no cost change: do not mention any cost need, cost-recovery target or cost comparison. sku_price_notes describe only the SKU price table for particular products; they never mean that a market's benchmark data is missing. When a proposed change is given, the headline states its verdict against the market benchmark." },
       { role: "user", content: `Facts: ${JSON.stringify(payload)}\nReply with JSON only: {"headline": str (<= 20 words), "markets": {"<country code>": str (2 sentences: what the data says and what it means for the proposed change)}, "watch": str (one sentence, <= 20 words, on what to re-check next month)}\nCopy each benchmark_range_pct exactly. Never multiply a benchmark, rate or average by cost_pass_through_pct: the pass-through applies only to cost_need_pct.` },
@@ -1286,6 +1286,15 @@ function via(r: ChatResult): string {
 /** A concept name from the model ends up in view names and SQL string literals: keep it to plain words. */
 function cleanConcept(v: unknown): string {
   return typeof v !== "string" ? "" : v.toLowerCase().replace(/['"`\\;]/g, "").trim();
+}
+
+/**
+ * The request as sent to the model. Through Nightshift on 27 Oct, questions with "go +3%" / "go -2%" came back as
+ * empty replies from both Nemotron lanes, while "move +3%" answered in 1-3 s. The rules, the brief and the memory
+ * keep the words as written.
+ */
+export function forModel(raw: string): string {
+  return raw.replace(/\bgo(?=\s+(?:(?:up|down|to|by)\s+)?[+\-−]?\s?\d)/gi, (m) => (m[0] === "G" ? "Move" : "move"));
 }
 
 function sameAsLastRequest(raw: string): boolean {
