@@ -97,3 +97,43 @@ test("a data-missing phrase is checked only against the market it is about", () 
   // Still caught when the market named is the one whose data is present.
   assert.ok(check({ headline: "German data absent; Aussie flat." }).some((p) => /DE: data claimed missing/.test(p)));
 });
+
+test("facts shared by every market are sent once, and the reply asked for is short", async () => {
+  const seen: any[] = [];
+  const facts = buildFacts(rows, { ...base, costIncreasePct: 8, costSharePct: 60 }, "Q1", 0.7, new Date("2026-10-27"));
+  const agent = new PriceSignalAgent({
+    llm: (async (m: any[], o: any) => { seen.push({ m, o }); return { text: '{"headline":"Historical market comparison","markets":{},"watch":"Re-check next month."}', model: "f", provider: "f", ms: 1 }; }) as any,
+    sql: { run: async () => { throw new Error("no SQL"); } } as any,
+    memory: new AgentMemory(fs.mkdtempSync(path.join(os.tmpdir(), "psig-narr-short-"))), hedgeMs: Infinity,
+  });
+  await (agent as any).narrate({ ...base, costIncreasePct: 8, costSharePct: 60 }, facts, NOTES, 0.7);
+  const user = seen[0].m[1].content as string;
+  const payload = JSON.parse(user.replace(/^Facts: /, "").split("\nReply with JSON only")[0]);
+  assert.match(String(payload.benchmark_basis), /historical reference only/);
+  for (const f of payload.facts) {
+    assert.equal(f.benchmark_basis, undefined);
+    assert.ok(f.cost_need_pct !== undefined && f.cost_vs_market !== undefined);
+  }
+  assert.match(String(payload.cost_share_basis), /unit cost/);
+  assert.match(user, /"headline": str \(<= 20 words\)/);
+  assert.match(user, /2 sentences/);
+});
+
+test("a reply cut off at the token limit is retried with a larger limit", async () => {
+  const calls: any[] = [];
+  const facts = buildFacts(rows, base, "Q1", 0.7, new Date("2026-10-27"));
+  const agent = new PriceSignalAgent({
+    llm: (async (_m: any[], o: any) => {
+      calls.push(o);
+      return calls.length === 1
+        ? { text: '{ "headline": "Food CPI: DE 0.4%, AU 3.0%, CA unavailable; +5% Q1 above benchmarks where da', model: "f", provider: "f", ms: 1, finishReason: "length", usage: { completion_tokens: 8000 } }
+        : { text: '{"headline":"Historical market comparison","markets":{},"watch":"Re-check next month."}', model: "f", provider: "f", ms: 1, finishReason: "stop" };
+    }) as any,
+    sql: { run: async () => { throw new Error("no SQL"); } } as any,
+    memory: new AgentMemory(fs.mkdtempSync(path.join(os.tmpdir(), "psig-narr-len-"))), hedgeMs: Infinity,
+  });
+  const res = await (agent as any).narrate(base, facts, NOTES, 0.7);
+  assert.ok(res.narrative);
+  assert.ok(calls[1].maxTokens >= 16000, String(calls[1].maxTokens));
+  assert.ok(agent.trace.some((e) => /cut off at the token limit/.test(e.title)), agent.trace.map((e) => e.title).join("\n"));
+});

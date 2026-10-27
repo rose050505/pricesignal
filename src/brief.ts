@@ -654,13 +654,15 @@ export function checkNarrative(n: Narrative, allowed: number[], facts?: MarketFa
 }
 
 /** What the narrative model sees: the facts without the monthly history, so it cannot pick a stray number. */
+/** What every market benchmark means; sent once with the narrative facts rather than per market. */
+export const BENCHMARK_BASIS = "latest YoY and available-observation mean in the year ending at the latest observation; historical reference only, not a forecast, confidence interval or evidence of customer acceptance";
+
 export function factsForNarrative(facts: MarketFacts[], req?: Request, policy?: number): unknown[] {
   const slim = (s?: SeriesFacts) => (s ? { label: s.label, frequency: s.frequency, latestPeriod: s.latestPeriod, latestYoy: s.latestYoy, avg12: s.avg12, averageCount: s.averageCount, averageExpected: s.averageExpected, averageLabel: s.averageLabel, yoy6Back: s.yoy6Back, trend: s.trend } : undefined);
   return facts.map((f) => ({
     country: f.country, agency: f.agency, category: slim(f.category), allItems: slim(f.allItems), monthsStale: f.monthsStale,
     ...(req ? { requested_category: req.concept, requested_category_available: !!requestedSeries(f, req), all_items_context_only: req.concept !== "all_items" && !!f.allItems } : {}),
     benchmark_range_pct: f.suggested ? { low: f.suggested.low, high: f.suggested.high } : undefined,
-    benchmark_basis: f.suggested ? "latest YoY and available-observation mean in the year ending at the latest observation; historical reference only, not a forecast, confidence interval or evidence of customer acceptance" : undefined,
     ...(!req || requestedSeries(f, req) ? {} : { coverage_note: "The requested category is unavailable. Do not state its inflation, benchmark or proposal/cost verdict. Any all-items observations are context only; cost recovery can still be calculated independently." }),
     verdict: f.verdict,
     ...(f.costNeed !== undefined && !req?.invalidPassThrough ? {

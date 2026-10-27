@@ -8,7 +8,7 @@ import { chat, ChatMessage, ChatResult } from "./llm.ts";
 import { AgentMemory, type SeriesMapping } from "./memory.ts";
 import { SqlResult, SqlRunner, rowsAsObjects, isIncompleteResultError } from "./zetaris.ts";
 import { AGENCY_FOR, COMPARE_COLUMNS, Candidate, Concept, Country, COUNTRY_ALIASES, CONCEPT_WORDS, compareSql, discover, monthsBack, normalizeCountry, onboard, skuSearchWords, isBroadFoodLabel, ensureCached, rawTableRef, sourceAnswers } from "./sources/index.ts";
-import { MarketFacts, Brief, RunMetrics, SkuLine, buildFacts, renderBrief, signedPct, marketKey, allowedNumbers, checkNarrative, salvageNarrative, factsForNarrative, costShareBasisDescription, seriesFacts, marketBenchmark, Narrative, NarrativeIssue } from "./brief.ts";
+import { MarketFacts, Brief, RunMetrics, SkuLine, buildFacts, renderBrief, signedPct, marketKey, allowedNumbers, checkNarrative, salvageNarrative, factsForNarrative, BENCHMARK_BASIS, costShareBasisDescription, seriesFacts, marketBenchmark, Narrative, NarrativeIssue } from "./brief.ts";
 import { buildAlignment } from "./alignment.ts";
 import { PRICE_DB, PRICING_COLUMNS, SKU_RATE_COLUMNS, ensurePriceList, priceTable, priceView, pricingSql, skuCategoriesSql, skuRatesSql } from "./sources/pricelist.ts";
 import { BROADER_COVERAGE_REASON, SELECTION_VERSION, skuScope, selectionMessages, validateSelectionsPerGroup, fallbackSelection, type SelectionGroup, type SelectionDecision } from "./selection.ts";
@@ -968,15 +968,16 @@ Reply with JSON only.`;
     // Notes about other product categories ("CA snacks: ...") describe the SKU price table, not the market benchmark.
     const skuNote = (n: string) => { const m = n.match(/^[A-Z]{2} ([a-z_]+):/); return !!m && m[1] !== req.concept && m[1] !== "all_items"; };
     const costScenario = facts.some((f) => f.costNeed !== undefined) ? "computed" : req.costIncreasePct !== undefined ? "unavailable" : "none";
-    const payload = { request: req.raw, proposed_change_pct: req.proposedChangePct ?? null, cost_increase_pct: req.costIncreasePct ?? null, cost_share_pct: req.costSharePct ?? null, cost_scenario: costScenario, cost_share_basis: costScenario === "none" ? null : costShareBasisDescription(req), cost_pass_through_pct: req.invalidPassThrough ? null : Math.round(policy * 100), facts: factsForNarrative(facts, req, policy), caveats: unique.filter((n) => !skuNote(n)), sku_price_notes: unique.filter(skuNote) };
+    const payload = { request: req.raw, proposed_change_pct: req.proposedChangePct ?? null, cost_increase_pct: req.costIncreasePct ?? null, cost_share_pct: req.costSharePct ?? null, cost_scenario: costScenario, cost_share_basis: costScenario === "none" ? null : costShareBasisDescription(req), cost_pass_through_pct: req.invalidPassThrough ? null : Math.round(policy * 100), benchmark_basis: BENCHMARK_BASIS, facts: factsForNarrative(facts, req, policy), caveats: unique.filter((n) => !skuNote(n)), sku_price_notes: unique.filter(skuNote) };
     const ask: ChatMessage[] = [
       { role: "system", content: "You write short, plain-English pricing briefs for an exporter's pricing manager. Use ONLY numbers that appear in the facts JSON, written with the same rounding. Copy benchmark_range_pct low and high exactly; never compute a range yourself. This is a historical year-on-year consumer-price benchmark, not a recommended price, willingness-to-pay estimate, or forecast. Each market's verdict field is final: say it as given (above, within or below the market benchmark), keeping every market and the headline consistent. Average coverage states how many monthly or quarterly observations were available; do not call partial coverage a complete annual average or insufficient history a flat trend. cost_need_pct, when provided, is a conditional cost-recovery scenario computed from the stated before/after-change cost basis, unchanged selling price, cost change and monetary cost pass-through. State the cost basis exactly as supplied and preserve any timing assumption. The cost policy does not scale the market benchmark; it applies only to the separate cost-recovery scenario. If no cost scenario was computed, do not say the policy was applied to the proposed change or the market benchmark. It does not assume or preserve a profit margin. If the cost scenario is unavailable, use the supplied missing-input reason and do not invent a price target from the cost change. Use cost_vs_market exactly when comparing that scenario with the historical benchmark. Never write internal JSON keys in the prose; name the cost recovery target and its explicit percentage as the subject of a cost comparison, separately from the proposed price change. No new numbers, no predictions about customers accepting a price. Mention the caveats supplied in the facts JSON and do not invent other source or methodology claims. If cost_scenario is \"none\", the request states no cost change: do not mention any cost need, cost-recovery target or cost comparison. sku_price_notes describe only the SKU price table for particular products; they never mean that a market's benchmark data is missing. When a proposed change is given, the headline states its verdict against the market benchmark." },
-      { role: "user", content: `Facts: ${JSON.stringify(payload)}\nReply with JSON only: {"headline": str (<= 25 words), "markets": {"<country code>": str (2-3 sentences: what the data says and what it means for the proposed change)}, "watch": str (one sentence on what to re-check next month)}` },
+      { role: "user", content: `Facts: ${JSON.stringify(payload)}\nReply with JSON only: {"headline": str (<= 20 words), "markets": {"<country code>": str (2 sentences: what the data says and what it means for the proposed change)}, "watch": str (one sentence, <= 20 words, on what to re-check next month)}` },
     ];
     // One time budget for the prose, retries included: the numbers never wait more than this for the words.
     const deadline = Date.now() + Number(process.env.PSIG_NARRATIVE_BUDGET_MS || 55_000);
     let issue: NarrativeIssue | undefined; // why the last attempt failed, so the brief states the real reason
     const drafts: Narrative[] = []; // drafts that failed the fact check, for sentence-level salvage
+    let maxTokens = 8000; // Nemotron's hidden reasoning counts against it; raised once if a reply is cut off
     const withMarketKeys = (n: Narrative): Narrative => ({ ...n, markets: Object.fromEntries(Object.entries(n.markets ?? {}).map(([k, v]) => [marketKey(k), v])) });
     for (let attempt = 0; attempt < 2; attempt++) {
       const left = deadline - Date.now();
@@ -986,8 +987,12 @@ Reply with JSON only.`;
         break;
       }
       try {
-        const r = await this.hedged("narrative", (signal) => this.llm(ask, { lane: (process.env.PSIG_NARRATIVE_LANE as "fast" | "deep") || "fast", temperature: 0.2, maxTokens: 8000, attempts: 1, timeoutMs: Math.max(1_000, deadline - Date.now()), signal }));
+        const r = await this.hedged("narrative", (signal) => this.llm(ask, { lane: (process.env.PSIG_NARRATIVE_LANE as "fast" | "deep") || "fast", temperature: 0.2, maxTokens, attempts: 1, timeoutMs: Math.max(1_000, deadline - Date.now()), signal }));
         const n = extractJson(r.text) as Narrative | null;
+        if (!n?.headline && r.finishReason === "length") {
+          maxTokens = 16_000;
+          throw new Error(`reply cut off at the token limit (finish_reason=length; ${JSON.stringify(r.usage ?? {}).slice(0, 120)}) - the next attempt allows ${maxTokens} tokens: ${r.text.replace(/\s+/g, " ").slice(0, 100)}`);
+        }
         if (!n?.headline) throw new Error(`no headline in reply: ${r.text.replace(/\s+/g, " ").slice(0, 160)}`);
         const bad = checkNarrative(n, allowed, facts, req, policy, noteNumbers);
         this.log("llm", `narrative (${r.model}, ${r.ms} ms${via(r)})${bad.length ? ` - does not match the facts: ${bad.join(", ")}` : " - numbers and verdicts match the facts"}`, bad.length ? { model: r.model, ms: r.ms, draft: n, problems: bad } : undefined);
@@ -997,7 +1002,7 @@ Reply with JSON only.`;
         ask.push({ role: "assistant", content: r.text }, { role: "user", content: `These numbers, ranges or verdicts do not match the facts for that market: ${bad.join(", ")}. Rewrite using only that market's numbers; the benchmark range must be exactly benchmark_range_pct low to high, and each market's verdict must be exactly its verdict field. JSON only.` });
       } catch (e) {
         this.log("warn", `narrative attempt failed: ${String(e).slice(0, 120)}`);
-        issue = /no headline in reply/.test(String(e)) ? "unusable" : "provider";
+        issue = /no headline in reply|cut off at the token limit/.test(String(e)) ? "unusable" : "provider";
         // Failures through Nightshift come and go from one request to the next, so the next attempt runs while the budget lasts.
       }
     }

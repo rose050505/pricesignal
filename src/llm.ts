@@ -7,7 +7,7 @@ import { env } from "./env.ts";
 
 export type Role = "system" | "user" | "assistant";
 export interface ChatMessage { role: Role; content: string }
-export interface ChatResult { text: string; model: string; provider: string; ms: number; usage?: unknown }
+export interface ChatResult { text: string; model: string; provider: string; ms: number; usage?: unknown; finishReason?: string }
 
 const APP_ID = "pricesignal";
 const TIMEOUT_MS = Number(process.env.LLM_TIMEOUT_MS || 90_000);
@@ -140,7 +140,7 @@ export async function chat(messages: ChatMessage[], opts: { lane?: "fast" | "dee
         lastErr = new Error(`empty completion (finish_reason=${j.choices?.[0]?.finish_reason ?? "?"}, reasoning ${String(msg.reasoning ?? msg.reasoning_content ?? "").length} chars)`);
         continue;
       }
-      return { text, model: String(j.model ?? model), provider: cfg.provider, ms: Date.now() - t0, usage: j.usage };
+      return { text, model: String(j.model ?? model), provider: cfg.provider, ms: Date.now() - t0, usage: j.usage, finishReason: j.choices?.[0]?.finish_reason };
     } catch (e) {
       lastErr = e;
       process.stderr.write(`    … failed: ${String(e).slice(0, 160)}\n`);
