@@ -24,3 +24,12 @@ test('Markdown negative SKU ranges do not acquire a contradictory plus sign',()=
   const b=brief();b.skus![0].rangeLow=-1.4;b.skus![0].rangeHigh=-1;
   assert.doesNotMatch(renderBrief(b),/\+-1\.4/);
 });
+
+test('Markdown calls a Food series that was the only official candidate "only official option", like the UI',()=>{
+  const b=brief();
+  b.skus![0].selectionSource='fallback';
+  b.skus![0].selectionReason='The official Food series was the only candidate; no product-specific official series was found.';
+  const md=renderBrief(b);
+  assert.match(md,/broader proxy; only official option/);
+  assert.doesNotMatch(md,/unconfirmed match/);
+});
