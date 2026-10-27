@@ -21,10 +21,11 @@ function fakeRows(): unknown[][] {
 }
 class FakeZ implements SqlRunner {
   sqls: string[] = [];
-  constructor(private failSemantic = false) {}
+  constructor(private failSemantic = false, private failSemanticRead = false) {}
   async run(sql: string): Promise<SqlResult> {
     this.sqls.push(sql);
     if (this.failSemantic && /^CREATE OR REPLACE SCHEMASTORE VIEW/.test(sql)) throw new Error("Zetaris HTTP 400: not permitted");
+    if (this.failSemanticRead && /FROM psig\.v_market_inflation_/.test(sql)) throw new Error("Zetaris HTTP 500: org.apache.spark.sql.AnalysisException: Table or view not found");
     if (/^SELECT COUNT/.test(sql)) return { id: "x", sql, columns: ["n", "latest"], rows: [[9, "2026-09"]], ms: 1 };
     if (/^SELECT country/.test(sql)) return { id: "x", sql, columns: ["country", "concept", "category_label", "frequency", "period", "yoy_pct", "source_id"], rows: fakeRows(), ms: 2 };
     return { id: "x", sql, columns: [], rows: [], ms: 1 };
@@ -77,6 +78,17 @@ test("if the semantic view cannot be created the comparison falls back to the di
   assert.equal(brief.semanticView, undefined);
   assert.equal(brief.facts.length, 2);
   assert.ok(agent.trace.some((e) => e.kind === "warn" && /semantic view/.test(e.title)));
+});
+
+test("if the semantic view is created but cannot be read, the same attempt queries the agency views directly", async () => {
+  const z = new FakeZ(false, true);
+  const agent = agentWith(z);
+  const brief = await agent.run("DE and AU food +5%");
+  assert.match(brief.compared.sql, /UNION ALL/);
+  assert.equal(brief.semanticView, undefined);
+  assert.equal(brief.facts.length, 2);
+  assert.equal(z.sqls.filter((s) => /FROM psig\.v_market_inflation_/.test(s)).length, 1, "one failed read, not three");
+  assert.ok(agent.trace.some((e) => e.kind === "warn" && /semantic view .* could not be read/.test(e.title)));
 });
 
 test("the SQL allowlist accepts OR REPLACE only for schemastore views", async () => {

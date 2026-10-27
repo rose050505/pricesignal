@@ -109,6 +109,12 @@ export function humanError(raw: unknown): string {
   return s.replace(/^Error: /, "").slice(0, 140);
 }
 
+/** An agency outage during discovery is true only for that run: it is shown then, never stored with a remembered mapping. */
+const TRANSIENT_NOTE = /\bdid not answer during discovery\b|\bcould not be checked\b/i;
+export function durableNotes(note: string | undefined): string | undefined {
+  return note?.split(/(?<=[.!?])\s+/).filter((s) => !TRANSIENT_NOTE.test(s)).join(" ") || undefined;
+}
+
 /** One retry after a dropped connection, a 5xx or a 429 (agencies blip); a timeout already waited a minute and is not retried. */
 export async function getJson(url: string, headers: Record<string, string> = {}, retryDelayMs = 1000): Promise<any> {
   let r: Response | undefined;

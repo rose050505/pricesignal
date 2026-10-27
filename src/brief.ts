@@ -3,7 +3,7 @@
 // that introduces numbers not present in the facts.
 import type { Request, TraceEvent } from "./agent.ts";
 import type { SqlResult } from "./zetaris.ts";
-import { AGENCY_FOR, Country, normalizeCountry } from "./sources/index.ts";
+import { AGENCY_FOR, CONCEPT_WORDS, Country, normalizeCountry } from "./sources/index.ts";
 import { priceView } from "./sources/pricelist.ts";
 import type { PeriodAlignment } from "./alignment.ts";
 import { costPolicyErrors } from "./narrative-policy.ts";
@@ -358,10 +358,34 @@ function availableDataDenialErrors(text: string, f: MarketFacts, req: Request, f
     if (!requestedSeries(f, req)) continue;
     const series = /all[ -]items|headline inflation/i.test(sentence) ? f.allItems : requestedSeries(f, req);
     if (!series) continue;
-    const m = sentence.match(/\b(?:unavailable|not available|absent|missing|failed to respond|did not respond|no\s+(?:\w+\s+){0,2}(?:data|figures?|series|benchmark|verdict|release))\b/i);
-    if (m) bad.push(`data claimed missing although it is in the facts: ${m[0]}`);
+    const m = sentence.match(/\b(?:unavailable|not (?:yet )?available|absent|missing|failed to respond|did not respond|no\s+(?:[\w-]+\s+){0,2}(?:data|figures?|series|benchmark|verdict|release))\b/i);
+    if (!m) continue;
+    // "no separate condiments series", "a snacks-level series" and "no October 2026 data yet" / "no newer release"
+    // are about a narrower category or a later period, not about this series.
+    const claim = sentence.slice(0, m.index! + m[0].length);
+    if (narrowerCategory(claim, req) || /\b(?:newer|later|next|more recent|upcoming)\b/i.test(claim) || laterPeriodNamed(claim, series.latestPeriod)) continue;
+    bad.push(`data claimed missing although it is in the facts: ${m[0]}`);
   }
   return bad;
+}
+
+function narrowerCategory(text: string, req: Request): boolean {
+  if (/\b(?:separate|specific|dedicated|narrower|detailed|sub-?categor\w*|[a-z]+-level)\b/i.test(text)) return true;
+  const other = Object.entries(CONCEPT_WORDS).filter(([k]) => k !== req.concept && k !== "food" && k !== "all_items").flatMap(([, w]) => w);
+  return other.some((w) => new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i").test(text));
+}
+
+const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+/** Whether the text names a month or quarter after the series' latest observation ("October 2026", "2026-Q4"). */
+function laterPeriodNamed(text: string, latest: string): boolean {
+  const last = periodIndex(latest);
+  if (Number.isNaN(last)) return false;
+  const named = [
+    ...[...text.matchAll(/\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{4})\b/gi)].map((m) => Number(m[2]) * 12 + MONTHS.indexOf(m[1].toLowerCase())),
+    ...[...text.matchAll(/\b(\d{4})-(\d{2}|Q[1-4])\b/g)].map((m) => periodIndex(`${m[1]}-${m[2]}`)),
+    ...[...text.matchAll(/\bQ([1-4])\s+(\d{4})\b/g)].map((m) => periodIndex(`${m[2]}-Q${m[1]}`)),
+  ];
+  return named.some((i) => i > last);
 }
 
 function checkCoverage(text: string, facts: MarketFacts[]): { text: string; errors: string[] } {
@@ -470,15 +494,34 @@ function headlineVerdictErrors(headline: string, facts: MarketFacts[], field = "
   // in their own clause; "above in DE and within in CA" keeps the verdict before each country.
   const cuts = [0, ...[...text.matchAll(/[,;:]|\b(?:but|while|whereas)\b/gi)].map((c) => c.index! + c[0].length), text.length];
   const clauseOf = (at: number) => { let i = 0; while (i < cuts.length - 2 && cuts[i + 1] <= at) i++; return [cuts[i], cuts[i + 1]] as const; };
+  const verdictOf = (country: Country, c: (typeof claims)[number]) => { const f = vf.find((x) => x.country === country)!; return c.subject === "cost" ? f.costVsMarket : f.verdict; };
+  const excepted = new Map<(typeof claims)[number], Set<Country>>();
   for (const m of mentions) {
     const [cs, ce] = clauseOf(m.at);
+    const clause = text.slice(cs, ce);
     const inClause = claims.filter((c) => c.at >= cs && c.at < ce);
-    const owner = inClause.length
+    // "Canada and Australia: within" takes the verdict after the colon; "fits Canada and Australia but exceeds
+    // Germany's" says these countries do NOT have the verdict after the contrast word.
+    const next = claims.find((c) => c.at >= ce);
+    let owner = inClause.length
       ? [...inClause].reverse().find((c) => c.at < m.at) ?? inClause[0]
-      : [...claims].reverse().find((c) => c.at < m.at) ?? claims[0];
-    const f = vf.find((x) => x.country === m.country)!;
-    const verdict = owner.subject === "cost" ? f.costVsMarket : f.verdict;
-    if (!verdict || !owner.verdicts.has(verdict)) bad.push(`${field} "${owner.words.join(" or ")}" for ${m.country} (computed: ${verdict})`);
+      : /:\s*$/.test(clause) && next ? next : [...claims].reverse().find((c) => c.at < m.at) ?? claims[0];
+    let negated = !inClause.length && !!next && /\b(?:but|while|whereas)\s*$/i.test(clause);
+    if (negated) owner = next!;
+    // "within in all markets except Germany": the excepted country does not have that verdict.
+    if (owner.at < m.at && /\b(?:except|other than|apart from|besides|excluding)\b/i.test(text.slice(Math.max(cs, owner.end), m.at))) {
+      negated = true;
+      excepted.set(owner, (excepted.get(owner) ?? new Set()).add(m.country));
+    }
+    const verdict = verdictOf(m.country, owner);
+    const ok = negated ? !!verdict && !owner.verdicts.has(verdict) : !!verdict && owner.verdicts.has(verdict);
+    if (!ok) bad.push(`${field} "${owner.words.join(" or ")}"${negated ? " excludes" : " for"} ${m.country} (computed: ${verdict})`);
+  }
+  // "... in all markets except Germany": every other market must have that verdict.
+  for (const [c, out] of excepted) {
+    if (!universalClaim(text, c.at)) continue;
+    const off = vf.filter((f) => !out.has(f.country) && !c.verdicts.has(verdictOf(f.country, c) ?? ""));
+    if (off.length) bad.push(`${field} "${c.words.join(" or ")}" for every other market (computed: ${off.map((f) => `${f.country} ${verdictOf(f.country, c)}`).join(", ")})`);
   }
   return [...new Set(bad)];
 }

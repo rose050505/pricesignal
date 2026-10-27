@@ -14,6 +14,8 @@ export interface SelectionDecision {
   reason: string;
   by: 'model' | 'fallback';
   model?: string;
+  /** The official Food series was the only candidate, so there was nothing for the model to judge. */
+  onlyCandidate?: boolean;
 }
 
 /** Product scope is independent of market mappings and of presentation order. */

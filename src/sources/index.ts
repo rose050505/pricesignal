@@ -44,7 +44,8 @@ export function rawTableRef(c: Candidate, concept: Concept): string {
  * Zetaris CACHE TABLE keeps a REST table's response, so later queries read the cache instead of calling the agency
  * (measured: 0 endpoint calls after caching; CACHE TABLE on a cached table is a no-op). The cache is refreshed with
  * UNCACHE + CACHE after PSIG_CACHE_TTL_HOURS (default 6), but only when the agency answers - the cached copy is
- * never dropped during an outage. Cache times are tracked per process.
+ * never dropped during an outage (a CACHE that fails right after UNCACHE is tried once more, then reported as failed).
+ * Cache times are tracked per process.
  */
 const cachedAt = new Map<string, number>();
 export function resetCacheRegistry(): void {
@@ -65,7 +66,8 @@ export async function ensureCached(z: SqlRunner, ref: string, opts: { now?: numb
         return { ok: true, action: "kept-stale", cachedAt: at };
       }
       await z.run(`UNCACHE TABLE IF EXISTS ${ref}`);
-      await z.run(`CACHE TABLE ${ref}`);
+      // Once uncached, a failed CACHE would leave no copy at all: try it once more before reporting the failure.
+      await z.run(`CACHE TABLE ${ref}`).catch(() => z.run(`CACHE TABLE ${ref}`));
       cachedAt.set(ref, now);
       return { ok: true, action: "refreshed", cachedAt: now };
     }
@@ -78,10 +80,10 @@ export async function ensureCached(z: SqlRunner, ref: string, opts: { now?: numb
   }
 }
 
-/** Whether an agency endpoint answers with JSON right now (used before refreshing a cached copy). */
-export async function sourceAnswers(url: string): Promise<boolean> {
+/** Whether an agency endpoint answers with JSON right now (used before refreshing a cached copy), asked as its REST table asks. */
+export async function sourceAnswers(url: string, agency?: string): Promise<boolean> {
   try {
-    await getJson(url, {}, 500);
+    await getJson(url, agency === "abs" ? abs.REQUEST_HEADERS : {}, 500);
     return true;
   } catch {
     return false;
@@ -141,7 +143,7 @@ export async function onboard(z: SqlRunner, c: Candidate, concept: Concept, now 
   // One retry after a short pause: an agency read through Zetaris can fail for a single request (StatCan did on 27 Oct).
   for (let attempt = 0; attempt < 2; attempt++) {
     if (attempt) await new Promise((res) => setTimeout(res, Number(process.env.PSIG_ONBOARD_RETRY_MS ?? 1500)));
-    cached = (await ensureCached(z, rawTable, { reachable: () => sourceAnswers(c.sourceUrl) })).ok;
+    cached = (await ensureCached(z, rawTable, { reachable: () => sourceAnswers(c.sourceUrl, c.agency) })).ok;
     try {
       const check = await z.run(`SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.${plan.view} WHERE yoy_pct IS NOT NULL`);
       const count = check.rows[0]?.[0];

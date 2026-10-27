@@ -293,6 +293,23 @@ test("a product group whose only official candidate is the Food series is not se
   assert.equal((brief.skus!.find(s => s.country === "DE") as any).selectionSource, "model");
 });
 
+test("a Food-only product group is remembered, so the next run neither asks the model nor discovers it again", async () => {
+  const f = fixture();
+  f.state.onlyFoodFor = "AU";
+  const first = await new PriceSignalAgent(f.deps()).run("DE and AU food +3%, pass through 70%");
+  assert.ok(first.notes.some((n) => /^AU condiments: .*no product-specific official series was found/.test(n)), first.notes.join(" | "));
+  assert.ok(!first.notes.some((n) => /^AU condiments: .*selection was unavailable or unusable/.test(n)), "the model was not asked, so nothing was unavailable");
+  f.state.selections = 0;
+  f.state.discoveries = 0;
+  const repeat = await new PriceSignalAgent(f.deps()).run("same as last time");
+  assert.equal(f.state.discoveries, 0);
+  assert.equal(f.state.selections, 0);
+  const au = repeat.skus!.find(s => s.country === "AU")!;
+  assert.equal(au.rateLabel, "Food");
+  assert.equal((au as any).selectionSource, "memory");
+  assert.equal((au as any).selectionFit, "broader");
+});
+
 test("the raw selection reply is kept in the trace when a group is rejected", async () => {
   const f = fixture();
   f.state.reply = "partial";

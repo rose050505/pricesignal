@@ -7,7 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { PriceSignalAgent } from "../src/agent.ts";
 import { AgentMemory } from "../src/memory.ts";
-import { ensureCached, onboard, rawTableRef, resetCacheRegistry, type Candidate } from "../src/sources/index.ts";
+import { ensureCached, onboard, rawTableRef, resetCacheRegistry, sourceAnswers, type Candidate } from "../src/sources/index.ts";
 import { discover as statcanDiscover } from "../src/sources/statcan.ts";
 import type { SqlResult, SqlRunner } from "../src/zetaris.ts";
 
@@ -111,4 +111,28 @@ test("a transient failure while caching or verifying a new source is retried onc
   const down = recorder((sql) => /^CACHE TABLE|^SELECT COUNT/.test(sql));
   assert.equal((await onboard(down.z, statcanFood, "food", new Date("2026-10-27"))).ok, false);
   assert.equal(down.sqls.filter((s) => /^SELECT COUNT/.test(s)).length, 2);
+});
+
+test("a refresh whose CACHE fails right after UNCACHE tries CACHE once more instead of leaving the table uncached", async () => {
+  resetCacheRegistry();
+  const ref = "psig_abs.t";
+  let failures = 0;
+  const { z, sqls } = recorder((sql) => sql === `CACHE TABLE ${ref}` && sqls.some((s) => /^UNCACHE/.test(s)) && failures++ < 1);
+  const t0 = Date.parse("2026-10-27T00:00:00Z");
+  await ensureCached(z, ref, { now: t0 });
+  const r = await ensureCached(z, ref, { now: t0 + 7 * 3_600_000, reachable: async () => true });
+  assert.equal(r.action, "refreshed", r.error);
+  assert.deepEqual(sqls.slice(-3), [`UNCACHE TABLE IF EXISTS ${ref}`, `CACHE TABLE ${ref}`, `CACHE TABLE ${ref}`]);
+});
+
+test("the reachability check before a refresh sends the agency's own request headers (ABS needs its SDMX JSON accept header)", async () => {
+  const real = globalThis.fetch;
+  const seen: Record<string, string>[] = [];
+  globalThis.fetch = (async (_url: string, init: any) => { seen.push(init.headers); return new Response("{}", { status: 200, headers: { "content-type": "application/json" } }); }) as any;
+  try {
+    assert.equal(await sourceAnswers("https://data.api.abs.gov.au/rest/data/ABS,CPI/1.20001.10.50.M", "abs"), true);
+    assert.equal(seen[0].accept, "application/vnd.sdmx.data+json");
+  } finally {
+    globalThis.fetch = real;
+  }
 });

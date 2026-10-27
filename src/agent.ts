@@ -7,7 +7,7 @@ import { EventEmitter } from "node:events";
 import { chat, ChatMessage, ChatResult } from "./llm.ts";
 import { AgentMemory, type SeriesMapping } from "./memory.ts";
 import { SqlResult, SqlRunner, rowsAsObjects, isIncompleteResultError } from "./zetaris.ts";
-import { AGENCY_FOR, COMPARE_COLUMNS, Candidate, Concept, Country, COUNTRY_ALIASES, CONCEPT_WORDS, compareSql, marketSemanticView, semanticCompareSql, discover, monthsBack, normalizeCountry, onboard, skuSearchWords, isBroadFoodLabel, ensureCached, rawTableRef, sourceAnswers, humanError } from "./sources/index.ts";
+import { AGENCY_FOR, COMPARE_COLUMNS, Candidate, Concept, Country, COUNTRY_ALIASES, CONCEPT_WORDS, compareSql, marketSemanticView, semanticCompareSql, discover, monthsBack, normalizeCountry, onboard, skuSearchWords, isBroadFoodLabel, ensureCached, rawTableRef, sourceAnswers, humanError, durableNotes } from "./sources/index.ts";
 import { MarketFacts, Brief, RunMetrics, SkuLine, buildFacts, renderBrief, signedPct, marketKey, allowedNumbers, checkNarrative, salvageNarrative, factsForNarrative, BENCHMARK_BASIS, costShareBasisDescription, seriesFacts, marketBenchmark, Narrative, NarrativeIssue } from "./brief.ts";
 import { buildAlignment } from "./alignment.ts";
 import { PRICE_DB, PRICING_COLUMNS, SKU_RATE_COLUMNS, ensurePriceList, priceTable, priceView, pricingSql, skuCategoriesSql, skuRatesSql } from "./sources/pricelist.ts";
@@ -184,7 +184,7 @@ export class PriceSignalAgent extends EventEmitter {
   private async cacheRemembered(m: SeriesMapping): Promise<void> {
     const c = { agency: m.agency, country: m.country, dataset: m.dataset, code: m.code, label: m.label, frequency: m.frequency, measure: "index", status: "active", sourceUrl: m.sourceUrl ?? "" } as unknown as Candidate;
     const ref = m.rawTable ?? rawTableRef(c, m.concept as Concept);
-    const r = await ensureCached(this.sql, ref, m.sourceUrl ? { reachable: () => sourceAnswers(m.sourceUrl!) } : {});
+    const r = await ensureCached(this.sql, ref, m.sourceUrl ? { reachable: () => sourceAnswers(m.sourceUrl!, m.agency) } : {});
     if (r.ok) this.cached.add(ref);
     if (r.action === "kept-stale") this.log("warn", `${m.country} ${m.concept}: the agency did not answer, so its Zetaris cache from ${new Date(r.cachedAt!).toISOString().slice(0, 16)} UTC is used`);
   }
@@ -507,9 +507,10 @@ Reply with JSON only.`;
             return { error: `remembered view psig.${hit.mapping.view} has no usable fresh dated rows; discover_and_onboard again` };
           }
           const n = Number(count);
-          s.views.set(s.key(country, concept), { view: hit.mapping.view, label: hit.mapping.label, via: "memory", note: hit.mapping.note, memoryId: hit.id });
-          const remembered = `${country}: ${hit.mapping.note} (remembered from an earlier run)`;
-          if (hit.mapping.note && !s.notes.includes(remembered)) s.notes.push(remembered);
+          const kept = durableNotes(hit.mapping.note);
+          s.views.set(s.key(country, concept), { view: hit.mapping.view, label: hit.mapping.label, via: "memory", note: kept, memoryId: hit.id });
+          const remembered = `${country}: ${kept} (remembered from an earlier run)`;
+          if (kept && !s.notes.includes(remembered)) s.notes.push(remembered);
           memory.feedback(hit.id, "helpful");
           this.log("memory", `reused ${hit.id}: ${country} ${concept} -> psig.${hit.mapping.view} (${n} rows, latest ${probe.rows[0]?.[1]})`);
           return { ok: true, view: hit.mapping.view, rows: n, latest: probe.rows[0]?.[1] };
@@ -604,7 +605,7 @@ Reply with JSON only.`;
             }
             const note = own.join(" ") || undefined;
             s.views.set(s.key(country, concept), { view: r.view, label: c.label, via: "onboarded", note });
-            const id = memory.rememberMapping({ country, concept, agency: c.agency, dataset: c.dataset, code: c.code, label: c.label, view: r.view, frequency: c.frequency, decoderVersion: sourceDecoderVersion(c.agency), note, rawTable: r.rawTable, sourceUrl: c.sourceUrl });
+            const id = memory.rememberMapping({ country, concept, agency: c.agency, dataset: c.dataset, code: c.code, label: c.label, view: r.view, frequency: c.frequency, decoderVersion: sourceDecoderVersion(c.agency), note: durableNotes(note), rawTable: r.rawTable, sourceUrl: c.sourceUrl });
             this.log("memory", `stored mapping ${id}`);
           }
           return { ok: r.ok, view: r.view, rows: r.rows, latest: r.latest, error: r.error };
@@ -629,7 +630,20 @@ Reply with JSON only.`;
             this.semantic = undefined;
             this.log("warn", `semantic view psig.${sem.name} could not be created (${String(e).slice(0, 120)}) - querying the agency views directly`);
           }
-          const res = await this.sql.run(viaSemantic ? semanticCompareSql(sem.name, monthsBack(15)) : compareSql(vs, monthsBack(15)));
+          let res: SqlResult | undefined;
+          if (viaSemantic) {
+            try {
+              res = await this.sql.run(semanticCompareSql(sem.name, monthsBack(15)));
+            } catch (e) {
+              // Only a problem with the view itself is worked around here; an agency that does not answer would
+              // fail the direct query too, and the bounded compare retries handle it.
+              if (!/AnalysisException|Table or view not found|cannot resolve|ParseException/i.test(String(e))) throw e;
+              this.semantic = undefined;
+              viaSemantic = false;
+              this.log("warn", `semantic view psig.${sem.name} was created but could not be read (${String(e).replace(/^Error: /, "").slice(0, 120)}) - querying the agency views directly`);
+            }
+          }
+          res ??= await this.sql.run(compareSql(vs, monthsBack(15)));
           s.setCompared(res);
           this.log("compare", `federated query ${res.id} ${viaSemantic ? `on the semantic view psig.${sem.name} (${vs.length} agency views)` : `over ${vs.length} views`} -> ${res.rows.length} rows`);
           const latest = latestByKey(rowsAsObjects(res, COMPARE_COLUMNS));
@@ -770,16 +784,16 @@ Reply with JSON only.`;
       const mapping = hit?.mapping;
       const decoderCurrent = mapping && (mapping.decoderVersion ?? 1) === sourceDecoderVersion(AGENCY_FOR[country].agency);
       if (hit && mapping && !decoderCurrent) this.log("memory", `product-checked SKU mapping ${hit.id} uses an obsolete decoder - selecting and verifying again`);
-      if (hit && decoderCurrent && mapping?.selectionVersion === SELECTION_VERSION && mapping.selection?.by === "model" && !memory.hmem.store.get(hit.id)?.tags.includes("review")) {
+      if (hit && decoderCurrent && mapping?.selectionVersion === SELECTION_VERSION && (mapping.selection?.by === "model" || mapping.selection?.onlyCandidate) && !memory.hmem.store.get(hit.id)?.tags.includes("review")) {
         try {
           await this.cacheRemembered(mapping);
           const probe = await this.sql.run(`SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.${mapping.view} WHERE yoy_pct IS NOT NULL`);
           const latest = probe.rows[0]?.[1];
           if (isUsableObservationCount(probe.rows[0]?.[0]) && hasFreshPeriod(latest, mapping.frequency)) {
-            const selected: SkuView = { view: mapping.view, note: mapping.note, selectionReason: mapping.selection.fit === "broader" ? BROADER_COVERAGE_REASON : mapping.selection.reason, selectionSource: "memory", selectionFit: mapping.selection.fit };
+            const selected: SkuView = { view: mapping.view, note: durableNotes(mapping.note), selectionReason: mapping.selection.fit === "broader" ? BROADER_COVERAGE_REASON : mapping.selection.reason, selectionSource: "memory", selectionFit: mapping.selection.fit };
             skuViews.set(id, selected);
-            views.set(`${id}:${scope}`, { view: mapping.view, label: mapping.label, via: "memory", note: mapping.note, memoryId: hit.id });
-            if (mapping.note) notes.push(`${country} ${concept}: ${mapping.note} (remembered SKU selection)`);
+            views.set(`${id}:${scope}`, { view: mapping.view, label: mapping.label, via: "memory", note: durableNotes(mapping.note), memoryId: hit.id });
+            if (durableNotes(mapping.note)) notes.push(`${country} ${concept}: ${durableNotes(mapping.note)} (remembered SKU selection)`);
             memory.feedback(hit.id, "helpful");
             this.log("memory", `reused product-checked SKU mapping ${hit.id}: ${id} -> psig.${mapping.view}`, { products, selection: mapping.selection });
             return;
@@ -846,7 +860,8 @@ Reply with JSON only.`;
       if (timer) clearTimeout(timer);
     }
     await byAgency(groups, async (group) => {
-      let decision = decisions.get(group.id) ?? fallbackSelection(group);
+      const only = onlyFood(group) ? fallbackSelection(group) : undefined;
+      let decision = decisions.get(group.id) ?? (only ? { ...only, reason: "The official Food series was the only candidate; no product-specific official series was found.", onlyCandidate: true } : fallbackSelection(group));
       if (!decision) {
         notes.push(`${group.country} ${group.concept}: no verified category or official Food fallback is available; these SKU prices are omitted.`);
         return;
@@ -883,13 +898,13 @@ Reply with JSON only.`;
       const { candidate, result } = registered;
       const scope = skuScope(group.products);
       const ownNotes = discoveries.get(group.id) ?? [];
-      if (decision.fit === "broader") ownNotes.push(`${candidate.label} is used as a broader category proxy (coarser) for these products${decision.by === "fallback" ? "; a product-specific selection was unavailable or unusable" : ""}.`);
+      if (decision.fit === "broader") ownNotes.push(`${candidate.label} is used as a broader category proxy (coarser) for these products${decision.onlyCandidate ? "; no product-specific official series was found" : decision.by === "fallback" ? "; a product-specific selection was unavailable or unusable" : ""}.`);
       const note = [...new Set(ownNotes)].join(" ") || undefined;
       if (note) notes.push(`${group.country} ${group.concept}: ${note}`);
       skuViews.set(group.id, { view: result.view, note, selectionReason: decision.reason, selectionSource: decision.by, selectionFit: decision.fit });
       let memoryId: string | undefined;
-      if (decision.by === "model") {
-        memoryId = memory.rememberMapping({ country: group.country, concept: group.concept, agency: candidate.agency, dataset: candidate.dataset, code: candidate.code, label: candidate.label, view: result.view, rawTable: result.rawTable, sourceUrl: candidate.sourceUrl, frequency: candidate.frequency, decoderVersion: sourceDecoderVersion(candidate.agency), note, scope, selectionVersion: SELECTION_VERSION, selection: decision });
+      if (decision.by === "model" || decision.onlyCandidate) {
+        memoryId = memory.rememberMapping({ country: group.country, concept: group.concept, agency: candidate.agency, dataset: candidate.dataset, code: candidate.code, label: candidate.label, view: result.view, rawTable: result.rawTable, sourceUrl: candidate.sourceUrl, frequency: candidate.frequency, decoderVersion: sourceDecoderVersion(candidate.agency), note: durableNotes(note), scope, selectionVersion: SELECTION_VERSION, selection: decision });
         this.log("memory", `stored product-checked SKU mapping ${memoryId}`, { scope, products: group.products, selection: decision });
       }
       views.set(`${group.id}:${scope}`, { view: result.view, label: candidate.label, via: "onboarded", note, memoryId });

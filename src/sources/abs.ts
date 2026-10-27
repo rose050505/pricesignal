@@ -6,6 +6,8 @@ import { Candidate, Concept, Country, CONCEPT_WORDS, DiscoverResult, OnboardPlan
 const BASE = "https://data.api.abs.gov.au/rest";
 export const ABS_DB = "PSIG_ABS";
 const DATA_ACCEPT = "application/vnd.sdmx.data+json";
+/** The headers the ABS data endpoint needs to answer in SDMX JSON (the REST table sends the same accept header). */
+export const REQUEST_HEADERS = { accept: DATA_ACCEPT };
 
 function quartersBackLabel(n: number): string {
   const d = new Date();
