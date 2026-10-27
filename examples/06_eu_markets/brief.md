@@ -55,48 +55,48 @@ Food inflation is 2.7% YoY in September 2026, with a 12-month average of 2.5% ac
 **Watch:** Re-check next month's food prints for any change in trend.
 
 ## Evidence
-Views: `psig.v_fr_food_prc_hicp_minr_cp01_ex20261028_003921_2475718` (onboarded), `psig.v_fr_all_items_prc_hicp_minr_total_ex20261028_003921_2475718` (onboarded), `psig.v_it_food_prc_hicp_minr_cp01_ex20261028_003921_2475718` (onboarded), `psig.v_it_all_items_prc_hicp_minr_total_ex20261028_003921_2475718` (onboarded), `psig.v_es_food_prc_hicp_minr_cp01_ex20261028_003921_2475718` (onboarded), `psig.v_es_all_items_prc_hicp_minr_total_ex20261028_003921_2475718` (onboarded)
+Views: `psig.v_fr_food_prc_hicp_minr_cp01_ex20261028_005844_2524371` (onboarded), `psig.v_fr_all_items_prc_hicp_minr_total_ex20261028_005844_2524371` (onboarded), `psig.v_it_food_prc_hicp_minr_cp01_ex20261028_005844_2524371` (onboarded), `psig.v_it_all_items_prc_hicp_minr_total_ex20261028_005844_2524371` (onboarded), `psig.v_es_food_prc_hicp_minr_cp01_ex20261028_005844_2524371` (onboarded), `psig.v_es_all_items_prc_hicp_minr_total_ex20261028_005844_2524371` (onboarded)
 
-<details><summary>Q4 · 1 row · 386 ms</summary>
+<details><summary>Q4 · 1 row · 259 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_fr_food_prc_hicp_minr_cp01_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_fr_food_prc_hicp_minr_cp01_ex20261028_005844_2524371 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q8 · 1 row · 301 ms</summary>
+<details><summary>Q8 · 1 row · 246 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_fr_all_items_prc_hicp_minr_total_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_fr_all_items_prc_hicp_minr_total_ex20261028_005844_2524371 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q12 · 1 row · 315 ms</summary>
+<details><summary>Q12 · 1 row · 235 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_it_food_prc_hicp_minr_cp01_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_it_food_prc_hicp_minr_cp01_ex20261028_005844_2524371 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q16 · 1 row · 302 ms</summary>
+<details><summary>Q16 · 1 row · 215 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_it_all_items_prc_hicp_minr_total_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_it_all_items_prc_hicp_minr_total_ex20261028_005844_2524371 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q20 · 1 row · 328 ms</summary>
+<details><summary>Q20 · 1 row · 264 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_es_food_prc_hicp_minr_cp01_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_es_food_prc_hicp_minr_cp01_ex20261028_005844_2524371 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q24 · 1 row · 257 ms</summary>
+<details><summary>Q24 · 1 row · 309 ms</summary>
 
 ```sql
-SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_es_all_items_prc_hicp_minr_total_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL
+SELECT COUNT(*) AS n, MAX(period) AS latest FROM psig.v_es_all_items_prc_hicp_minr_total_ex20261028_005844_2524371 WHERE yoy_pct IS NOT NULL
 ```
 </details>
-<details><summary>Q26 · 90 rows · 3012 ms</summary>
+<details><summary>Q26 · 90 rows · 2533 ms</summary>
 
 ```sql
-SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_market_inflation_cd59a72c_ex20261028_003921_2475718 WHERE period >= '2025-07'
+SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_market_inflation_8933c2ed_ex20261028_005844_2524371 WHERE period >= '2025-07'
 ORDER BY country, concept, period
 ```
 </details>

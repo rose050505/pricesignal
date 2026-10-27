@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "methodVersion": 3,
-  "calculatedAt": "2026-10-27T15:42:22.414Z",
-  "startedAt": "2026-10-27T15:41:40.035Z",
+  "calculatedAt": "2026-10-27T16:01:07.330Z",
+  "startedAt": "2026-10-27T16:00:51.128Z",
   "request": {
     "raw": "USA & canada food: can we raise prices 3%? we pass on 70%",
     "countries": [
@@ -22,7 +22,7 @@
   "queries": {
     "market": {
       "id": "Q14",
-      "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_market_inflation_bb507536_ex20261028_003921_2475718 WHERE period >= '2025-07'\nORDER BY country, concept, period",
+      "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_market_inflation_31da20e0_ex20261028_005844_2524371 WHERE period >= '2025-07'\nORDER BY country, concept, period",
       "columns": [
         "country",
         "concept",
@@ -550,7 +550,7 @@
     },
     "pricing": {
       "id": "Q21",
-      "sql": "SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept AS rate_concept, s.category_label, s.frequency, s.period, s.yoy_pct, s.source_id\nFROM psig.v_price_list_ex20261028_003921_2475718 p\nJOIN (\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261028_003921_2475718 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n) s ON p.country = s.country AND p.sku_category = s.concept\nWHERE p.country IN ('US', 'CA')\nORDER BY p.country, p.sku, s.period",
+      "sql": "SELECT p.sku, p.product, p.country, p.sku_category, p.currency, p.current_price, s.concept AS rate_concept, s.category_label, s.frequency, s.period, s.yoy_pct, s.source_id\nFROM psig.v_price_list_ex20261028_005844_2524371 p\nJOIN (\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_condiments_v41690974_live_yoyv2_ex20261028_005844_2524371 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_snacks_v41690974_live_yoyv2_ex20261028_005844_2524371 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n    UNION ALL\n    SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_ca_food_v41690974_live_yoyv2_ex20261028_005844_2524371 WHERE yoy_pct IS NOT NULL AND period >= '2025-07'\n) s ON p.country = s.country AND p.sku_category = s.concept\nWHERE p.country IN ('US', 'CA')\nORDER BY p.country, p.sku, s.period",
       "columns": [
         "sku",
         "product",

@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "methodVersion": 3,
-  "calculatedAt": "2026-10-27T15:41:19.612Z",
-  "startedAt": "2026-10-27T15:40:57.072Z",
+  "calculatedAt": "2026-10-27T16:00:29.450Z",
+  "startedAt": "2026-10-27T16:00:04.797Z",
   "request": {
     "raw": "france, italy and spain food prices: can we raise prices +3%? we pass on about 70%",
     "countries": [
@@ -23,7 +23,7 @@
   "queries": {
     "market": {
       "id": "Q26",
-      "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_market_inflation_cd59a72c_ex20261028_003921_2475718 WHERE period >= '2025-07'\nORDER BY country, concept, period",
+      "sql": "SELECT country, concept, category_label, frequency, period, yoy_pct, source_id FROM psig.v_market_inflation_8933c2ed_ex20261028_005844_2524371 WHERE period >= '2025-07'\nORDER BY country, concept, period",
       "columns": [
         "country",
         "concept",
