@@ -19,6 +19,6 @@ NVIDIA Nemotron, through Meterless Nightshift with its reasoning pass switched o
 
 Code calculates a historical benchmark (latest YoY and recent annual mean, with observation coverage), how far the proposal sits from it, which change would fit every market, and a cost target from cost change, unit-cost share and its timing, and pass-through. It does not forecast demand.
 
-Meterless H-MEM (reference engine, conformance 13/13) remembers policies, requests, verified mappings and each market's last result, so "same as last time, but +3%?" skips planning and discovery and says what changed; stale mappings are rechecked.
+Meterless H-MEM (reference engine, conformance 13/13) remembers policies, requests, verified mappings and each market's last result, so "same as last time, but +3%?" skips planning and market discovery and says what changed; stale mappings are rechecked.
 
 Built with Claude Code and Codex; no Cursor. Replay without keys: rose050505.github.io/pricesignal. Code, limits, seven recorded runs with traces and offline-verifiable SQL rows: github.com/rose050505/pricesignal

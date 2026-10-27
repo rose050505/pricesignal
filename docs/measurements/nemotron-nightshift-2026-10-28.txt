@@ -1,0 +1,17 @@
+# scripts/18_nemotron_check.mts, run on 28 Oct 2026, 00:16 KST (Nightshift on the desktop, NVIDIA API and OpenRouter lanes for Nemotron 3.5 Lightning)
+
+$ npx tsx scripts/18_nemotron_check.mts
+Nemotron through Meterless Nightshift, 2026-10-27T15:16:40.984Z
+1. Request reading (demo question 1), switch on vs off:
+  switch on, max_tokens 600 (#1)                 5029 ms  91 output tokens  finish=stop  nvidia/nemotron-3.5-lightning-30b-a3b
+  switch off, max_tokens 6000 (#1)              62691 ms  2735 output tokens  finish=stop  nvidia/nemotron-3.5-lightning-30b-a3b
+  switch on, max_tokens 600 (#2)                 3374 ms  91 output tokens  finish=stop  nvidia/nemotron-3.5-lightning-30b-a3b
+  switch off, max_tokens 6000 (#2)              56320 ms  2296 output tokens  finish=stop  nvidia/nemotron-3.5-lightning-30b-a3b
+2. First narrative draft for examples/01_cold_start, max_tokens 1024 vs 8000:
+  narrative draft, max_tokens 1024               3130 ms  213 output tokens  finish=stop  nvidia/nemotron-3.5-lightning-30b-a3b
+  narrative draft, max_tokens 8000               2728 ms  210 output tokens  finish=stop  nvidia/nemotron-3.5-lightning-30b-a3b
+  narrative draft, max_tokens 1024               2813 ms  230 output tokens  finish=stop  nvidia/nemotron-3.5-lightning-30b-a3b
+  narrative draft, max_tokens 8000               2797 ms  209 output tokens  finish=stop  nvidia/nemotron-3.5-lightning-30b-a3b
+3. Request reading for "go" vs "move", sent as written (max_tokens 600):
+  "canada food, can we go -2%?"                 11817 ms  FAILED: Error: HTTP 502: {"error":{"message":"All candidate providers failed for this request.","type":"api_error","code":"provi
+  "canada food, can we move -2%?"                1304 ms  78 output tokens  finish=stop  nvidia/nemotron-3.5-lightning-30b-a3b

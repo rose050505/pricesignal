@@ -128,14 +128,14 @@ function trackNemo(e){if(!nemo)return;const t=String(e.title),ms=(t.match(/, (\d
   else if(e.kind==="plan"&&/\[[^\]]*nemotron[^\]]*\]$/i.test(t))nemo.planner++;
   else if(e.kind==="llm"&&/^SKU category selection/.test(t)){const m=t.match(/accepted (\d+) of (\d+)/);if(m)nemo.sku={ms:Number(ms),a:m[1],n:m[2]}}
   else if(e.kind==="warn"&&/^SKU category selection unavailable/.test(t))nemo.skuFailed=true;
-  else if(e.kind==="llm"&&/^narrative \(/.test(t)){nemo.narr={ms:Number(ms),ok:/match the facts$/.test(t)}}
+  else if(e.kind==="llm"&&/^narrative \(/.test(t)){const ok=/match the facts$/.test(t),prev=nemo.narr||{ms:0,replies:0,rejected:0};nemo.narr={ms:prev.ms+Number(ms),replies:prev.replies+1,rejected:prev.rejected+(ok?0:1),ok}}
   else if(e.kind==="llm"&&/^narrative kept/.test(t)&&nemo.narr)nemo.narr.removed=Number((t.match(/removed (\d+)/)||[])[1])}
 function verifyLine(r){const v=r.verification;if(!v)return"";return v.ok?`<div class="sub" style="margin-top:6px"><b>✓ Evidence replayed:</b> ${Number(v.checks)} offline checks re-derived the benchmarks, verdicts and SKU prices from the saved Zetaris rows · <code>npm run verify -- ${esc(v.path)}</code></div>`:`<div class="sub" style="margin-top:6px;color:var(--warn)"><b>Evidence replay found problems:</b> ${esc((v.errors||[]).join("; "))} · <code>${esc(v.path)}</code></div>`}
 function nemoLine(){if(!nemo)return"";const s=x=>(x/1000).toFixed(1)+" s",p=[];
   if(nemo.parse!=null)p.push(`read the request (${s(nemo.parse)})`);
   if(nemo.planner)p.push(`planned ${nemo.planner} turn${nemo.planner===1?"":"s"}`);
   if(nemo.sku)p.push(`chose official categories for ${nemo.sku.a} of ${nemo.sku.n} product groups (${s(nemo.sku.ms)})`);else if(nemo.skuFailed)p.push("product categories: not available this run");
-  if(nemo.narr)p.push(nemo.narr.ok?`wrote the summary (${s(nemo.narr.ms)}, every sentence passed the check)`:nemo.narr.removed?`wrote the summary (${s(nemo.narr.ms)}, ${nemo.narr.removed} sentence${nemo.narr.removed===1?"":"s"} removed by the check)`:"summary: did not pass the check this run");
+  if(nemo.narr)p.push(nemo.narr.ok?(nemo.narr.rejected?`wrote the summary (${s(nemo.narr.ms)} over ${nemo.narr.replies} replies: the check rejected ${nemo.narr.rejected===1?"the first draft":`${nemo.narr.rejected} drafts`}, then the rewrite passed)`:`wrote the summary (${s(nemo.narr.ms)}, every sentence passed the check)`):nemo.narr.removed?`wrote the summary (${s(nemo.narr.ms)}, ${nemo.narr.removed} sentence${nemo.narr.removed===1?"":"s"} removed by the check)`:"summary: did not pass the check this run");
   return p.length?`<div class="sub nemo-line" style="margin-top:6px">NVIDIA Nemotron in this run: ${esc(p.join(" · "))}</div>`:""}
 // Until market numbers arrive, the answer area shows the agent's steps, filled from the trace.
 function renderProgress(){const p=progress;if(!p)return;
@@ -309,7 +309,7 @@ $("#go").onclick=async()=>{
     es.addEventListener("partial",m=>{clearReconnect();hasPartial=true;render(JSON.parse(m.data),q)});
     es.addEventListener("result",m=>{clearReconnect();es.close();const r=JSON.parse(m.data);render(r,q);finishRun(`Run complete — ${coverage(r).title}. ${(r.ms/1000).toFixed(1)} s.${r.record?` Activity log saved: ${r.record}/trace.json`:""}`)});
     es.addEventListener("failure",m=>{clearReconnect();es.close();const error=JSON.parse(m.data).error;if(!hasPartial)$("#out").innerHTML=`<div class="card"><b>The investigation could not finish</b><pre>${esc(error)}</pre></div>`;finishRun(`Investigation stopped: ${error}. ${hasPartial?"Available figures are preserved. ":""}You can investigate again.`)});
-  }catch(e){clearReconnect();if(!hasPartial)$("#out").innerHTML=`<div class="card"><b>The investigation could not start</b><pre>${esc(e)}</pre></div>`;finishRun("The request failed. Check the runtime status, then investigate again.")}
+  }catch(e){clearReconnect();if(!hasPartial)$("#out").innerHTML=`<div class="card"><b>The investigation could not start</b><pre>${esc(e)}</pre></div>`;finishRun(REPLAY?"This page replays recorded runs only: pick one of the recorded questions.":"The request failed. Check the runtime status, then investigate again.")}
 };
 </script>
 </body>

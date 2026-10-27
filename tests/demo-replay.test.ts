@@ -34,7 +34,7 @@ test("the demo site is the real UI page with the replay scripts loaded first, an
   assert.ok(html.indexOf('src="replay/catalog.js"') < html.indexOf('src="replay.js"') && html.indexOf('src="replay.js"') < html.indexOf('src="scenario.js"'));
   assert.doesNotMatch(html, /src="\//, "relative paths, so the site works under a GitHub Pages sub-path");
   const catalog = fs.readFileSync(path.join(out, "replay", "catalog.js"), "utf8");
-  assert.match(catalog, /"recordedAt":"27 Oct 2026, 18:55 KST"/);
+  assert.match(catalog, /"recordedAt":"27 Oct 2026, 18:54 KST"/);
   assert.match(catalog, /"model":"nvidia\/nemotron-3.5-lightning-30b-a3b"/);
   const result = JSON.parse(fs.readFileSync(path.join(out, "replay", "05_within_range", "result.json"), "utf8"));
   assert.equal(result.final.record, "examples/05_within_range");
@@ -60,7 +60,7 @@ test("asking a recorded question replays its trace, the early result and the fin
   const out = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "psig-site-")), "site");
   buildDemoSite(out, recordedExamples());
   const { ctx, inserted } = replayPage(out);
-  assert.match(inserted[0].innerHTML, /Replay of recorded runs\.<\/b> 1 question recorded in one session starting 27 Oct 2026, 18:55 KST/);
+  assert.match(inserted[0].innerHTML, /Replay of recorded runs\.<\/b> 1 question recorded in one session starting 27 Oct 2026, 18:54 KST/);
   assert.match(inserted[0].innerHTML, /no live calls/);
   const status = await (await ctx.fetch("/api/status")).json();
   assert.equal(status.replay, true);

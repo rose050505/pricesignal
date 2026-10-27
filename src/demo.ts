@@ -42,7 +42,8 @@ export function buildDemoSite(outDir: string, examplesDir = path.join(ROOT, "exa
       const m = String(e.title).match(MODEL_REPLY);
       if (m) models.add(m[1]);
     }
-    if (recording.recordedAt) recorded.push(recording.recordedAt);
+    // recordedAt is written when a run ends; the session started elapsedSeconds earlier.
+    if (recording.recordedAt) recorded.push(new Date(Date.parse(recording.recordedAt) - (recording.elapsedSeconds ?? 0) * 1000).toISOString());
   }
   const first = recorded.sort()[0];
   const recordedAt = first

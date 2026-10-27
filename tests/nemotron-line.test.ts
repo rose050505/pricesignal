@@ -53,3 +53,16 @@ test("an offline render without trace events shows no Nemotron line", () => {
   b.run(`render(${JSON.stringify(result)},"q")`);
   assert.doesNotMatch(b.node("#out").innerHTML, /NVIDIA Nemotron in this run/);
 });
+
+test("a draft the check rejected before the rewrite passed is not hidden (QA, 28 Oct 00:15)", async () => {
+  const b = browser(); b.node("#q").value = "food +5%";
+  await b.node("#go").onclick!();
+  for (const e of [
+    { kind: "llm", title: "narrative (nvidia/nemotron-3.5-lightning-30b-a3b, 7580 ms via Meterless Nightshift) - does not match the facts: headline: says inflation itself is above the market benchmark; the verdict is about the proposed change" },
+    { kind: "llm", title: "narrative (nvidia/nemotron-3.5-lightning-30b-a3b, 4120 ms via Meterless Nightshift) - numbers and verdicts match the facts" },
+  ]) b.run(`addTrace(${JSON.stringify(e)})`);
+  b.streams[0].listeners.result({ data: JSON.stringify(result) });
+  const out = b.node("#out").innerHTML;
+  assert.match(out, /wrote the summary \(11\.7 s over 2 replies: the check rejected the first draft, then the rewrite passed\)/);
+  assert.doesNotMatch(out, /every sentence passed the check/);
+});

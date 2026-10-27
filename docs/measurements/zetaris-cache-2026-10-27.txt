@@ -22,3 +22,9 @@ $ PSIG_ZETARIS_NS=ex20261027_234114_2269488 npx tsx scripts/17_cache_check.mts t
 Part 2 - federated queries over the DE/CA/AU tables with suffix ex20261027_234114_2269488 (two runs each):
   uncached: comparison 8780 / 5716 ms (84 rows), price-list join 3152 / 2820 ms (42 rows)
   cached:   comparison 1708 / 1405 ms (84 rows), price-list join 1142 / 863 ms (42 rows)
+
+# Repeated on 28 Oct 2026, 00:15 KST over the tables of the current examples/ recording.
+$ PSIG_ZETARIS_NS=ex20261027_235644_2343121 npx tsx scripts/17_cache_check.mts timing
+Part 2 - federated queries over the DE/CA/AU tables with suffix ex20261027_235644_2343121 (two runs each):
+  uncached: comparison 7052 / 5739 ms (84 rows), price-list join 3415 / 2755 ms (42 rows)
+  cached:   comparison 1761 / 1359 ms (84 rows), price-list join 1150 / 1062 ms (42 rows)
