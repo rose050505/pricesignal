@@ -1,0 +1,26 @@
+# Offline checks only: no Zetaris, Nightshift or agency calls, no secrets.
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - name: Vendor the Meterless H-MEM reference engine and conformance suite (pinned commit)
+        run: npm run setup && npm run setup:conformance
+      - run: npm run typecheck
+      - name: Agent tests (fake model, fake Zetaris)
+        run: npm test
+      - name: H-MEM conformance on the engine the agent uses
+        run: npm run conformance
+      - name: Re-check every recorded example from its saved SQL rows
+        run: for f in examples/*/evidence.json; do echo "$f"; npm run --silent verify -- "$f"; done
