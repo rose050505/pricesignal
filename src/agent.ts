@@ -203,7 +203,9 @@ Reply with JSON only.`;
     let j: any = {};
     this.requestReadByRules = true;
     try {
-      const r = await this.hedged("request parsing", (signal, o) => this.llm([{ role: "user", content: prompt }], { lane: "fast", temperature: 0, attempts: 1, timeoutMs: 60_000, signal, ...o }));
+      // With thinking off the reply is ~50-90 tokens in 1-3 s; a small limit and a short timeout turn a stuck reply
+      // into a fast fallback to the rules (27 Oct: requests with "can we go +3%" failed after 25-29 s at 2,048 tokens).
+      const r = await this.hedged("request parsing", (signal, o) => this.llm([{ role: "user", content: prompt }], { lane: "fast", temperature: 0, attempts: 1, ...(thinkingOff() ? { maxTokens: 600, timeoutMs: 15_000 } : { timeoutMs: 60_000 }), signal, ...o }));
       const parsed = extractJson(r.text);
       if (parsed) this.requestReadByRules = false;
       j = parsed ?? {};
