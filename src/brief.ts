@@ -465,6 +465,27 @@ function verdictErrors(text: string, f: MarketFacts): string[] {
  * after a verdict word (or before the first one) must have that verdict; "within or above" allows either.
  * With no market named, the word must be a verdict some market has (all of them, when they agree).
  */
+const EVERY_MARKET = /\b(?:all|every|each)\s+(?:(?:two|three|four|five|six|\d+)\s+)?(?:markets?|countries)\b|\bacross\s+(?:the\s+)?(?:(?:two|three|four|five|six|\d+)\s+)?(?:markets|countries)\b|\beverywhere\b/i;
+// Trend verbs only: "a 5% price rise" or "increase" is the proposal, not a claim about inflation's direction.
+const TREND_CLAIMS: [SeriesFacts["trend"], RegExp][] = [
+  ["easing", /\b(?:eas(?:es|ed|ing)|cool(?:s|ed|ing)|slow(?:s|ed|ing)|decelerat\w*|soften(?:s|ed|ing))\b/i],
+  ["rising", /\b(?:rising|accelerat\w*|heat(?:s|ed|ing)\s+up|pick(?:s|ed|ing)\s+up|climb(?:s|ed|ing))\b/i],
+];
+
+/** "Food inflation is easing in all three markets": a trend claimed for every market must be each market's computed trend. */
+function universalTrendErrors(text: string, facts: MarketFacts[], req: Request, field: string): string[] {
+  const out: string[] = [];
+  for (const sentence of text.split(/(?<=[.!?;])\s+|\n+/)) {
+    if (!EVERY_MARKET.test(sentence)) continue;
+    for (const [trend, re] of TREND_CLAIMS) {
+      if (!re.test(sentence)) continue;
+      const off = facts.flatMap((f) => { const s = requestedSeries(f, req); return s && s.trend !== trend ? [`${f.country} is ${s.trend}`] : []; });
+      if (off.length) out.push(`${field}: says ${trend} in every market, but ${off.join(", ")}`);
+    }
+  }
+  return out;
+}
+
 function headlineVerdictErrors(headline: string, facts: MarketFacts[], field = "headline"): string[] {
   const vf = facts.filter((f) => f.verdict || f.costVsMarket);
   if (!vf.length) return [];
@@ -707,6 +728,9 @@ export function checkNarrative(n: Narrative, allowed: number[], facts?: MarketFa
     }
     bad.push(...headlineVerdictErrors(String(n.headline ?? ""), facts));
     if (typeof n.watch === "string") bad.push(...headlineVerdictErrors(n.watch, facts, "watch"));
+    for (const [field, text] of [["headline", n.headline], ["watch", n.watch], ...Object.entries(n.markets ?? {})] as [string, unknown][]) {
+      if (typeof text === "string") bad.push(...universalTrendErrors(text, facts, req, field));
+    }
   } else {
     bad.push(...unknownNumbers([n.headline, ...Object.values(n.markets ?? {}), n.watch ?? ""].join(" "), allowed));
   }
