@@ -231,6 +231,7 @@ Reply with JSON only.`;
     const defaultMarkets = !countries.length && !unknown.length;
     if (defaultMarkets) countries.push("DE", "CA", "AU");
     const percentages = requestPercentages(raw, j);
+    if (percentages.proposalWords && percentages.proposedChangePct !== undefined) this.log("llm", `proposal read by Nemotron from words: "${percentages.proposalWords}" -> ${percentages.proposedChangePct > 0 ? "+" : ""}${percentages.proposedChangePct}%`);
     const { passThrough, costIncreasePct: costPct, costSharePct, proposedChangePct: explicitPct } = percentages;
     const share = percentages.invalidCostShare ? undefined : costSharePct ?? last?.request.costSharePct;
     const basis = requestCostShareBasis(raw, share, costSharePct !== undefined, percentages.costContext, last?.request.costShareBasis);
@@ -1369,13 +1370,23 @@ function numOrUndef(v: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty"];
+/** "four percent" in the request, confirmed by the model's own reading of the same number (sign from the wording). */
+function proposalFromWords(raw: string, modelValue: unknown): { value: number; words: string } | undefined {
+  const m = raw.match(new RegExp(`\\b(${NUMBER_WORDS.join("|")})\\s+(?:percent|per cent|pct)\\b`, "i"));
+  const fromModel = numOrUndef(modelValue);
+  if (!m || fromModel === undefined) return undefined;
+  const value = NUMBER_WORDS.indexOf(m[1].toLowerCase()) * (/\b(?:cut|lower|reduce|decrease|drop)\b|인하|내리/i.test(raw) ? -1 : 1);
+  return Math.abs(fromModel - value) < 1e-9 ? { value, words: m[0] } : undefined;
+}
+
 /** An exchange-rate move ("the euro weakened 4%", "환율 3%"); a currency code alone ("our EUR prices") is not one. */
 const FX_MOVE = /\bexchange[- ]rates?\b|\bFX\b|\bcurrenc(?:y|ies)\s+(?:moves?|moved|swings?|fell|rose|weakened|strengthened)|\b(?:euro|dollar|won|yen|pound|loonie)s?\s+(?:has\s+|have\s+)?(?:weakened|strengthened|fell|rose|dropped|gained|depreciated|appreciated|moved)\b|환율|원화\s*(?:약세|강세)/i;
 
 /** Percentages are grounded in the request, with separate denominators and explicit signs. */
 function requestPercentages(raw: string, model: any): {
   proposedChangePct?: number; costIncreasePct?: number; costSharePct?: number; passThrough?: number;
-  costContext?: string;
+  costContext?: string; proposalWords?: string;
   invalidCostShare: boolean; invalidPassThrough: boolean; invalidProposal: boolean; invalidCostChange: boolean; issues: string[];
 } {
   // A malformed/huge token must never restart at its trailing digits and become a different rate.
@@ -1450,8 +1461,13 @@ function requestPercentages(raw: string, model: any): {
   const proposals = found.filter(p => !p.previousValue && !p.share && !p.pass && !p.cost && !p.unrelated && !p.historical);
   const uniqueProposals = [...new Set(proposals.map(p => p.x))];
   const ambiguousProposal = uniqueProposals.length > 1;
-  const proposal = proposals[0];
-  const invalidProposal = ambiguousProposal || proposals.some(p => !Number.isFinite(p.x) || p.x < -100);
+  // "3-4%" or "3 to 4%" outside a cost, pass-through or share phrase is a range, not one proposal.
+  const rangeProposal = [...raw.matchAll(/(\d+(?:[.,]\d+)?)\s*(?:-|–|—|~|〜|\bto\b)\s*(\d+(?:[.,]\d+)?)\s*(?:%|pct\b|percent\b|퍼센트|프로)/gi)]
+    .some(m => !/\b(?:costs?|pass\w*|recover\w*|share|margin|tax|VAT|inflation)\b|원가|비용|반영|전가|비중/i.test(raw.slice(Math.max(0, m.index! - 40), m.index)));
+  // "four percent": used only when no digits gave a proposal and Nemotron read the same number from the request.
+  const wordProposal = !proposals.length && !rangeProposal ? proposalFromWords(raw, model.proposed_change_pct) : undefined;
+  const proposal = proposals[0] ?? (wordProposal ? { x: wordProposal.value } : undefined);
+  const invalidProposal = ambiguousProposal || rangeProposal || proposals.some(p => !Number.isFinite(p.x) || p.x < -100);
   const selectedCost = chooseOption("cost", model.cost_increase_pct);
   const costChange = selectedCost?.x;
   const invalidCostChange = costChange !== undefined && (!Number.isFinite(costChange) || costChange < -100);
@@ -1459,11 +1475,13 @@ function requestPercentages(raw: string, model: any): {
   if (invalidCostShare) issues.push("Cost share must be between 0% and 100% of the current selling price; the invalid value is not reused from memory and the cost-recovery target is omitted.");
   if (invalidPassThrough) issues.push("Cost pass-through must be between 0% and 100% of the monetary cost increase; the invalid policy is not replaced by a remembered value and the cost-recovery target is omitted.");
   if (ambiguousProposal) issues.push("Multiple different proposed price changes were supplied; provide one proposal. No proposal is chosen or recalled for this comparison.");
+  if (rangeProposal) issues.push("A range of proposed changes was given; provide one proposal. No proposal is chosen or recalled for this comparison.");
   if (FX_MOVE.test(raw)) issues.push("An exchange-rate change was mentioned; exchange rates are not used in this comparison.");
   if (/\b(?:every|each|per)\s+quarter\b|\bquarterly\b|매\s*분기|분기마다/i.test(raw)) issues.push("The question describes a repeated quarterly increase. The benchmark is year-on-year, and repeated quarterly increases add up over a year.");
   if (proposals.some(p => !Number.isFinite(p.x) || p.x < -100)) issues.push("The proposed price change must be finite and at least -100%; the invalid value is omitted and is not replaced from memory.");
   if (invalidCostChange) issues.push("The cost change must be finite and at least -100%; the invalid value is omitted and is not replaced from memory.");
   return {
+    proposalWords: wordProposal && !invalidProposal ? wordProposal.words : undefined,
     proposedChangePct: invalidProposal ? undefined : proposal?.x,
     costIncreasePct: invalidCostChange ? undefined : costChange,
     costContext: invalidCostChange ? undefined : selectedCost?.context,

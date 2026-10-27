@@ -92,3 +92,15 @@ test("the preview table keeps one decimal like the market cards", () => {
   const src = fs.readFileSync(new URL("../public/preview-panel.js", import.meta.url), "utf8");
   assert.match(src, /pct\(m\.low\)–\$\{pct\(m\.high\)\}|toFixed\(1\)/);
 });
+
+test("the market bar is labelled, and a Food series that was the only official candidate is not called unconfirmed", () => {
+  const b = browser();
+  const sku = (reason: string) => ({ sku: "GCJ", product: "Gochujang 500 g", country: "CA", currency: "CAD", currentPrice: 8.4, low: 8.6, high: 8.7, rangeLow: 2.2, rangeHigh: 4.1, atProposed: 8.82, verdict: "above the market benchmark", yoy: 2.2, period: "2026-09", rateLabel: "Food", coarser: true, selectionSource: "fallback", selectionFit: "broader", selectionReason: reason });
+  b.context.sample = { headline: "x", facts: fx.facts, notes: [], views: [], sql: [], passThrough: 0.7, ms: 1000, markdown: "", concept: "food", requestedCountries: fx.requestedCountries, proposed: 5, compared: { id: "Q1", sql: "", rows: [] },
+    skus: [sku("The official Food series was the only candidate; no product-specific official series was found."), sku("Using the official Food series as a broader proxy; a product-specific match was not confirmed.")] };
+  b.run('render(sample,"q")');
+  const out = b.node("#out").innerHTML;
+  assert.match(out, /market benchmark [\d.]+–[\d.]+% \(box\) · proposed \+5% \(red line\)/);
+  assert.match(out, /Broader proxy · Only official option/);
+  assert.match(out, /Broader proxy · Unconfirmed match/);
+});

@@ -15,7 +15,7 @@ Food inflation in Germany, Canada and Australia is fragmented across Eurostat, S
 
 Ask in plain words, typos and Korean included. The agent finds the official series (Eurostat and ABS category lookups, a vetted Canadian vector list) and registers each in Zetaris: a Lightning REST table, a decoding view in one schema, and CACHE TABLE so repeat queries read Zetaris instead of the agency. One federated query over a schemastore view compares markets; a second joins the company's price list. Each rate cites its query and SQL.
 
-NVIDIA Nemotron, through Meterless Nightshift (the app's primary AI provider), reads the request, proposes the discovery steps that code checks and completes, picks official snack and condiment categories from a bounded shortlist using product names, and explains the computed facts. Numeric and verdict checks run per sentence: after one rewrite, contradicting sentences are dropped, or a computed summary is used.
+NVIDIA Nemotron, through Meterless Nightshift (the app's primary AI provider), helps read the request (typo market names, the category; code extracts every %), proposes the discovery steps that code checks and completes, picks official snack and condiment categories from a bounded shortlist using product names, and explains the computed facts. Numeric and verdict checks run per sentence: after one rewrite, contradicting sentences are dropped, or a computed summary is used.
 
 Code calculates a historical benchmark (latest YoY and recent annual mean, with observation coverage), how far the proposal sits from it, and a cost target from cost change, unit-cost share and its timing, and pass-through. It does not forecast demand.
 
