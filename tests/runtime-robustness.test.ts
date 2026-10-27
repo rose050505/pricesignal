@@ -271,3 +271,25 @@ test("a rejected narrative draft and the reasons are kept in the trace for later
   assert.equal(detail.draft?.headline, "German food inflation is 9.9%.");
   assert.ok(detail.problems?.some((p) => /9\.9/.test(p)), JSON.stringify(detail.problems));
 });
+
+test("an agency maintenance page is reported as such, with the host first so the reason survives a short note", async () => {
+  const real = globalThis.fetch;
+  const page = `<!--Last modified--><!DOCTYPE html><html><head><title>Statistics Canada - We're sorry! The website is currently unavailable / Statistique Canada : Nous sommes désolés!</title></head><body>…</body></html>`;
+  globalThis.fetch = (async () => new Response(page, { status: 200, headers: { "content-type": "text/html" } })) as any;
+  try {
+    const e = await getJson("https://www150.statcan.gc.ca/t1/wds/rest/getDataFromVectorByReferencePeriodRange?vectorIds=%2241690974%22&startRefPeriod=2026-02-01", {}, 0).catch((x: Error) => x);
+    const msg = String(e).replace(/^Error: /, "");
+    assert.match(msg.slice(0, 80), /^www150\.statcan\.gc\.ca returned a web page instead of data/);
+    assert.match(msg, /We're sorry! The website is currently unavailable/);
+    assert.doesNotMatch(msg, /vectorIds/);
+  } finally {
+    globalThis.fetch = real;
+  }
+  globalThis.fetch = (async () => new Response("bad gateway", { status: 502 })) as any;
+  try {
+    const e = await getJson("https://data.api.abs.gov.au/rest/data/ABS,CPI/1.20001.10.50.M?startPeriod=2025-01", {}, 0).catch((x: Error) => x);
+    assert.match(String(e).replace(/^Error: /, "").slice(0, 60), /^data\.api\.abs\.gov\.au -> HTTP 502/);
+  } finally {
+    globalThis.fetch = real;
+  }
+});

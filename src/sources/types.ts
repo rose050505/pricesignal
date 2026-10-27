@@ -120,11 +120,17 @@ export async function getJson(url: string, headers: Record<string, string> = {},
     }
     break;
   }
-  if (!r.ok) throw new Error(`GET ${url} -> HTTP ${r.status}: ${text.slice(0, 200)}`);
+  // The host and the reason come first: notes shorten these messages.
+  const host = new URL(url).host;
+  if (!r.ok) throw new Error(`${host} -> HTTP ${r.status}: ${text.slice(0, 200)}`);
   try {
     return JSON.parse(text);
   } catch {
-    throw new Error(`GET ${url} -> not JSON: ${text.slice(0, 120)}`);
+    if (/<html|<!doctype/i.test(text)) {
+      const title = text.match(/<title>([\s\S]*?)<\/title>/i)?.[1].replace(/\s+/g, " ").trim();
+      throw new Error(`${host} returned a web page instead of data (the service may be down for maintenance)${title ? `: "${title.slice(0, 90)}"` : ""}`);
+    }
+    throw new Error(`${host} -> not JSON: ${text.slice(0, 120)}`);
   }
 }
 

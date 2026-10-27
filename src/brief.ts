@@ -717,8 +717,11 @@ export function renderBrief(b: Brief): string {
     L.push(`**None of the markets in this question is covered yet.**`, "", `## Fragmentation the agent found`, ...mergeNotes(b.notes).map((n) => `- ${n}`));
     return L.join("\n");
   }
-  const headline = (b.narrative?.headlineByCode ? undefined : b.narrative?.headline) ?? fallbackHeadline(b);
+  // The answer comes first, computed from the verdicts; the model's headline is quoted under it.
+  const modelHeadline = b.narrative?.headlineByCode ? undefined : b.narrative?.headline;
+  const headline = fallbackHeadline(b) ?? modelHeadline;
   if (headline) L.push(`**${headline}**`, "");
+  if (modelHeadline && modelHeadline !== headline) L.push(`> Nemotron: ${modelHeadline}`, "");
   L.push(`${req.invalidPassThrough ? "Cost policy unavailable: provide a valid pass-through percentage from 0% to 100%" : `Cost policy: recover ${Math.round(b.passThrough * 100)}% of incremental unit cost${b.policySource ? ` (${b.policySource})` : ""}`}${req.proposedChangePct !== undefined ? ` · proposed change: ${signedPct(req.proposedChangePct)}` : ""}. This policy does not scale the market benchmark.`, "");
   if (req.costIncreasePct !== undefined) {
     const need = costScenario(req, b.passThrough);

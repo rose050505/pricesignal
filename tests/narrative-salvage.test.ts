@@ -95,7 +95,8 @@ test("the brief and the UI show which sentences the fact check removed", () => {
   (context as any).sample = { facts: fx.facts, notes: fx.notes, views: [], sql: [], skus: [], passThrough: fx.passThrough, ms: 35000, compared: { id: "Q19", sql: "SELECT 1" }, markdown: md, concept: "food", requestedCountries: ["DE", "CA", "AU"], proposed: 5, narrative: s };
   vm.runInContext('render(sample,"demo question 1")', context);
   const out = node("#out").innerHTML;
-  assert.match(out, /fact check removed 4 sentences/i);
+  assert.match(out, /<b>Fact check: 7 sentences kept · 4 removed<\/b> \(the headline is computed in code\)/);
+  assert.match(out, /<details class="removed"><summary>What was removed and why<\/summary>/);
   assert.match(out, /<s>A cost need of 3\.4%/);
   assert.match(out, /Summary written by NVIDIA Nemotron/);
 });

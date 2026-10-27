@@ -317,7 +317,7 @@ Reply with JSON only.`;
           this.log("plan", `${batch.map((b) => `${b.action} ${JSON.stringify(b.args ?? {})}`).join(" · ")}  [${r.model}${via(r)}]`, { thought: j.thought, model: r.model, ms: r.ms });
         } catch (e) {
           badReplies++;
-          this.log("warn", `planner reply unusable (${badReplies}): ${String(e).slice(0, 120)}`);
+          this.log("warn", `planner reply had no action JSON (${badReplies}) - asked again`, { reply: String(e).slice(0, 300) });
           messages.push({ role: "user", content: 'That was not the action JSON. Do not answer the pricing question yourself. Reply with ONLY {"thought": "...", "actions": [{"action": "...", "args": {...}}]}.' });
           if (badReplies >= 2) {
             autopilot = true;
@@ -514,7 +514,7 @@ Reply with JSON only.`;
             s.candidates.set(s.key(country, concept), []);
             s.candidates.set(s.key(country, concept) + ":gaveup", []);
             s.candidates.set(s.key(country, concept) + ":noanswer", []);
-            const note = `${country}: ${AGENCY_FOR[country].name} did not answer for "${concept}" (${String(e).replace(/^Error: /, "").slice(0, 80)}).`;
+            const note = `${country}: ${AGENCY_FOR[country].name} did not answer for "${concept}" (${String(e).replace(/^Error: /, "").slice(0, 160)}).`;
             if (!s.notes.includes(note)) s.notes.push(note);
             this.log("warn", `${AGENCY_FOR[country].name} did not answer for ${country} ${concept}: ${String(e).slice(0, 120)}`);
             return { error: "agency did not answer", candidates: [] };
