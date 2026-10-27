@@ -1369,6 +1369,9 @@ function numOrUndef(v: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+/** An exchange-rate move ("the euro weakened 4%", "환율 3%"); a currency code alone ("our EUR prices") is not one. */
+const FX_MOVE = /\bexchange[- ]rates?\b|\bFX\b|\bcurrenc(?:y|ies)\s+(?:moves?|moved|swings?|fell|rose|weakened|strengthened)|\b(?:euro|dollar|won|yen|pound|loonie)s?\s+(?:has\s+|have\s+)?(?:weakened|strengthened|fell|rose|dropped|gained|depreciated|appreciated|moved)\b|환율|원화\s*(?:약세|강세)/i;
+
 /** Percentages are grounded in the request, with separate denominators and explicit signs. */
 function requestPercentages(raw: string, model: any): {
   proposedChangePct?: number; costIncreasePct?: number; costSharePct?: number; passThrough?: number;
@@ -1397,7 +1400,7 @@ function requestPercentages(raw: string, model: any): {
     const direction = /\b(?:fall|fell|decreas\w*|reduc\w*|cut|lower\w*)\b|인하|내리|하락|감소/i.test(`${before} ${directionAfter}`);
     const x = Number(m[2].replace(",", ".")) * (/^[\-−－]$/.test(m[1]) || (!m[1] && !share && !pass && direction) ? -1 : 1);
     const lastIndex = (pattern: RegExp) => [...before.matchAll(pattern)].at(-1)?.index ?? -1;
-    const unrelatedAt = lastIndex(/\b(?:tax|VAT|margin|inflation|CPI|HICP|interest|discount rate)\b|부가세|세율|마진|이익률|물가상승률/gi);
+    const unrelatedAt = lastIndex(new RegExp(`\\b(?:tax|VAT|margin|inflation|CPI|HICP|interest|discount rate)\\b|부가세|세율|마진|이익률|물가상승률|${FX_MOVE.source}`, "gi"));
     const proposalAt = lastIndex(/\b(?:thinking|considering|propos\w*|planning|what about|(?:can|could|should|would|will)\s+[^:;.!?]*?\b(?:raise|increase|reduce|cut|change)\s+(?:our\s+)?prices?)\b|가격(?:은|을|이)?\s*(?:인상|인하|변경)/gi);
     const unrelated = unrelatedAt >= 0 && proposalAt <= unrelatedAt
       || /^\s*(?:VAT|tax|margin|inflation|부가세|세율|마진|이익률)\b/i.test(after);
@@ -1456,6 +1459,8 @@ function requestPercentages(raw: string, model: any): {
   if (invalidCostShare) issues.push("Cost share must be between 0% and 100% of the current selling price; the invalid value is not reused from memory and the cost-recovery target is omitted.");
   if (invalidPassThrough) issues.push("Cost pass-through must be between 0% and 100% of the monetary cost increase; the invalid policy is not replaced by a remembered value and the cost-recovery target is omitted.");
   if (ambiguousProposal) issues.push("Multiple different proposed price changes were supplied; provide one proposal. No proposal is chosen or recalled for this comparison.");
+  if (FX_MOVE.test(raw)) issues.push("An exchange-rate change was mentioned; exchange rates are not used in this comparison.");
+  if (/\b(?:every|each|per)\s+quarter\b|\bquarterly\b|매\s*분기|분기마다/i.test(raw)) issues.push("The question describes a repeated quarterly increase. The benchmark is year-on-year, and repeated quarterly increases add up over a year.");
   if (proposals.some(p => !Number.isFinite(p.x) || p.x < -100)) issues.push("The proposed price change must be finite and at least -100%; the invalid value is omitted and is not replaced from memory.");
   if (invalidCostChange) issues.push("The cost change must be finite and at least -100%; the invalid value is omitted and is not replaced from memory.");
   return {

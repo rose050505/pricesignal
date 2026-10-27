@@ -5,7 +5,7 @@
 // agency inflation views, so internal and external data meet in the same SQL.
 import { SqlRunner, runDdl } from "../zetaris.ts";
 import { zetarisName } from "./types.ts";
-import { ensureCached } from "./index.ts";
+import { ensureCached, sourceAnswers } from "./index.ts";
 
 export const PRICE_DB = "PSIG_INTERNAL";
 export const priceTable = () => zetarisName("internal_price_list");
@@ -57,10 +57,11 @@ FROM ${PRICE_DB.toLowerCase()}.${priceTable()}`,
 }
 
 let ready = false;
-export async function ensurePriceList(z: SqlRunner): Promise<{ ok: boolean; created: boolean; cached?: boolean; rawTable?: string; error?: string }> {
+export async function ensurePriceList(z: SqlRunner, opts: { now?: number; reachable?: () => Promise<boolean> } = {}): Promise<{ ok: boolean; created: boolean; cached?: boolean; rawTable?: string; error?: string }> {
   const rawTable = `${PRICE_DB.toLowerCase()}.${priceTable()}`;
-  // The price list is cached like the agency tables, so SKU queries do not refetch it.
-  const cache = async () => (await ensureCached(z, rawTable)).ok;
+  // The price list is cached like the agency tables, so SKU queries do not refetch it; after the time-to-live it is
+  // reloaded when its endpoint answers, so edited prices show up.
+  const cache = async () => (await ensureCached(z, rawTable, { now: opts.now, reachable: opts.reachable ?? (() => sourceAnswers(priceListUrl())) })).ok;
   if (ready) return { ok: true, created: false, cached: await cache(), rawTable };
   let created = false;
   for (const s of priceListStatements()) {

@@ -172,3 +172,20 @@ test("a verification failure that is not a bad cached response leaves the cache 
   assert.equal(r.ok, false);
   assert.ok(!sqls.some((s) => /^UNCACHE/.test(s)), "an outage does not drop the only copy");
 });
+
+test("the company's price list cache is refreshed after its time-to-live like the agency tables, so edited prices show up", async () => {
+  // Independent Impact review, 27 Oct 13:18: ensurePriceList cached without a reachability check, so it never refreshed.
+  const { ensurePriceList } = await import("../src/sources/pricelist.ts");
+  resetCacheRegistry();
+  const { z, sqls } = recorder();
+  const t0 = Date.parse("2026-10-27T00:00:00Z");
+  const first = await ensurePriceList(z, { now: t0, reachable: async () => true });
+  assert.equal(first.ok, true);
+  sqls.length = 0;
+  await ensurePriceList(z, { now: t0 + 7 * 3_600_000, reachable: async () => true });
+  assert.deepEqual(sqls.filter((s) => /CACHE/.test(s)), [`UNCACHE TABLE IF EXISTS ${first.rawTable}`, `CACHE TABLE ${first.rawTable}`]);
+  // When the price-list endpoint does not answer, the cached copy is kept.
+  sqls.length = 0;
+  await ensurePriceList(z, { now: t0 + 20 * 3_600_000, reachable: async () => false });
+  assert.ok(!sqls.some((s) => /^UNCACHE/.test(s)));
+});
